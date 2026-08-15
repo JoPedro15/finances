@@ -11,25 +11,26 @@
 ![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20pytest-FF9900?style=flat-square&logo=python&logoColor=white)
 ![MIT License](https://img.shields.io/badge/license-MIT-607D8B?style=flat-square)
 
-The **Finances Portfolio Tracker** is a lightweight, production-grade CLI application designed to track, record, and analyze personal investment portfolios.
+The **Finances Portfolio Tracker** is a lightweight, production-grade CLI application designed to track, record, analyze personal investment portfolios, and monitor target asset dip opportunities.
 
-By integrating live market data with multi-currency conversion and historical record-keeping, this project provides a **Single Source of Truth (SSoT)** for evaluating asset performance, portfolio ROI, and capital gains.
+By integrating live market data with multi-currency conversion, historical record-keeping, and automated notifications, this project provides a **Single Source of Truth (SSoT)** for evaluating asset performance, portfolio ROI, and capital allocation.
 
 ## 🏗️ Architecture & Structure
 
-The repository follows a clean modular design, strictly separating portfolio datasets, domain processing logic, and execution utilities.
+The repository follows a clean modular design, strictly separating portfolio datasets, domain processing logic, automation workflows, and execution utilities.
 
 | Layer | Path | Description |
 | :--- | :--- | :--- |
-| `Data Storage` | `data/` | Centralized repository for asset definitions (`portfolio.json`) and snapshot records (`history.json`). |
-| `Core Utilities` | `utils/` | Financial quotation retrieval, multi-currency conversion, snapshot management, and performance analysis. |
+| `Data Storage` | `data/` | Centralized repository for asset holdings (`portfolio.json`), historical snapshots (`history.json`), and target watchlist (`watchlist.json`). |
+| `Core Utilities` | `utils/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, and email notifications. |
 | `Logging System` | `utils/logger/` | Standardized internal logger enforcing clean output formatting across operations. |
+| `Automation` | `.github/workflows/` | CI Quality Pipeline (`ci.yml`) and scheduled stock dip notification workflow (`dip_notifier.yml`). |
 | `Entrypoint` | `main.py` | CLI command router orchestrating system execution modes. |
 | `Tooling` | `root` | Dependency definitions (`requirements.txt`), linter rules (`.flake8`), and quality gates (`Makefile`). |
 
 ## 🔌 Core Utilities (utils/)
 
-Each module inside `utils/` adheres to standard type hinting and modular design principles.
+Each module inside `utils/` adheres to standard type hinting, strict error handling, and modular design principles.
 
 ### 📊 Snapshot Manager (`utils/snapshot.py`)
 
@@ -49,6 +50,23 @@ Market data retrieval wrapper powered by `yfinance`:
 - **Real-Time Quotes**: Fetches latest ticker price and native currency.
 - **Currency Exchange**: Resolves dynamic currency exchange pairs (e.g., `USDEUR=X`, `GBPEUR=X`).
 
+### 📉 Dip Detector (`utils/dip_detector.py`)
+
+Scans watchlist assets for potential buying opportunities:
+- **Watchlist Ingestion**: Loads asset metadata (Name, ISIN, Ticker) from `data/watchlist.json`.
+- **Peak Drop Analysis**: Identifies assets dropping within a target percentage range (e.g., 5% to 10%) from recent high peaks.
+
+### 📧 Alert Notifier (`utils/notifier.py`)
+
+Automated SMTP notification engine:
+- **Email Delivery**: Formats and dispatches structured HTML/plain text dip reports using SMTP credentials.
+- **Env Fallbacks**: Supports seamless single or dual email configurations via environment variables (`SMTP_USER`, `SMTP_PASSWORD`, `DEST_EMAIL`).
+
+## ⚙️ Automated Workflows (GitHub Actions)
+
+- **Continuous Integration (`ci.yml`)**: Executes formatting, linting, static type checking (`mypy`), security audits, and pytest suites on every pull request or push.
+- **Stock Dip Alert Schedule (`dip_notifier.yml`)**: Runs automatically Monday–Friday at 21:00 UTC (post-market close) to evaluate `check-dips` and notify via SMTP if buying opportunities are detected.
+
 ## 🛠️ Global Quality Gate (GNU Make)
 
 A unified orchestration layer ensures parity between local development and CI/CD pipelines.
@@ -59,10 +77,11 @@ A unified orchestration layer ensures parity between local development and CI/CD
 | `make get-snapshot` | Displays current portfolio valuation without modifying history records. |
 | `make save-snapshot` | Evaluates portfolio value and appends a timestamped entry to `data/history.json`. |
 | `make analyze` | Analyzes total ROI and individual asset acquisition vs. market performance. |
-| `make check` | Runs code formatting (`black --check`) and linting (`flake8`). |
-| `make sec-check` | Executes SAST security scan (`bandit`) and dependency audit (`pip-audit`). |
-| `make test` | Runs unit test suite (`pytest`). |
-| `make quality` | Executes the complete quality gate (`check` + `sec-check` + `test`). |
+| `make check-dips` | Scans watchlist for stock price dip opportunities and triggers email notifications. |
+| `make check` | Runs code formatting (`black --check`), linting (`flake8`), and type checking (`mypy`). |
+| `make security-check` | Executes SAST security scan (`bandit`) and dependency audit (`pip-audit`). |
+| `make test` | Runs unit test suite with coverage (`pytest`). |
+| `make quality` | Executes the complete quality gate (`check` + `security-check` + `test`). |
 | `make clean` | Removes temporary Python caches and build artifacts. |
 
 ## 📖 Governance & Standards
@@ -72,7 +91,7 @@ To maintain codebase integrity, contributions must adhere to the project's engin
 - **Type Safety**: Explicit type annotations are required for all function signatures and local variables.
 - **Documentation**: Code comments, docstrings, variable names, and READMEs must be written in English.
 - **Zero-Print Policy**: Direct `print()` statements are avoided in favor of the structured logger module.
-- **Security & Quality**: All PRs must pass SAST scans, dependency vulnerability audits, and unit tests.
+- **Security & Quality**: All PRs must pass SAST scans, dependency vulnerability audits, and unit tests with coverage.
 
 ---
 

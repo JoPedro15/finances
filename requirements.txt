@@ -8,6 +8,7 @@
 # --- Core Application Dependencies ---
 yfinance>=0.2.38
 pandas>=2.0.0
+pandas-stubs>=2.0.0
 
 # --- Code Quality & Static Typing ---
 black>=24.0.0
