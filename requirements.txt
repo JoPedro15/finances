@@ -1,0 +1,5 @@
+# Python dependencies for the finances project.
+#
+# To install, run: make install
+
+yfinance
