@@ -1,0 +1,33 @@
+name: Stock Dip Alert Schedule
+
+on:
+  schedule:
+    - # Runs monday to friday at 21:00 UTC
+    - cron: '0 21 * * 1-5'
+  workflow_dispatch: # Allows manual execution of the workflow
+
+jobs:
+  check-and-notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Dip Detector and Send Alert
+        env:
+          SMTP_SERVER: "smtp.gmail.com"
+          SMTP_PORT: "587"
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          DEST_EMAIL: ${{ secrets.SMTP_USER }}
+        run: python main.py check-dips
