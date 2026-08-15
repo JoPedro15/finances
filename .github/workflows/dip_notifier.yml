@@ -2,7 +2,7 @@ name: Stock Dip Alert Schedule
 
 on:
   schedule:
-    - # Runs monday to friday at 21:00 UTC
+    # Runs monday to friday at 21:00 UTC
     - cron: '0 21 * * 1-5'
   workflow_dispatch: # Allows manual execution of the workflow
 
