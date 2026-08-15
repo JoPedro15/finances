@@ -15,25 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  setup:
-    name: Setup Environment
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: make install
-
   lint:
     name: Code Formatting & Linting
-    needs: setup
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
