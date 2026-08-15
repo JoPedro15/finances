@@ -6,8 +6,9 @@ PYTHON = python3
 # Define the source files to be checked
 SOURCES = main.py utils/
 TESTS_DIR = tests/
+ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install check security-check test quality clean get-snapshot save-snapshot analyze
+.PHONY: help install format check security-check test quality clean get-snapshot save-snapshot analyze
 
 # ==============================================================================
 # 📖 Help
@@ -16,11 +17,12 @@ help:
 	@echo "Available commands:"
 	@echo "  --- Setup, Maintenance & Quality ---"
 	@echo "  make install        - Installs dependencies."
-	@echo "  make check          - Runs formatter (black) and linter (flake8)."
+	@echo "  make format         - Formats code automatically (black)."
+	@echo "  make check          - Runs formatter check (black), linter (flake8) and type checker (mypy)."
 	@echo "  make security-check - Runs security analysis (bandit & pip-audit)."
 	@echo "  make test           - Runs unit tests (pytest)."
 	@echo "  make quality        - Runs full quality gate (check + security-check + test)."
-	@echo "  make clean          - Cleans Python cache files."
+	@echo "  make clean          - Cleans Python temporary cache files and coverage reports."
 	@echo "  --- Project Utils ---"
 	@echo "  make get-snapshot   - Displays the current portfolio value."
 	@echo "  make save-snapshot  - Saves the current portfolio value to history."
@@ -32,11 +34,17 @@ help:
 install:
 	$(PYTHON) -m pip install -r requirements.txt
 
+format:
+	@echo "Formatting code (black)..."
+	$(PYTHON) -m black $(ALL_SOURCES)
+
 check:
-	@echo "Running formatter (black)..."
-	$(PYTHON) -m black --check $(SOURCES)
+	@echo "Running formatter check (black)..."
+	$(PYTHON) -m black --check $(ALL_SOURCES)
 	@echo "Running linter (flake8)..."
-	$(PYTHON) -m flake8 $(SOURCES)
+	$(PYTHON) -m flake8 $(ALL_SOURCES)
+	@echo "Running static type checker (mypy)..."
+	$(PYTHON) -m mypy $(SOURCES)
 
 security-check:
 	@echo "Running SAST security scan (bandit)..."
@@ -51,10 +59,13 @@ test:
 quality: check security-check test
 
 clean:
-	@echo "Cleaning Python temporary cache files..."
+	@echo "Cleaning Python temporary cache files and test reports..."
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
+	find . -type d -name ".mypy_cache" -exec rm -rf {} +
+	find . -type d -name "htmlcov" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
+	find . -type f -name ".coverage" -delete
 
 # ==============================================================================
 # 📈 Project Utils

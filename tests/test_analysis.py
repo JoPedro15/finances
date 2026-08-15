@@ -16,7 +16,8 @@ def test_analyze_overall_performance_gain_scenario(
     mock_file: MagicMock, mock_logger: MagicMock
 ) -> None:
     """
-    Validates calculations and log outputs for individual assets and overall portfolio gain.
+    Validates calculations and log outputs for individual
+    assets and overall portfolio gain.
     """
     portfolio_data: Dict[str, Any] = {
         "assets": [
@@ -64,7 +65,8 @@ def test_analyze_overall_performance_loss_scenario(
     mock_file: MagicMock, mock_logger: MagicMock
 ) -> None:
     """
-    Validates log outputs when the overall portfolio produces an absolute loss and negative ROI.
+    Validates log outputs when the overall portfolio
+    produces an absolute loss and negative ROI.
     """
     portfolio_data: Dict[str, Any] = {
         "assets": [
@@ -122,7 +124,8 @@ def test_analyze_overall_performance_missing_or_corrupted_file(
     mock_file: MagicMock, mock_logger: MagicMock
 ) -> None:
     """
-    Tests handling of missing history files, empty history lists, and JSON decode errors.
+    Tests handling of missing history files, empty history
+    lists, and JSON decode errors.
     """
     # 1. Empty history list
     portfolio_data: Dict[str, Any] = {"assets": []}
@@ -134,7 +137,9 @@ def test_analyze_overall_performance_missing_or_corrupted_file(
     ]
 
     analyze_overall_performance()
-    mock_logger.warning.assert_called_with("History file is empty. Cannot perform analysis.")
+    mock_logger.warning.assert_called_with(
+        "History file is empty. Cannot perform analysis."
+    )
 
     # 2. FileNotFoundError
     mock_file.side_effect = FileNotFoundError("File not found")
@@ -189,7 +194,9 @@ def test_analyze_overall_performance_mismatched_assets(
 
     analyze_overall_performance()
 
-    mock_logger.warning.assert_any_call("No recent market data found for Omitted Asset. Skipping.")
+    mock_logger.warning.assert_any_call(
+        "No recent market data found for Omitted Asset. Skipping."
+    )
     mock_logger.info.assert_any_call("Total Acquisition Cost: 1000.00 EUR")
     mock_logger.info.assert_any_call("Latest Market Value:   1500.00 EUR")
     mock_logger.success.assert_any_call("Return on Investment (ROI): +50.00%")

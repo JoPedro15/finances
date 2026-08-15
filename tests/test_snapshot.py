@@ -1,5 +1,6 @@
 """
-Unit tests for utils/snapshot.py covering snapshot calculation, currency exchange rate failures,
+Unit tests for utils/snapshot.py covering snapshot
+calculation, currency exchange rate failures,
 display logic, file handling errors, and snapshot persistence.
 """
 
@@ -156,7 +157,8 @@ def test_get_snapshot_exchange_rate_failure(
     mock_get_exchange_rate: MagicMock,
 ) -> None:
     """
-    Ensures that when an exchange rate retrieval returns None, the corresponding asset is skipped.
+    Ensures that when an exchange rate retrieval
+    returns None, the corresponding asset is skipped.
     """
     portfolio_data: Dict[str, Any] = {
         "assets": [
@@ -226,7 +228,8 @@ def test_display_snapshot(mock_logger: MagicMock) -> None:
 
 def test_save_snapshot_new_and_existing_history(tmp_path: Path) -> None:
     """
-    Validates saving snapshot to a new history file as well as appending to an existing history file.
+    Validates saving snapshot to a new history file
+    as well as appending to an existing history file.
     """
     history_file_path: Path = tmp_path / "history.json"
     first_snapshot: Dict[str, Any] = {

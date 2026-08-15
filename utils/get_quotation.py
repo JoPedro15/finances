@@ -4,7 +4,7 @@
 import sys
 from datetime import datetime
 from typing import Any, Dict, Optional
-import yfinance as yf
+import yfinance as yf  # type: ignore[import-untyped]
 
 # Import the custom logger instance
 from .logger.logger import logger
@@ -53,9 +53,7 @@ def get_quotation(ticker: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_exchange_rate(
-    from_currency: str, to_currency: str = "EUR"
-) -> Optional[float]:
+def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> Optional[float]:
     """
     Gets the current exchange rate to convert from one currency to another.
 
