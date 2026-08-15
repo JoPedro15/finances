@@ -14,7 +14,8 @@ from utils.get_quotation import get_exchange_rate, get_quotation, get_usd_to_eur
 @patch("utils.get_quotation.yf.Ticker")
 def test_get_quotation_success_primary(mock_ticker_class: MagicMock) -> None:
     """
-    Tests successful retrieval of stock quotation when regularMarketPrice is present in info.
+    Tests successful retrieval of stock quotation when
+    regularMarketPrice is present in info.
     """
     mock_ticker_instance: MagicMock = MagicMock()
     mock_ticker_instance.info = {
@@ -35,7 +36,8 @@ def test_get_quotation_success_primary(mock_ticker_class: MagicMock) -> None:
 @patch("utils.get_quotation.yf.Ticker")
 def test_get_quotation_fallback_to_history(mock_ticker_class: MagicMock) -> None:
     """
-    Tests fallback mechanism to stock.history when regularMarketPrice is missing in info.
+    Tests fallback mechanism to stock.history when
+    regularMarketPrice is missing in info.
     """
     mock_ticker_instance: MagicMock = MagicMock()
     mock_ticker_instance.info = {"currency": "EUR"}
@@ -82,7 +84,8 @@ def test_get_quotation_exception_handling(mock_ticker_class: MagicMock) -> None:
 @patch("utils.get_quotation.yf.Ticker")
 def test_get_exchange_rate_same_currency(mock_ticker_class: MagicMock) -> None:
     """
-    Validates that requesting rate for identical currencies returns 1.0 without API call.
+    Validates that requesting rate for identical currencies
+    returns 1.0 without API call.
     """
     rate: Optional[float] = get_exchange_rate("EUR", "EUR")
 
