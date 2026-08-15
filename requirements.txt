@@ -12,7 +12,7 @@ pandas>=2.0.0
 # --- Code Quality & Static Typing ---
 black>=24.0.0
 flake8>=7.0.0
-mypy>=1.8.0
+mypy>=2.3.0
 
 # --- Security Audit & Static Analysis ---
 bandit>=1.7.0
