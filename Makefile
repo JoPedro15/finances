@@ -8,7 +8,7 @@ SOURCES = main.py utils/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format check security-check test quality clean get-snapshot save-snapshot analyze
+.PHONY: help install format check security-check test quality clean get-snapshot save-snapshot analyze check-dips
 
 # ==============================================================================
 # 📖 Help
@@ -27,6 +27,7 @@ help:
 	@echo "  make get-snapshot   - Displays the current portfolio value."
 	@echo "  make save-snapshot  - Saves the current portfolio value to history."
 	@echo "  make analyze        - Analyzes overall portfolio performance."
+	@echo "  make check-dips     - Scans watchlist for stock price dip opportunities."
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality
@@ -78,3 +79,6 @@ save-snapshot:
 
 analyze:
 	$(PYTHON) main.py analyze
+
+check-dips:
+	$(PYTHON) main.py check-dips
