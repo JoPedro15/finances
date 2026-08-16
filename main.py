@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 from utils.analysis import analyze_overall_performance
 from utils.dip_detector import load_watchlist, scan_watchlist
 from utils.logger.logger import logger
-from utils.notifier import send_email_alert
 from utils.snapshot import display_snapshot, get_snapshot, save_snapshot
 
 
@@ -45,7 +44,6 @@ def main() -> None:
             logger.info(f"Found {len(matches)} dip opportunities:")
             for match in matches:
                 logger.info(f" -> {match}")
-            send_email_alert(matches)
         else:
             logger.info("No tickers met the dip criteria.")
     else:
