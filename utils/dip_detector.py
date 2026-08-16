@@ -8,15 +8,14 @@ from typing import Any, Dict, List, Optional
 import pandas as pd  # type: ignore[import-untyped]
 import yfinance as yf  # type: ignore[import-untyped]
 
-# Import the custom logger instance
+from .config import DEFAULT_DIP_CONFIG
 from .logger.logger import logger
 
 
 def load_watchlist(
     file_path: str = "data/watchlist.json",
 ) -> List[Dict[str, str]]:
-    """
-    Loads the watchlist configuration from a JSON file.
+    """Loads the watchlist configuration from a JSON file.
 
     Args:
         file_path (str): Path to the watchlist JSON file.
@@ -40,19 +39,18 @@ def load_watchlist(
 
 def detect_dip(
     ticker: str,
-    min_drop_pct: float = 5.0,
-    max_drop_pct: float = 10.0,
-    lookback_days: int = 30,
+    min_drop_pct: float = DEFAULT_DIP_CONFIG.min_drop_pct,
+    max_drop_pct: float = DEFAULT_DIP_CONFIG.max_drop_pct,
+    lookback_days: int = DEFAULT_DIP_CONFIG.lookback_days,
 ) -> Optional[Dict[str, Any]]:
-    """
-    Detects if a stock has experienced a dip between min_drop_pct and max_drop_pct
+    """Detects if a stock has experienced a dip between min_drop_pct and max_drop_pct
     relative to its highest price (peak) in the specified lookback window.
 
     Args:
         ticker (str): Stock ticker symbol (e.g., "AAPL").
-        min_drop_pct (float): Minimum drop percentage threshold (default: 5.0).
-        max_drop_pct (float): Maximum drop percentage threshold (default: 10.0).
-        lookback_days (int): Number of days to look back for peak price (default: 30).
+        min_drop_pct (float): Minimum drop percentage threshold.
+        max_drop_pct (float): Maximum drop percentage threshold.
+        lookback_days (int): Number of days to look back for peak price.
 
     Returns:
         A dictionary containing dip details if within range, or None otherwise.
@@ -94,16 +92,18 @@ def detect_dip(
 
 def scan_watchlist(
     items: List[Dict[str, str]],
-    min_drop_pct: float = 5.0,
-    max_drop_pct: float = 10.0,
+    min_drop_pct: float = DEFAULT_DIP_CONFIG.min_drop_pct,
+    max_drop_pct: float = DEFAULT_DIP_CONFIG.max_drop_pct,
+    lookback_days: int = DEFAULT_DIP_CONFIG.lookback_days,
 ) -> List[Dict[str, Any]]:
-    """
-    Scans a list of watchlist items and returns candidates currently in the dip range.
+    """Scans a list of watchlist items and returns candidates
+    currently in the dip range.
 
     Args:
         items (List[Dict[str, str]]): List of dictionaries containing asset details.
         min_drop_pct (float): Minimum drop percentage threshold.
         max_drop_pct (float): Maximum drop percentage threshold.
+        lookback_days (int): Number of days to look back for peak price.
 
     Returns:
         A list of dictionaries containing dip details for matching tickers.
@@ -121,6 +121,7 @@ def scan_watchlist(
             ticker=ticker,
             min_drop_pct=min_drop_pct,
             max_drop_pct=max_drop_pct,
+            lookback_days=lookback_days,
         )
         if dip_data:
             dip_data["name"] = name

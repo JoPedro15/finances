@@ -117,7 +117,10 @@ def test_detect_dip_below_threshold(
     mock_instance.history.return_value = mock_stock_history_small_dip
     mock_ticker.return_value = mock_instance
 
-    result: Optional[Dict[str, Any]] = detect_dip("AAPL")
+    # Explicitly test against standard thresholds (5.0% to 10.0%)
+    result: Optional[Dict[str, Any]] = detect_dip(
+        "AAPL", min_drop_pct=5.0, max_drop_pct=10.0
+    )
 
     assert result is None
 
@@ -131,7 +134,10 @@ def test_detect_dip_above_threshold(
     mock_instance.history.return_value = mock_stock_history_large_dip
     mock_ticker.return_value = mock_instance
 
-    result: Optional[Dict[str, Any]] = detect_dip("AAPL")
+    # Explicitly test against standard thresholds (5.0% to 10.0%)
+    result: Optional[Dict[str, Any]] = detect_dip(
+        "AAPL", min_drop_pct=5.0, max_drop_pct=10.0
+    )
 
     assert result is None
 
