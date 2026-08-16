@@ -51,7 +51,7 @@ def test_send_email_alert_success(
 
     send_email_alert(mock_matches)
 
-    mock_smtp_class.assert_called_once_with("smtp.gmail.com", 587)
+    mock_smtp_class.assert_called_once_with("smtp.gmail.com", 587, timeout=10)
     mock_server_instance.starttls.assert_called_once()
     mock_server_instance.login.assert_called_once_with(
         "test@example.com", "secretpassword"

@@ -2,14 +2,22 @@ name: Stock Dip Alert Schedule
 
 on:
   schedule:
-    # Runs monday to friday at 21:00 UTC
+    # Runs Monday to Friday at 21:00 UTC
     - cron: '0 21 * * 1-5'
-  workflow_dispatch: # Allows manual execution of the workflow
+  workflow_dispatch:
+    inputs:
+      min_drop_pct:
+        description: 'Minimum drop percentage'
+        required: false
+        default: '5.0'
+      max_drop_pct:
+        description: 'Maximum drop percentage'
+        required: false
+        default: '15.0'
 
 jobs:
   check-and-notify:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,10 +29,12 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: make install
 
       - name: Run Dip Detector and Send Alert
         env:
+          MIN_DROP_PCT: ${{ github.event.inputs.min_drop_pct || '5.0' }}
+          MAX_DROP_PCT: ${{ github.event.inputs.max_drop_pct || '10.0' }}
           SMTP_SERVER: "smtp.gmail.com"
           SMTP_PORT: "587"
           SMTP_USER: ${{ secrets.SMTP_USER }}
