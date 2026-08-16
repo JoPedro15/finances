@@ -1,9 +1,20 @@
 import os
 from dataclasses import dataclass
 from dotenv import load_dotenv  # type: ignore[import-untyped]
+from pathlib import Path
 
-# Loads environment variables from a local .env file if present
 load_dotenv()
+
+BASE_DIR: Path = Path(__file__).resolve().parent.parent
+DATA_DIR: Path = BASE_DIR / "data"
+
+CREDS_PATH_GDRIVE: Path = Path(
+    os.getenv("GDRIVE_CREDS_PATH", str(DATA_DIR / "credentials.json"))
+)
+TOKEN_PATH_GDRIVE: Path = Path(
+    os.getenv("GDRIVE_TOKEN_PATH", str(DATA_DIR / "token.json"))
+)
+GDRIVE_FOLDER_ID: str | None = os.getenv("GDRIVE_FOLDER_ID")
 
 
 @dataclass(frozen=True)
