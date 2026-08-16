@@ -9,6 +9,11 @@ venv/
 ENV/
 env/
 
+# Environment & Local Secrets
+.env
+.env.*
+!.env.example
+
 # Testing & Coverage
 .coverage
 .coverage.*
