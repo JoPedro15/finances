@@ -1,17 +1,18 @@
 """
-Unit tests for utils/get_quotation.py covering success paths, fallback mechanisms,
+Unit tests for src/core/get_quotation.py covering success paths, fallback mechanisms,
 and error handling.
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 from unittest.mock import MagicMock, patch
+
 import pandas as pd
 
-from utils.get_quotation import get_exchange_rate, get_quotation, get_usd_to_eur_rate
+from src.core.get_quotation import get_exchange_rate, get_quotation, get_usd_to_eur_rate
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_quotation_success_primary(mock_ticker_class: MagicMock) -> None:
     """
     Tests successful retrieval of stock quotation when
@@ -24,7 +25,7 @@ def test_get_quotation_success_primary(mock_ticker_class: MagicMock) -> None:
     }
     mock_ticker_class.return_value = mock_ticker_instance
 
-    result: Optional[Dict[str, Any]] = get_quotation("AAPL")
+    result: dict[str, Any] | None = get_quotation("AAPL")
 
     assert result is not None
     assert result["price"] == 150.50
@@ -33,7 +34,7 @@ def test_get_quotation_success_primary(mock_ticker_class: MagicMock) -> None:
     mock_ticker_class.assert_called_once_with("AAPL")
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_quotation_fallback_to_history(mock_ticker_class: MagicMock) -> None:
     """
     Tests fallback mechanism to stock.history when
@@ -45,7 +46,7 @@ def test_get_quotation_fallback_to_history(mock_ticker_class: MagicMock) -> None
     mock_ticker_instance.history.return_value = mock_df
     mock_ticker_class.return_value = mock_ticker_instance
 
-    result: Optional[Dict[str, Any]] = get_quotation("SAP")
+    result: dict[str, Any] | None = get_quotation("SAP")
 
     assert result is not None
     assert result["price"] == 120.25
@@ -53,7 +54,7 @@ def test_get_quotation_fallback_to_history(mock_ticker_class: MagicMock) -> None
     mock_ticker_instance.history.assert_called_once_with(period="1d")
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_quotation_no_price_found(mock_ticker_class: MagicMock) -> None:
     """
     Tests that get_quotation logs error and returns None when no price is available.
@@ -64,36 +65,36 @@ def test_get_quotation_no_price_found(mock_ticker_class: MagicMock) -> None:
     mock_ticker_instance.history.return_value = mock_df
     mock_ticker_class.return_value = mock_ticker_instance
 
-    result: Optional[Dict[str, Any]] = get_quotation("UNKNOWN")
+    result: dict[str, Any] | None = get_quotation("UNKNOWN")
 
     assert result is None
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_quotation_exception_handling(mock_ticker_class: MagicMock) -> None:
     """
     Tests handling of API/network exceptions during stock retrieval.
     """
     mock_ticker_class.side_effect = Exception("API connection failure")
 
-    result: Optional[Dict[str, Any]] = get_quotation("INVALID")
+    result: dict[str, Any] | None = get_quotation("INVALID")
 
     assert result is None
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_exchange_rate_same_currency(mock_ticker_class: MagicMock) -> None:
     """
     Validates that requesting rate for identical currencies
     returns 1.0 without API call.
     """
-    rate: Optional[float] = get_exchange_rate("EUR", "EUR")
+    rate: float | None = get_exchange_rate("EUR", "EUR")
 
     assert rate == 1.0
     mock_ticker_class.assert_not_called()
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_exchange_rate_success(mock_ticker_class: MagicMock) -> None:
     """
     Tests successful retrieval of exchange rate between two distinct currencies.
@@ -103,13 +104,13 @@ def test_get_exchange_rate_success(mock_ticker_class: MagicMock) -> None:
     mock_ticker_instance.history.return_value = mock_df
     mock_ticker_class.return_value = mock_ticker_instance
 
-    rate: Optional[float] = get_exchange_rate("USD", "EUR")
+    rate: float | None = get_exchange_rate("USD", "EUR")
 
     assert rate == 0.92
     mock_ticker_class.assert_called_once_with("USDEUR=X")
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_exchange_rate_empty_history(mock_ticker_class: MagicMock) -> None:
     """
     Tests that get_exchange_rate returns None when market data is empty.
@@ -119,24 +120,24 @@ def test_get_exchange_rate_empty_history(mock_ticker_class: MagicMock) -> None:
     mock_ticker_instance.history.return_value = mock_df
     mock_ticker_class.return_value = mock_ticker_instance
 
-    rate: Optional[float] = get_exchange_rate("USD", "XYZ")
+    rate: float | None = get_exchange_rate("USD", "XYZ")
 
     assert rate is None
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_exchange_rate_exception_handling(mock_ticker_class: MagicMock) -> None:
     """
     Tests exception handling in get_exchange_rate.
     """
     mock_ticker_class.side_effect = Exception("Network timeout")
 
-    rate: Optional[float] = get_exchange_rate("USD", "EUR")
+    rate: float | None = get_exchange_rate("USD", "EUR")
 
     assert rate is None
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_usd_to_eur_rate_success(mock_ticker_class: MagicMock) -> None:
     """
     Tests successful execution of legacy function get_usd_to_eur_rate.
@@ -146,13 +147,13 @@ def test_get_usd_to_eur_rate_success(mock_ticker_class: MagicMock) -> None:
     mock_ticker_instance.history.return_value = mock_df
     mock_ticker_class.return_value = mock_ticker_instance
 
-    rate: Optional[float] = get_usd_to_eur_rate()
+    rate: float | None = get_usd_to_eur_rate()
 
     assert rate == 0.92
     mock_ticker_class.assert_called_once_with("USDEUR=X")
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_usd_to_eur_rate_empty_history(mock_ticker_class: MagicMock) -> None:
     """
     Tests get_usd_to_eur_rate returning None on empty response.
@@ -162,18 +163,18 @@ def test_get_usd_to_eur_rate_empty_history(mock_ticker_class: MagicMock) -> None
     mock_ticker_instance.history.return_value = mock_df
     mock_ticker_class.return_value = mock_ticker_instance
 
-    rate: Optional[float] = get_usd_to_eur_rate()
+    rate: float | None = get_usd_to_eur_rate()
 
     assert rate is None
 
 
-@patch("utils.get_quotation.yf.Ticker")
+@patch("src.core.get_quotation.yf.Ticker")
 def test_get_usd_to_eur_rate_exception_handling(mock_ticker_class: MagicMock) -> None:
     """
     Tests exception handling in get_usd_to_eur_rate.
     """
     mock_ticker_class.side_effect = Exception("API failure")
 
-    rate: Optional[float] = get_usd_to_eur_rate()
+    rate: float | None = get_usd_to_eur_rate()
 
     assert rate is None

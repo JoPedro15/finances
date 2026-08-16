@@ -1,12 +1,14 @@
-# tests/test_gdrive_service.py
+"""
+Unit tests for src/infra/gdrive/service.py covering Google Drive file operations,
+uploads, overwriting, and directory listings.
+"""
 
 from pathlib import Path
-from typing import Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from utils.gdrive.service import GDriveService
+from src.infra.gdrive.service import GDriveService
 
 
 def test_init_raises_file_not_found_when_creds_missing(tmp_path: Path) -> None:
@@ -21,8 +23,8 @@ def test_init_raises_file_not_found_when_creds_missing(tmp_path: Path) -> None:
         )
 
 
-@patch("utils.gdrive.service.build")
-@patch("utils.gdrive.service.get_google_service_credentials")
+@patch("src.infra.gdrive.service.build")
+@patch("src.infra.gdrive.service.get_google_service_credentials")
 def test_upload_file_new(
     mock_get_creds: MagicMock,
     mock_build: MagicMock,
@@ -56,8 +58,8 @@ def test_upload_file_new(
     mock_files.create.assert_called_once()
 
 
-@patch("utils.gdrive.service.build")
-@patch("utils.gdrive.service.get_google_service_credentials")
+@patch("src.infra.gdrive.service.build")
+@patch("src.infra.gdrive.service.get_google_service_credentials")
 def test_upload_file_overwrite(
     mock_get_creds: MagicMock,
     mock_build: MagicMock,
@@ -94,8 +96,8 @@ def test_upload_file_overwrite(
     mock_files.update.assert_called_once()
 
 
-@patch("utils.gdrive.service.build")
-@patch("utils.gdrive.service.get_google_service_credentials")
+@patch("src.infra.gdrive.service.build")
+@patch("src.infra.gdrive.service.get_google_service_credentials")
 def test_file_exists_returns_true(
     mock_get_creds: MagicMock,
     mock_build: MagicMock,
@@ -119,8 +121,8 @@ def test_file_exists_returns_true(
     assert exists is True
 
 
-@patch("utils.gdrive.service.build")
-@patch("utils.gdrive.service.get_google_service_credentials")
+@patch("src.infra.gdrive.service.build")
+@patch("src.infra.gdrive.service.get_google_service_credentials")
 def test_list_files(
     mock_get_creds: MagicMock,
     mock_build: MagicMock,
@@ -145,6 +147,6 @@ def test_list_files(
         token_path=str(tmp_path / "token.json"),
     )
 
-    files: List[Dict[str, str]] = service.list_files(folder_id="folder_123", limit=5)
+    files: list[dict[str, str]] = service.list_files(folder_id="folder_123", limit=5)
     assert len(files) == 2
     assert files[0]["name"] == "file1.txt"

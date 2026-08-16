@@ -1,5 +1,3 @@
-# utils/gdrive/service.py
-
 from __future__ import annotations
 
 import io
@@ -7,16 +5,19 @@ import os
 from pathlib import Path
 from typing import Any, Final
 
-from googleapiclient.discovery import Resource, build  # type: ignore
-from googleapiclient.http import MediaFileUpload  # type: ignore
-from googleapiclient.http import MediaIoBaseDownload  # type: ignore
+from googleapiclient.discovery import Resource, build  # type: ignore[import-untyped]
+from googleapiclient.http import (  # type: ignore[import-untyped]
+    MediaFileUpload,
+    MediaIoBaseDownload,
+)
 
-from utils.config import (
+from src.config import (
     CREDS_PATH_GDRIVE,
     GDRIVE_FOLDER_ID,
     TOKEN_PATH_GDRIVE,
 )
-from utils.logger.logger import logger
+from src.utils.logger.logger import logger
+
 from .auth import get_google_service_credentials
 
 __all__: list[str] = ["GDriveService"]
@@ -164,4 +165,5 @@ class GDriveService:
             .execute()
         )
 
-        return results.get("files", [])
+        files: list[dict[str, str]] = results.get("files", [])
+        return files

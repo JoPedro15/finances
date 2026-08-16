@@ -1,39 +1,40 @@
-# utils/dip_detector.py
-# This file contains utilities for detecting stock price dips from recent peaks.
+"""
+This file contains utilities for detecting stock price dips from recent peaks.
+"""
+
+from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
-from typing import Any, Dict, List, Optional
-import pandas as pd  # type: ignore[import-untyped]
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
 import yfinance as yf  # type: ignore[import-untyped]
 
-from .config import DEFAULT_DIP_CONFIG
-from .logger.logger import logger
+from src.config import DEFAULT_DIP_CONFIG
+from src.core.exceptions import InvalidWatchlistError, QuotationFetchError
+from src.utils.logger.logger import logger
 
 
 def load_watchlist(
     file_path: str = "data/watchlist.json",
-) -> List[Dict[str, str]]:
-    """Loads the watchlist configuration from a JSON file.
-
-    Args:
-        file_path (str): Path to the watchlist JSON file.
-
-    Returns:
-        List of dictionaries containing asset metadata (name, isin, ticker).
-    """
+) -> list[dict[str, str]]:
+    """Loads the watchlist configuration from a JSON file."""
     path: Path = Path(file_path)
     if not path.exists():
-        logger.error(f"Watchlist file not found at '{file_path}'.")
+        err = InvalidWatchlistError(f"Watchlist file not found at '{file_path}'.")
+        logger.error(str(err))
         return []
 
     try:
-        with open(path, "r", encoding="utf-8") as file:
-            data: List[Dict[str, str]] = json.load(file)
+        with open(path, encoding="utf-8") as file:
+            data: list[dict[str, str]] = json.load(file)
             return data
     except Exception as e:
-        logger.error(f"Error loading watchlist from '{file_path}'", exception=e)
+        err = InvalidWatchlistError(f"Error loading watchlist from '{file_path}': {e}")
+        logger.error(str(err), exception=e)
         return []
 
 
@@ -42,19 +43,9 @@ def detect_dip(
     min_drop_pct: float = DEFAULT_DIP_CONFIG.min_drop_pct,
     max_drop_pct: float = DEFAULT_DIP_CONFIG.max_drop_pct,
     lookback_days: int = DEFAULT_DIP_CONFIG.lookback_days,
-) -> Optional[Dict[str, Any]]:
-    """Detects if a stock has experienced a dip between min_drop_pct and max_drop_pct
-    relative to its highest price (peak) in the specified lookback window.
-
-    Args:
-        ticker (str): Stock ticker symbol (e.g., "AAPL").
-        min_drop_pct (float): Minimum drop percentage threshold.
-        max_drop_pct (float): Maximum drop percentage threshold.
-        lookback_days (int): Number of days to look back for peak price.
-
-    Returns:
-        A dictionary containing dip details if within range, or None otherwise.
-    """
+) -> dict[str, Any] | None:
+    """Detects if a stock has experienced a dip between
+    min_drop_pct and max_drop_pct."""
     try:
         stock: yf.Ticker = yf.Ticker(ticker)
         history: pd.DataFrame = stock.history(period=f"{lookback_days}d")
@@ -86,38 +77,30 @@ def detect_dip(
         return None
 
     except Exception as e:
-        logger.error(f"Error analyzing dip for ticker {ticker}", exception=e)
+        err = QuotationFetchError(f"Error analyzing dip for ticker {ticker}: {e}")
+        logger.error(str(err), exception=e)
         return None
 
 
 def scan_watchlist(
-    items: List[Dict[str, str]],
+    items: list[dict[str, str]],
     min_drop_pct: float = DEFAULT_DIP_CONFIG.min_drop_pct,
     max_drop_pct: float = DEFAULT_DIP_CONFIG.max_drop_pct,
     lookback_days: int = DEFAULT_DIP_CONFIG.lookback_days,
-) -> List[Dict[str, Any]]:
-    """Scans a list of watchlist items and returns candidates
-    currently in the dip range.
+    max_workers: int = 5,
+) -> list[dict[str, Any]]:
+    """Scans watchlist items concurrently preserving item order."""
+    valid_items: list[dict[str, str]] = [item for item in items if item.get("ticker")]
+    results: list[dict[str, Any]] = []
 
-    Args:
-        items (List[Dict[str, str]]): List of dictionaries containing asset details.
-        min_drop_pct (float): Minimum drop percentage threshold.
-        max_drop_pct (float): Maximum drop percentage threshold.
-        lookback_days (int): Number of days to look back for peak price.
+    if not valid_items:
+        return results
 
-    Returns:
-        A list of dictionaries containing dip details for matching tickers.
-    """
-    results: List[Dict[str, Any]] = []
-
-    for item in items:
+    def process_item(item: dict[str, str]) -> dict[str, Any] | None:
         ticker: str = item.get("ticker", "")
         name: str = item.get("name", ticker)
-        if not ticker:
-            continue
-
         logger.info(f"Scanning asset: {name} ({ticker})")
-        dip_data: Optional[Dict[str, Any]] = detect_dip(
+        dip_data: dict[str, Any] | None = detect_dip(
             ticker=ticker,
             min_drop_pct=min_drop_pct,
             max_drop_pct=max_drop_pct,
@@ -128,13 +111,19 @@ def scan_watchlist(
             isin: str = item.get("isin", "")
             if isin:
                 dip_data["isin"] = isin
-            results.append(dip_data)
+            return dip_data
+        return None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for res in executor.map(process_item, valid_items):
+            if res:
+                results.append(res)
 
     return results
 
 
 if __name__ == "__main__":
-    watchlist_items: List[Dict[str, str]] = []
+    watchlist_items: list[dict[str, str]] = []
 
     if len(sys.argv) > 1:
         watchlist_items = [
@@ -145,7 +134,7 @@ if __name__ == "__main__":
         watchlist_items = load_watchlist()
 
     logger.section("Scanning watchlist for price dips...")
-    matches: List[Dict[str, Any]] = scan_watchlist(watchlist_items)
+    matches: list[dict[str, Any]] = scan_watchlist(watchlist_items)
 
     if matches:
         logger.info(f"Found {len(matches)} dip opportunities:")
