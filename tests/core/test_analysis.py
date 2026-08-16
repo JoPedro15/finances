@@ -1,16 +1,16 @@
 """
-Unit tests for utils/analysis.py covering portfolio performance analysis,
+Unit tests for src/core/analysis.py covering portfolio performance analysis,
 loss scenarios, missing/corrupted data files, and edge cases.
 """
 
 import json
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import MagicMock, mock_open, patch
 
-from utils.analysis import analyze_overall_performance
+from src.core.analysis import analyze_overall_performance
 
 
-@patch("utils.analysis.logger")
+@patch("src.core.analysis.logger")
 @patch("builtins.open")
 def test_analyze_overall_performance_gain_scenario(
     mock_file: MagicMock, mock_logger: MagicMock
@@ -19,7 +19,7 @@ def test_analyze_overall_performance_gain_scenario(
     Validates calculations and log outputs for individual
     assets and overall portfolio gain.
     """
-    portfolio_data: Dict[str, Any] = {
+    portfolio_data: dict[str, Any] = {
         "assets": [
             {
                 "name": "Apple",
@@ -35,7 +35,7 @@ def test_analyze_overall_performance_gain_scenario(
             },
         ]
     }
-    history_data: List[Dict[str, Any]] = [
+    history_data: list[dict[str, Any]] = [
         {
             "assets_snapshot": [
                 {"isin": "US0378331005", "value_eur": 1500.0},
@@ -59,7 +59,7 @@ def test_analyze_overall_performance_gain_scenario(
     mock_logger.success.assert_any_call("Return on Investment (ROI): +20.00%")
 
 
-@patch("utils.analysis.logger")
+@patch("src.core.analysis.logger")
 @patch("builtins.open")
 def test_analyze_overall_performance_loss_scenario(
     mock_file: MagicMock, mock_logger: MagicMock
@@ -68,7 +68,7 @@ def test_analyze_overall_performance_loss_scenario(
     Validates log outputs when the overall portfolio
     produces an absolute loss and negative ROI.
     """
-    portfolio_data: Dict[str, Any] = {
+    portfolio_data: dict[str, Any] = {
         "assets": [
             {
                 "name": "Tesla",
@@ -78,7 +78,7 @@ def test_analyze_overall_performance_loss_scenario(
             }
         ]
     }
-    history_data: List[Dict[str, Any]] = [
+    history_data: list[dict[str, Any]] = [
         {
             "assets_snapshot": [
                 {"isin": "US88160R1014", "value_eur": 1000.0},
@@ -97,7 +97,7 @@ def test_analyze_overall_performance_loss_scenario(
     mock_logger.warning.assert_any_call("Return on Investment (ROI): -50.00%")
 
 
-@patch("utils.analysis.logger")
+@patch("src.core.analysis.logger")
 @patch("builtins.open")
 def test_analyze_overall_performance_zero_acquisition_cost(
     mock_file: MagicMock, mock_logger: MagicMock
@@ -105,8 +105,8 @@ def test_analyze_overall_performance_zero_acquisition_cost(
     """
     Ensures zero acquisition cost handles division by zero safely and reports 0.00% ROI.
     """
-    portfolio_data: Dict[str, Any] = {"assets": []}
-    history_data: List[Dict[str, Any]] = [{"assets_snapshot": []}]
+    portfolio_data: dict[str, Any] = {"assets": []}
+    history_data: list[dict[str, Any]] = [{"assets_snapshot": []}]
 
     mock_file.side_effect = [
         mock_open(read_data=json.dumps(portfolio_data))(),
@@ -118,7 +118,7 @@ def test_analyze_overall_performance_zero_acquisition_cost(
     mock_logger.success.assert_any_call("Return on Investment (ROI): +0.00%")
 
 
-@patch("utils.analysis.logger")
+@patch("src.core.analysis.logger")
 @patch("builtins.open")
 def test_analyze_overall_performance_missing_or_corrupted_file(
     mock_file: MagicMock, mock_logger: MagicMock
@@ -128,8 +128,8 @@ def test_analyze_overall_performance_missing_or_corrupted_file(
     lists, and JSON decode errors.
     """
     # 1. Empty history list
-    portfolio_data: Dict[str, Any] = {"assets": []}
-    history_data: List[Dict[str, Any]] = []
+    portfolio_data: dict[str, Any] = {"assets": []}
+    history_data: list[dict[str, Any]] = []
 
     mock_file.side_effect = [
         mock_open(read_data=json.dumps(portfolio_data))(),
@@ -155,7 +155,7 @@ def test_analyze_overall_performance_missing_or_corrupted_file(
     mock_logger.error.assert_called()
 
 
-@patch("utils.analysis.logger")
+@patch("src.core.analysis.logger")
 @patch("builtins.open")
 def test_analyze_overall_performance_mismatched_assets(
     mock_file: MagicMock, mock_logger: MagicMock
@@ -163,7 +163,7 @@ def test_analyze_overall_performance_mismatched_assets(
     """
     Confirms that assets omitted from historical snapshots are skipped cleanly.
     """
-    portfolio_data: Dict[str, Any] = {
+    portfolio_data: dict[str, Any] = {
         "assets": [
             {
                 "name": "Apple",
@@ -179,7 +179,7 @@ def test_analyze_overall_performance_mismatched_assets(
             },
         ]
     }
-    history_data: List[Dict[str, Any]] = [
+    history_data: list[dict[str, Any]] = [
         {
             "assets_snapshot": [
                 {"isin": "US0378331005", "value_eur": 1500.0},
