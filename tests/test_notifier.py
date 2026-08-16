@@ -107,4 +107,3 @@ def test_send_email_alert_smtp_exception(
     # Should handle the exception without crashing
     send_email_alert(mock_matches)
     mock_smtp_class.assert_called_once()
-coslflefxqyohpek
