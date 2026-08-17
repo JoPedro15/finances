@@ -21,7 +21,7 @@ The repository follows a clean modular design, strictly separating portfolio dat
 
 | Layer | Path | Description |
 | :--- | :--- | :--- |
-| `Data Storage` | `data/` | Centralized repository for asset holdings (`portfolio.json`), historical snapshots (`history.json`), and target watchlist (`watchlist.json`), and ETF metadata cache (`etf_cache.json`).. |
+| `Data Storage` | `data/` | Centralized repository for asset holdings (`portfolio.json`), historical snapshots (`history.json`), target watchlist (`watchlist.json`), and ETF metadata cache (`etf_cache.json`). |
 | `Core Domain` | `src/core/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, and repository abstractions. |
 | `Google Drive Integration` | `src/infra/gdrive/` | Infrastructure service and OAuth2 authentication handlers for remote backup capabilities. |
 | `JustETF Integration` | `src/infra/justetf/` | Scraper client extracting ETF composition, sector allocation, country exposure, and TER directly from JustETF profile pages. |
@@ -53,7 +53,7 @@ Decouples domain logic from filesystem operations using Python Protocols:
 - **`PortfolioRepository`**: Interface for loading asset definitions.
 - **`HistoryRepository`**: Interface for reading and persisting portfolio snapshots.
 - **`ETFCacheRepository`**: Interface for reading and persisting cached ETF composition and exposure details with TTL validation.
-- **`JsonPortfolioRepository` / `JsonHistoryRepository`**: Default JSON file implementations.
+- **`JsonPortfolioRepository` / `JsonHistoryRepository` / `JsonETFCacheRepository`**: Default JSON file implementations.
 
 ### ⚡ Parallel Processing & Snapshot Engine (`src/core/snapshot.py` & `src/core/dip_detector.py`)
 Concurrent I/O execution powered by `ThreadPoolExecutor`:
