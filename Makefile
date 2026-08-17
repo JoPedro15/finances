@@ -1,5 +1,3 @@
-# Makefile for the finances project
-
 # Use python3 as the default interpreter
 PYTHON = python3
 
@@ -8,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean get-snapshot save-snapshot analyze check-dips etf-details analyze-exposure
+.PHONY: help install format lint security-check test quality clean get-snapshot save-snapshot analyze check-dips etf-details stock-details analyze-exposure
 
 # ==============================================================================
 # 📖 Help
@@ -29,6 +27,7 @@ help:
 	@echo "  make analyze          - Analyzes overall portfolio performance."
 	@echo "  make check-dips       - Scans watchlist for stock price dip opportunities."
 	@echo "  make etf-details ISIN= - Inspects composition and details for an ETF ISIN."
+	@echo "  make stock-details TICKER= - Inspects fundamental metrics for a stock ticker or ISIN."
 	@echo "  make analyze-exposure - Analyzes portfolio sector and country exposure."
 
 # ==============================================================================
@@ -91,6 +90,9 @@ check-dips:
 
 etf-details:
 	PYTHONPATH=src $(PYTHON) main.py etf-details
+
+stock-details:
+	PYTHONPATH=src $(PYTHON) main.py stock-details $(TICKER)
 
 analyze-exposure:
 	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
