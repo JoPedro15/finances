@@ -1,5 +1,5 @@
 """
-Repository protocols and JSON storage implementations for
+Repository protocols and storage implementations (JSON and SQLite) for
 portfolio, history, and ETF cache data.
 """
 
@@ -12,7 +12,9 @@ from typing import Any, Protocol
 
 from src.config import DEFAULT_ETF_CACHE_TTL_DAYS, ETF_CACHE_FILE
 from src.core.exceptions import StorageReadError, StorageWriteError
-from src.core.models import Asset, ETFDetails, PortfolioSnapshot
+from src.core.models import Asset, AssetSnapshot, ETFDetails, PortfolioSnapshot
+from src.infra.database.connection import DEFAULT_DB_PATH, get_db_context
+from src.infra.database.schema import initialize_database
 from src.utils.logger.logger import logger
 
 
@@ -46,6 +48,206 @@ class ETFCacheRepository(Protocol):
     def save_etf_details(self, isin: str, details: ETFDetails) -> None:
         """Saves or updates ETF details in the cache."""
         ...
+
+
+class SqlitePortfolioRepository:
+    """SQLite database-backed implementation of PortfolioRepository."""
+
+    def __init__(self, db_path: str | Path = DEFAULT_DB_PATH) -> None:
+        self.db_path: Path = Path(db_path)
+
+    def load_assets(self) -> list[Asset]:
+        """Loads all portfolio assets from the SQLite database."""
+        if not self.db_path.exists():
+            return []
+
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT isin, name, yahoo_ticker, quantity, "
+                    "average_buy_price, asset_type FROM assets ORDER BY id ASC"
+                )
+                rows = cursor.fetchall()
+                return [
+                    Asset(
+                        name=str(row["name"]),
+                        isin=str(row["isin"] or ""),
+                        yahoo_ticker=str(row["yahoo_ticker"]),
+                        quantity=float(row["quantity"]),
+                        average_buy_price=float(row["average_buy_price"]),
+                        asset_type=str(row["asset_type"]),
+                    )
+                    for row in rows
+                ]
+        except Exception as e:
+            raise StorageReadError(
+                f"Failed to read portfolio assets from '{self.db_path}': {e}"
+            ) from e
+
+    def save_assets(self, assets: list[Asset]) -> None:
+        """Saves or updates portfolio assets in the SQLite database."""
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+                for asset in assets:
+                    cursor.execute(
+                        """
+                        INSERT INTO assets (
+                            isin, name, yahoo_ticker, quantity,
+                            average_buy_price, asset_type
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(isin) DO UPDATE SET
+                            name=excluded.name,
+                            yahoo_ticker=excluded.yahoo_ticker,
+                            quantity=excluded.quantity,
+                            average_buy_price=excluded.average_buy_price,
+                            asset_type=excluded.asset_type;
+                        """,
+                        (
+                            asset.isin if asset.isin else None,
+                            asset.name,
+                            asset.yahoo_ticker,
+                            asset.quantity,
+                            asset.average_buy_price,
+                            asset.asset_type,
+                        ),
+                    )
+        except Exception as e:
+            raise StorageWriteError(
+                f"Failed to save assets to '{self.db_path}': {e}"
+            ) from e
+
+
+class SqliteHistoryRepository:
+    """SQLite database-backed implementation of HistoryRepository."""
+
+    def __init__(self, db_path: str | Path = DEFAULT_DB_PATH) -> None:
+        self.db_path: Path = Path(db_path)
+
+    def load_history(self) -> list[PortfolioSnapshot]:
+        """Loads all recorded portfolio snapshots from the SQLite database."""
+        if not self.db_path.exists():
+            return []
+
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, timestamp, total_value_eur FROM snapshots "
+                    "ORDER BY id ASC"
+                )
+                snapshots_rows = cursor.fetchall()
+                snapshots: list[PortfolioSnapshot] = []
+
+                for s_row in snapshots_rows:
+                    snapshot_id: int = s_row["id"]
+                    cursor.execute(
+                        """
+                        SELECT a.name, a.isin, a.yahoo_ticker,
+                               sa.native_price, sa.native_currency, sa.value_eur
+                        FROM asset_snapshots sa
+                        JOIN assets a ON sa.asset_id = a.id
+                        WHERE sa.snapshot_id = ?
+                        ORDER BY sa.id ASC
+                        """,
+                        (snapshot_id,),
+                    )
+                    asset_rows = cursor.fetchall()
+                    asset_snaps: list[AssetSnapshot] = [
+                        AssetSnapshot(
+                            name=str(a_row["name"]),
+                            isin=str(a_row["isin"] or ""),
+                            yahoo_ticker=str(a_row["yahoo_ticker"]),
+                            native_price=float(a_row["native_price"]),
+                            native_currency=str(a_row["native_currency"]),
+                            value_eur=float(a_row["value_eur"]),
+                        )
+                        for a_row in asset_rows
+                    ]
+
+                    snapshots.append(
+                        PortfolioSnapshot(
+                            timestamp=str(s_row["timestamp"]),
+                            total_value_eur=float(s_row["total_value_eur"]),
+                            assets_snapshot=asset_snaps,
+                        )
+                    )
+                return snapshots
+        except Exception as e:
+            raise StorageReadError(
+                f"Failed to read history from '{self.db_path}': {e}"
+            ) from e
+
+    def save_snapshot(self, snapshot: PortfolioSnapshot) -> None:
+        """Saves a new portfolio snapshot into the SQLite database."""
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    "INSERT INTO snapshots (timestamp, total_value_eur) "
+                    "VALUES (?, ?)",
+                    (snapshot.timestamp, snapshot.total_value_eur),
+                )
+                if cursor.lastrowid is None:
+                    raise StorageWriteError("Failed to retrieve inserted snapshot ID.")
+                snapshot_id: int = cursor.lastrowid
+
+                for asset_snap in snapshot.assets_snapshot:
+                    cursor.execute(
+                        "SELECT id FROM assets WHERE yahoo_ticker = ?",
+                        (asset_snap.yahoo_ticker,),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        asset_id: int = row["id"]
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO assets (
+                                isin, name, yahoo_ticker, quantity,
+                                average_buy_price, asset_type
+                            )
+                            VALUES (?, ?, ?, 0.0, 0.0, 'stock')
+                            """,
+                            (
+                                asset_snap.isin if asset_snap.isin else None,
+                                asset_snap.name,
+                                asset_snap.yahoo_ticker,
+                            ),
+                        )
+                        if cursor.lastrowid is None:
+                            raise StorageWriteError(
+                                "Failed to retrieve inserted asset ID."
+                            )
+                        asset_id = cursor.lastrowid
+
+                    cursor.execute(
+                        """
+                        INSERT INTO asset_snapshots (
+                            snapshot_id, asset_id, native_price,
+                            native_currency, value_eur
+                        )
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            snapshot_id,
+                            asset_id,
+                            asset_snap.native_price,
+                            asset_snap.native_currency,
+                            asset_snap.value_eur,
+                        ),
+                    )
+        except Exception as e:
+            raise StorageWriteError(
+                f"Failed to save snapshot to '{self.db_path}': {e}"
+            ) from e
 
 
 class JsonPortfolioRepository:

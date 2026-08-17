@@ -99,7 +99,7 @@ def test_check_dips_command_empty_watchlist() -> None:
 
 
 @patch("main.ETFProvider")
-@patch("main.JsonPortfolioRepository")
+@patch("main.SqlitePortfolioRepository")
 def test_etf_details_cmd_success(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
