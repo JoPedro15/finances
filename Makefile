@@ -8,7 +8,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean get-snapshot save-snapshot analyze check-dips
+.PHONY: help install format lint security-check test quality clean get-snapshot save-snapshot analyze check-dips etf-details analyze-exposure
 
 # ==============================================================================
 # 📖 Help
@@ -28,6 +28,8 @@ help:
 	@echo "  make save-snapshot    - Saves the current portfolio value to history."
 	@echo "  make analyze          - Analyzes overall portfolio performance."
 	@echo "  make check-dips       - Scans watchlist for stock price dip opportunities."
+	@echo "  make etf-details ISIN= - Inspects composition and details for an ETF ISIN."
+	@echo "  make analyze-exposure - Analyzes portfolio sector and country exposure."
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality
@@ -85,3 +87,9 @@ analyze:
 
 check-dips:
 	PYTHONPATH=src $(PYTHON) main.py check-dips
+
+etf-details:
+	PYTHONPATH=src $(PYTHON) main.py etf-details $(ISIN)
+
+analyze-exposure:
+	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
