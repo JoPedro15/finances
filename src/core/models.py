@@ -223,3 +223,44 @@ class ETFDetails:
             "country_breakdown": [item.to_dict() for item in self.country_breakdown],
             "ter_pct": self.ter_pct,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class StockDetails:
+    """Consolidates stock fundamental metrics and market data."""
+
+    market_cap: float | None = None
+    pe_ratio: float | None = None
+    forward_pe: float | None = None
+    dividend_yield_pct: float | None = None
+    fifty_two_week_high: float | None = None
+    fifty_two_week_low: float | None = None
+    sector: str | None = None
+    industry: str | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> StockDetails:
+        def _get_float(key: str) -> float | None:
+            val: Any = data.get(key)
+            return float(val) if val is not None else None
+
+        def _get_str(key: str) -> str | None:
+            val: Any = data.get(key)
+            return str(val) if val is not None else None
+
+        return cls(
+            market_cap=_get_float("market_cap"),
+            pe_ratio=_get_float("pe_ratio"),
+            forward_pe=_get_float("forward_pe"),
+            dividend_yield_pct=_get_float("dividend_yield_pct"),
+            fifty_two_week_high=_get_float("fifty_two_week_high"),
+            fifty_two_week_low=_get_float("fifty_two_week_low"),
+            sector=_get_str("sector"),
+            industry=_get_str("industry"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
