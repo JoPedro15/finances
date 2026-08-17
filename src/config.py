@@ -17,6 +17,9 @@ TOKEN_PATH_GDRIVE: Path = Path(
 )
 GDRIVE_FOLDER_ID: str | None = os.getenv("GDRIVE_FOLDER_ID")
 
+ETF_CACHE_FILE: Path = DATA_DIR / "etf_cache.json"
+DEFAULT_ETF_CACHE_TTL_DAYS: int = int(os.getenv("ETF_CACHE_TTL_DAYS", "30"))
+
 
 @dataclass(frozen=True)
 class DipDetectorConfig:
