@@ -23,8 +23,9 @@ from src.core.models import (
     StockDetails,
 )
 from src.core.providers import ETFProvider, StockProvider
-from src.core.repositories import JsonPortfolioRepository
+from src.core.repositories import SqlitePortfolioRepository
 from src.core.snapshot import display_snapshot, get_snapshot, save_snapshot
+from src.infra.database.connection import DEFAULT_DB_PATH
 from src.utils.logger.logger import logger
 
 app: typer.Typer = typer.Typer(
@@ -178,12 +179,9 @@ def etf_details_cmd(
         ),
     ] = None,
 ) -> None:
-    """Inspects composition, TER, holdings, and breakdowns
-
-    for an ETF ISIN or all portfolio ETFs.
-    """
+    """Inspects composition, TER, holdings, and breakdowns for portfolio ETFs."""
     provider: ETFProvider = ETFProvider()
-    repo: JsonPortfolioRepository = JsonPortfolioRepository("data/portfolio.json")
+    repo: SqlitePortfolioRepository = SqlitePortfolioRepository(DEFAULT_DB_PATH)
 
     if isin:
         clean_isin: str = isin.strip().upper()
@@ -290,9 +288,9 @@ def stock_details_cmd(
         ),
     ] = None,
 ) -> None:
-    """Inspects fundamental metrics for a stock ticker/ISIN or all portfolio stocks."""
+    """Inspects fundamental metrics for portfolio stock holdings."""
     provider: StockProvider = StockProvider()
-    repo: JsonPortfolioRepository = JsonPortfolioRepository("data/portfolio.json")
+    repo: SqlitePortfolioRepository = SqlitePortfolioRepository(DEFAULT_DB_PATH)
 
     if ticker_or_isin:
         clean_input: str = ticker_or_isin.strip().upper()
