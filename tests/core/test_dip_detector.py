@@ -205,16 +205,19 @@ def test_detect_dip_exception_handling(mock_ticker: MagicMock) -> None:
 @patch("src.core.dip_detector.detect_dip")
 def test_scan_watchlist(mock_detect_dip: MagicMock) -> None:
     """Tests scanning watchlist items and attaching metadata to dip results."""
-    mock_detect_dip.side_effect = [
-        {
-            "ticker": "AAPL",
-            "current_price": 93.0,
-            "peak_price": 100.0,
-            "peak_date": "2026-08-01",
-            "drop_pct": 7.0,
-        },
-        None,
-    ]
+
+    def dip_side_effect(ticker: str, **kwargs: Any) -> dict[str, Any] | None:
+        if ticker == "AAPL":
+            return {
+                "ticker": "AAPL",
+                "current_price": 93.0,
+                "peak_price": 100.0,
+                "peak_date": "2026-08-01",
+                "drop_pct": 7.0,
+            }
+        return None
+
+    mock_detect_dip.side_effect = dip_side_effect
 
     items: list[dict[str, str]] = [
         {"name": "Apple", "isin": "US0378331005", "ticker": "AAPL"},
