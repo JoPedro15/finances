@@ -8,12 +8,12 @@
 ![Security](https://img.shields.io/badge/security-Bandit%20%7C%20Audit-44cc11?style=flat-square&logo=shield&logoColor=white)
 ![GNU Make](https://img.shields.io/badge/env-GNU%20Make-active?style=flat-square&logo=gnu-make&logoColor=white)
 <br />
-![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20Typer%20%7C%20pytest%20%7C%20mypy-FF9900?style=flat-square&logo=python&logoColor=white)
+![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20SQLite%20%7C%20Typer%20%7C%20pytest%20%7C%20mypy-FF9900?style=flat-square&logo=python&logoColor=white)
 ![MIT License](https://img.shields.io/badge/license-MIT-607D8B?style=flat-square)
 
 The **Finances Portfolio Tracker** is a lightweight, production-grade CLI application designed to track, record, analyze personal investment portfolios, and monitor target asset dip opportunities.
 
-By integrating live market data with multi-currency conversion, concurrent API fetching, structured domain models, and centralized environment configuration, this project provides a **Single Source of Truth (SSoT)** for evaluating asset performance, portfolio ROI, and capital allocation.
+By integrating live market data with multi-currency conversion, concurrent API fetching, relational SQLite persistence, structured domain models, and centralized environment configuration, this project provides a **Single Source of Truth (SSoT)** for evaluating asset performance, portfolio ROI, and capital allocation.
 
 ## 🏗️ Architecture & Structure
 
@@ -21,11 +21,13 @@ The repository follows a clean modular design, strictly separating portfolio dat
 
 | Layer | Path | Description |
 | :--- | :--- | :--- |
-| `Data Storage` | `data/` | Centralized repository for asset holdings (`portfolio.json`), historical snapshots (`history.json`), target watchlist (`watchlist.json`), and ETF metadata cache (`etf_cache.json`). |
+| `Data Storage` | `data/` | SQLite relational database (`finances.db`), watchlist configuration (`watchlist.json`), and ETF metadata cache (`etf_cache.json`). |
 | `Core Domain` | `src/core/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, data provider abstractions (`providers.py`), and repository abstractions. |
+| `Database Infrastructure` | `src/infra/database/` | SQLite connection management (`connection.py`), foreign key enforcement, transactional contexts, and schema initialization DDL (`schema.py`). |
 | `Google Drive Integration` | `src/infra/gdrive/` | Infrastructure service and OAuth2 authentication handlers for remote backup capabilities. |
 | `JustETF Integration` | `src/infra/justetf/` | Scraper client extracting ETF composition, sector allocation, country exposure, and TER directly from JustETF profile pages. |
 | `Logging System` | `src/utils/logger/` | Standardized internal logger enforcing clean output formatting across operations. |
+| `Data Migration` | `src/migrate_json_to_sqlite.py` | Idempotent migration utility transferring legacy JSON datasets into the SQLite database engine. |
 | `Automation` | `.github/workflows/` | CI Quality Pipeline (`ci.yml`). |
 | `Entrypoint` | `main.py` | Typer-powered CLI application orchestrating system commands and options. |
 | `Tooling` | `root` | Modern project definitions (`pyproject.toml`), environment template (`.env.example`), and quality gates (`Makefile`). |
@@ -47,26 +49,26 @@ Implements the `AssetDataProvider` protocol to decouple market data sources:
 - **`StockProvider`**: Fetches real-time stock prices and fundamental metrics (`StockDetails`) via `yfinance`.
 - **`ETFProvider`**: Combines real-time price quotes from `yfinance` with ETF composition details scraped from JustETF (cached locally).
 
+### 🗄️ Database Infrastructure & Repositories (`src/infra/database/` & `src/core/repositories.py`)
+Decouples domain logic from database persistence using Python Protocols:
+- **`SqlitePortfolioRepository`**: Default SQLite implementation for loading and persisting portfolio asset configurations.
+- **`SqliteHistoryRepository`**: Default SQLite implementation for reading and recording timestamped valuation snapshots.
+- **`JsonPortfolioRepository` / `JsonHistoryRepository`**: Legacy JSON file implementations maintained for backwards compatibility and migration pipelines.
+- **`ETFCacheRepository`**: Interface for reading and persisting cached ETF composition and exposure details with TTL validation.
+
 ### ⚠️ Domain Exceptions (`src/core/exceptions.py`)
 Custom error hierarchy eliminating generic exception handling:
 - **`FinancesError`**: Base exception class.
 - **`QuotationFetchError` / `ExchangeRateFetchError`**: Market data network or parsing issues.
-- **`StorageReadError` / `StorageWriteError`**: I/O and persistence failures.
+- **`StorageReadError` / `StorageWriteError`**: I/O and database persistence failures.
 - **`InvalidWatchlistError`**: Malformed or unreadable watchlist configurations.
 - **`JustETFScrapeError`**: Network or HTML parsing issues during JustETF data extraction.
-
-### 🗄️ Repository Abstraction (`src/core/repositories.py`)
-Decouples domain logic from filesystem operations using Python Protocols:
-- **`PortfolioRepository`**: Interface for loading asset definitions.
-- **`HistoryRepository`**: Interface for reading and persisting portfolio snapshots.
-- **`ETFCacheRepository`**: Interface for reading and persisting cached ETF composition and exposure details with TTL validation.
-- **`JsonPortfolioRepository` / `JsonHistoryRepository` / `JsonETFCacheRepository`**: Default JSON file implementations.
 
 ### ⚡ Parallel Processing & Snapshot Engine (`src/core/snapshot.py` & `src/core/dip_detector.py`)
 Concurrent I/O execution powered by `ThreadPoolExecutor`:
 - **Concurrent Quotes**: Multithreaded retrieval of asset prices and dip scans to reduce total execution time.
 - **Exchange Normalization**: Dynamic fetching and caching of conversion rates via Yahoo Finance (default target: `EUR`).
-- **Snapshot Persistence**: Appends timestamped valuation snapshots directly into storage via repositories.
+- **Database Persistence**: Appends timestamped valuation snapshots directly into the SQLite database.
 
 ### 📈 Performance Analyzer (`src/core/analysis.py`)
 Computes overall portfolio health and asset metrics:
@@ -79,10 +81,15 @@ Computes overall portfolio health and asset metrics:
 The application exposes a modern CLI built with **Typer**:
 
 ```bash
+# Migrate legacy JSON data (portfolio.json / history.json) to SQLite database
+make migrate
+# or manually:
+PYTHONPATH=. python3 src/migrate_json_to_sqlite.py
+
 # Display current portfolio valuation
 python main.py get-snapshot
 
-# Calculate valuation and persist snapshot to history
+# Calculate valuation and persist snapshot to SQLite history
 python main.py save-snapshot
 
 # Analyze portfolio performance and ROI
