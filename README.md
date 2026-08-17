@@ -22,7 +22,7 @@ The repository follows a clean modular design, strictly separating portfolio dat
 | Layer | Path | Description |
 | :--- | :--- | :--- |
 | `Data Storage` | `data/` | Centralized repository for asset holdings (`portfolio.json`), historical snapshots (`history.json`), target watchlist (`watchlist.json`), and ETF metadata cache (`etf_cache.json`). |
-| `Core Domain` | `src/core/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, and repository abstractions. |
+| `Core Domain` | `src/core/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, data provider abstractions (`providers.py`), and repository abstractions. |
 | `Google Drive Integration` | `src/infra/gdrive/` | Infrastructure service and OAuth2 authentication handlers for remote backup capabilities. |
 | `JustETF Integration` | `src/infra/justetf/` | Scraper client extracting ETF composition, sector allocation, country exposure, and TER directly from JustETF profile pages. |
 | `Logging System` | `src/utils/logger/` | Standardized internal logger enforcing clean output formatting across operations. |
