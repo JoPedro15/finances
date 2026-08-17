@@ -10,8 +10,9 @@ from datetime import datetime
 from typing import Any
 
 from src.core.exceptions import StorageError
-from src.core.get_quotation import get_exchange_rate, get_quotation
+from src.core.get_quotation import get_exchange_rate
 from src.core.models import Asset, AssetSnapshot, PortfolioSnapshot, Quotation
+from src.core.providers import AssetDataProvider, ETFProvider, StockProvider
 from src.core.repositories import (
     HistoryRepository,
     JsonHistoryRepository,
@@ -24,6 +25,13 @@ from src.utils.logger.logger import logger
 DATA_DIR: str = os.path.join(os.path.dirname(__file__), "../..", "data")
 PORTFOLIO_FILE: str = os.path.join(DATA_DIR, "portfolio.json")
 HISTORY_FILE: str = os.path.join(DATA_DIR, "history.json")
+
+
+def get_provider_for_asset(asset: Asset) -> AssetDataProvider:
+    """Selects the appropriate data provider based on asset classification."""
+    if asset.isin and len(asset.isin) == 12:
+        return ETFProvider()
+    return StockProvider()
 
 
 def get_snapshot(
@@ -51,17 +59,15 @@ def get_snapshot(
         )
 
     def fetch_asset_quotation(asset: Asset) -> tuple[Asset, Quotation | None]:
-        raw_quotation = get_quotation(asset.yahoo_ticker)
+        provider: AssetDataProvider = get_provider_for_asset(asset)
+        raw_quotation: Quotation | None = provider.get_price(asset)
+
+        # Trigger retrieval/caching for ETF composition details if applicable
+        provider.get_details(asset)
+
         if not raw_quotation:
             return asset, None
-        if isinstance(raw_quotation, Quotation):
-            return asset, raw_quotation
-        if isinstance(raw_quotation, dict):
-            return asset, Quotation(
-                price=float(raw_quotation["price"]),
-                currency=str(raw_quotation.get("currency", "N/A")),
-            )
-        return asset, None
+        return asset, raw_quotation
 
     quotations_map: dict[str, Quotation] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
