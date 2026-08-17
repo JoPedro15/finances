@@ -4,10 +4,12 @@ Data provider abstractions and implementations for stocks and ETFs.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
+
+import yfinance as yf  # type: ignore[import-untyped]
 
 from src.core.get_quotation import get_quotation
-from src.core.models import Asset, ETFDetails, Quotation
+from src.core.models import Asset, ETFDetails, Quotation, StockDetails
 from src.core.repositories import ETFCacheRepository, JsonETFCacheRepository
 from src.infra.justetf.client import JustETFClient
 from src.utils.logger.logger import logger
@@ -20,8 +22,8 @@ class AssetDataProvider(Protocol):
         """Fetches the current market quotation for an asset."""
         ...
 
-    def get_details(self, asset: Asset) -> ETFDetails | None:
-        """Fetches extended details (e.g., ETF composition), if applicable."""
+    def get_details(self, asset: Asset) -> ETFDetails | StockDetails | None:
+        """Fetches extended details (ETF composition or stock fundamentals)."""
         ...
 
 
@@ -32,9 +34,63 @@ class StockProvider:
         """Retrieves real-time quotation for a single stock using yfinance."""
         return get_quotation(asset.yahoo_ticker)
 
-    def get_details(self, asset: Asset) -> ETFDetails | None:
-        """Stocks do not contain ETF composition details."""
-        return None
+    def get_details(self, asset: Asset) -> StockDetails | None:
+        """Retrieves fundamental metrics for a stock via yfinance."""
+        if not asset.yahoo_ticker:
+            logger.error(f"No Yahoo ticker provided for stock asset '{asset.name}'.")
+            return None
+
+        try:
+            ticker: yf.Ticker = yf.Ticker(asset.yahoo_ticker)
+            info: dict[str, Any] = ticker.info
+
+            if not info or not isinstance(info, dict):
+                logger.error(
+                    f"yfinance returned empty metadata for '{asset.yahoo_ticker}'."
+                )
+                return None
+
+            raw_div: Any = info.get("dividendYield")
+            dividend_yield_pct: float | None = None
+            if raw_div is not None:
+                try:
+                    val_float: float = float(raw_div)
+                    dividend_yield_pct = (
+                        round(val_float * 100.0, 4) if val_float < 1.0 else val_float
+                    )
+                except (ValueError, TypeError):
+                    dividend_yield_pct = None
+
+            def _parse_float(key: str) -> float | None:
+                val: Any = info.get(key)
+                if val is None:
+                    return None
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return None
+
+            def _parse_str(key: str) -> str | None:
+                val: Any = info.get(key)
+                return str(val) if val is not None else None
+
+            return StockDetails(
+                market_cap=_parse_float("marketCap"),
+                pe_ratio=_parse_float("trailingPE"),
+                forward_pe=_parse_float("forwardPE"),
+                dividend_yield_pct=dividend_yield_pct,
+                fifty_two_week_high=_parse_float("fiftyTwoWeekHigh"),
+                fifty_two_week_low=_parse_float("fiftyTwoWeekLow"),
+                sector=_parse_str("sector"),
+                industry=_parse_str("industry"),
+            )
+        except Exception as e:
+            err_details: str = f"{type(e).__name__} - {e}"
+            logger.error(
+                f"yfinance exception while fetching '{asset.yahoo_ticker}': "
+                f"{err_details}"
+            )
+            return None
 
 
 class ETFProvider:
@@ -54,6 +110,10 @@ class ETFProvider:
 
     def get_details(self, asset: Asset) -> ETFDetails | None:
         """Retrieves ETF composition, checking local cache before scraping."""
+        if not asset.isin:
+            logger.error(f"No ISIN provided for ETF asset {asset.name}.")
+            return None
+
         cached_details: ETFDetails | None = self.cache_repo.get_etf_details(asset.isin)
         if cached_details is not None:
             return cached_details

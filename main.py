@@ -16,8 +16,13 @@ from src.core.analysis import (
     calculate_portfolio_exposure,
 )
 from src.core.dip_detector import load_watchlist, scan_watchlist
-from src.core.models import Asset, ETFDetails, PortfolioSnapshot
-from src.core.providers import ETFProvider
+from src.core.models import (
+    Asset,
+    ETFDetails,
+    PortfolioSnapshot,
+    StockDetails,
+)
+from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import JsonPortfolioRepository
 from src.core.snapshot import display_snapshot, get_snapshot, save_snapshot
 from src.utils.logger.logger import logger
@@ -215,6 +220,129 @@ def etf_details_cmd(
 
     for asset in etf_assets:
         _display_single_etf_details(asset.isin, asset.name, provider)
+
+
+def _display_single_stock_details(
+    identifier: str, name: str, provider: StockProvider, asset: Asset | None = None
+) -> None:
+    """Helper function to fetch and print formatted fundamental details for a stock."""
+    logger.section("Stock Details Inspection")
+    logger.info(f"Stock Name: {name}")
+    if asset and asset.isin:
+        logger.info(f"Stock ISIN: {asset.isin}")
+    logger.info(f"Ticker: {identifier}")
+
+    dummy_asset: Asset = asset or Asset(
+        name=name,
+        isin="",
+        yahoo_ticker=identifier,
+        quantity=0,
+        average_buy_price=0.0,
+        asset_type="stock",
+    )
+
+    details: StockDetails | None = provider.get_details(dummy_asset)
+
+    if details is None:
+        logger.error(f"Failed to fetch details for stock '{identifier}'.")
+        return
+
+    mcap_str: str = (
+        f"{details.market_cap / 1e9:.2f}B" if details.market_cap is not None else "N/A"
+    )
+    pe_str: str = f"{details.pe_ratio:.2f}" if details.pe_ratio is not None else "N/A"
+    fwd_pe_str: str = (
+        f"{details.forward_pe:.2f}" if details.forward_pe is not None else "N/A"
+    )
+    div_str: str = (
+        f"{details.dividend_yield_pct:.2f}%"
+        if details.dividend_yield_pct is not None
+        else "N/A"
+    )
+    high_str: str = (
+        f"{details.fifty_two_week_high:.2f}"
+        if details.fifty_two_week_high is not None
+        else "N/A"
+    )
+    low_str: str = (
+        f"{details.fifty_two_week_low:.2f}"
+        if details.fifty_two_week_low is not None
+        else "N/A"
+    )
+
+    logger.info(f"Sector: {details.sector or 'N/A'}")
+    logger.info(f"Industry: {details.industry or 'N/A'}")
+    logger.info(f"Market Cap: {mcap_str}")
+    logger.info(f"P/E Ratio: {pe_str} (Forward P/E: {fwd_pe_str})")
+    logger.info(f"Dividend Yield: {div_str}")
+    logger.info(f"52-Week Range: {low_str} - {high_str}")
+
+
+@app.command(name="stock-details")
+def stock_details_cmd(
+    ticker_or_isin: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Optional Ticker or ISIN of the stock to inspect. "
+                "If omitted, inspects all stocks in portfolio."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Inspects fundamental metrics for a stock ticker/ISIN or all portfolio stocks."""
+    provider: StockProvider = StockProvider()
+    repo: JsonPortfolioRepository = JsonPortfolioRepository("data/portfolio.json")
+
+    if ticker_or_isin:
+        clean_input: str = ticker_or_isin.strip().upper()
+        assets_lookup: list[Asset] = []
+        try:
+            assets_lookup = repo.load_assets()
+        except Exception:
+            assets_lookup = []
+
+        matched_asset: Asset | None = next(
+            (
+                a
+                for a in assets_lookup
+                if a.asset_type == "stock"
+                and (
+                    a.yahoo_ticker.upper() == clean_input
+                    or (a.isin and a.isin.upper() == clean_input)
+                )
+            ),
+            None,
+        )
+
+        ticker: str = matched_asset.yahoo_ticker if matched_asset else clean_input
+        asset_name: str = matched_asset.name if matched_asset else clean_input
+        _display_single_stock_details(
+            identifier=ticker,
+            name=asset_name,
+            provider=provider,
+            asset=matched_asset,
+        )
+        return
+
+    try:
+        assets: list[Asset] = repo.load_assets()
+    except Exception as e:
+        logger.error(f"Failed to load portfolio assets: {e}")
+        raise typer.Exit(code=1) from e
+
+    stock_assets: list[Asset] = [a for a in assets if a.asset_type == "stock"]
+    if not stock_assets:
+        logger.warning("No active stock holdings found in portfolio.")
+        return
+
+    for asset in stock_assets:
+        _display_single_stock_details(
+            identifier=asset.yahoo_ticker,
+            name=asset.name,
+            provider=provider,
+            asset=asset,
+        )
 
 
 @app.command(name="analyze-exposure")

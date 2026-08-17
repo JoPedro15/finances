@@ -37,8 +37,15 @@ Each module inside `src/core/` adheres to standard type hinting, explicit domain
 ### 📐 Domain Models (`src/core/models.py`)
 Defines strongly-typed, immutable dataclasses representing business concepts:
 - **`Quotation`**: Represents ticker price, currency, and retrieval timestamp.
-- **`Asset`**: Portfolio asset configuration (name, ISIN, ticker, quantity, buy price).
+- **`Asset`**: Portfolio asset configuration (name, ISIN, ticker, quantity, buy price, asset type).
 - **`AssetSnapshot` & `PortfolioSnapshot`**: Normalized valuations for individual assets and total portfolio state.
+- **`Holding`**, **`SectorExposure`**, **`CountryExposure`** & **`ETFDetails`**: Consolidated ETF composition, sector, country allocations, and TER.
+- **`StockDetails`**: Fundamental equity metrics (Market Cap, P/E Ratio, Forward P/E, Dividend Yield, 52-week High/Low, Sector, and Industry).
+
+### 🌐 Data Providers (`src/core/providers.py`)
+Implements the `AssetDataProvider` protocol to decouple market data sources:
+- **`StockProvider`**: Fetches real-time stock prices and fundamental metrics (`StockDetails`) via `yfinance`.
+- **`ETFProvider`**: Combines real-time price quotes from `yfinance` with ETF composition details scraped from JustETF (cached locally).
 
 ### ⚠️ Domain Exceptions (`src/core/exceptions.py`)
 Custom error hierarchy eliminating generic exception handling:
@@ -84,8 +91,11 @@ python main.py analyze
 # Scan watchlist for price dips (with optional parameters)
 python main.py check-dips --watchlist data/watchlist.json --min-drop 5.0 --max-drop 10.0 --lookback 5
 
-# Inspect details, holdings, and breakdowns for a specific ETF ISIN
+# Inspect composition, TER, and holdings for a specific ETF or all portfolio ETFs
 python main.py etf-details IE00B4L5Y983
+
+# Inspect fundamental metrics (Market Cap, P/E Ratio, Sector, etc.) for a stock or all portfolio stocks
+python main.py stock-details AAPL
 
 # Analyze consolidated portfolio exposure across sectors and countries
 python main.py analyze-exposure
