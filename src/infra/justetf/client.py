@@ -4,6 +4,8 @@ Infrastructure client for scraping ETF details from JustETF.
 
 from __future__ import annotations
 
+import re
+
 import requests
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
@@ -87,35 +89,62 @@ class JustETFClient:
 
     def _parse_holdings(self, soup: BeautifulSoup) -> list[Holding]:
         holdings: list[Holding] = []
-        table = soup.find("table", {"id": "top-holdings"}) or soup.find(
-            "table", class_="table"
-        )
+
+        table = soup.find("table", {"id": "top-holdings"})
+        if not isinstance(table, Tag):
+            container = soup.find(
+                lambda tag: tag.name in ["div", "section", "table"]
+                and tag.get("id")
+                and "holding" in str(tag.get("id")).lower()
+            )
+            if isinstance(container, Tag):
+                table = (
+                    container if container.name == "table" else container.find("table")
+                )
+
+        if not isinstance(table, Tag):
+            for tbl in soup.find_all("table"):
+                header_text = tbl.get_text().lower()
+                if (
+                    "holding" in header_text
+                    or "weight" in header_text
+                    or "name" in header_text
+                ) and "inception" not in header_text:
+                    table = tbl
+                    break
+
         if not isinstance(table, Tag):
             return holdings
 
-        for row in table.find_all("tr")[1:]:
-            cols = row.find_all("td")
+        for row in table.find_all("tr"):
+            cols = row.find_all(["td", "th"])
             if len(cols) < 2:
                 continue
 
             name = cols[0].get_text(strip=True)
-            weight_str = (
-                cols[-1].get_text(strip=True).replace("%", "").replace(",", ".")
-            )
-            try:
-                weight_pct = float(weight_str)
-            except ValueError:
-                weight_pct = 0.0
+            if not name or name.lower() in [
+                "name",
+                "holding",
+                "top holdings",
+                "weight",
+            ]:
+                continue
 
-            if name:
-                holdings.append(
-                    Holding(
-                        name=name,
-                        isin="",  # Pode ser preenchido se extraído do link
-                        ticker=None,
-                        weight_pct=weight_pct,
+            weight_text = cols[-1].get_text(strip=True)
+            match = re.search(r"(\d+[.,]?\d*)\s*%", weight_text)
+            if match:
+                try:
+                    weight_pct = float(match.group(1).replace(",", "."))
+                    holdings.append(
+                        Holding(
+                            name=name,
+                            isin="",
+                            ticker=None,
+                            weight_pct=weight_pct,
+                        )
                     )
-                )
+                except ValueError:
+                    continue
 
         return holdings
 
@@ -123,23 +152,39 @@ class JustETFClient:
         sectors: list[SectorExposure] = []
         container = soup.find("div", {"id": "sectors"})
         if not isinstance(container, Tag):
-            return sectors
+            container = soup.find(
+                lambda tag: tag.name in ["div", "section", "table"]
+                and tag.get("id")
+                and "sector" in str(tag.get("id")).lower()
+            )
 
-        rows = container.find_all("tr")
+        target = container if isinstance(container, Tag) else soup
+        rows = target.find_all("tr") if isinstance(target, Tag) else []
+
         for row in rows:
-            cols = row.find_all("td")
+            cols = row.find_all(["td", "th"])
             if len(cols) >= 2:
                 sector_name = cols[0].get_text(strip=True)
-                weight_str = (
-                    cols[1].get_text(strip=True).replace("%", "").replace(",", ".")
-                )
-                try:
-                    weight_pct = float(weight_str)
-                    sectors.append(
-                        SectorExposure(sector_name=sector_name, weight_pct=weight_pct)
-                    )
-                except ValueError:
+                if not sector_name or sector_name.lower() in [
+                    "sector",
+                    "name",
+                    "weight",
+                ]:
                     continue
+
+                weight_text = cols[1].get_text(strip=True)
+                match = re.search(r"(\d+[.,]?\d*)\s*%", weight_text)
+                if match:
+                    try:
+                        weight_pct = float(match.group(1).replace(",", "."))
+                        sectors.append(
+                            SectorExposure(
+                                sector_name=sector_name,
+                                weight_pct=weight_pct,
+                            )
+                        )
+                    except ValueError:
+                        continue
 
         return sectors
 
@@ -147,40 +192,54 @@ class JustETFClient:
         countries: list[CountryExposure] = []
         container = soup.find("div", {"id": "countries"})
         if not isinstance(container, Tag):
-            return countries
+            container = soup.find(
+                lambda tag: tag.name in ["div", "section", "table"]
+                and tag.get("id")
+                and "countr" in str(tag.get("id")).lower()
+            )
 
-        rows = container.find_all("tr")
+        target = container if isinstance(container, Tag) else soup
+        rows = target.find_all("tr") if isinstance(target, Tag) else []
+
         for row in rows:
-            cols = row.find_all("td")
+            cols = row.find_all(["td", "th"])
             if len(cols) >= 2:
                 country_name = cols[0].get_text(strip=True)
-                weight_str = (
-                    cols[1].get_text(strip=True).replace("%", "").replace(",", ".")
-                )
-                try:
-                    weight_pct = float(weight_str)
-                    countries.append(
-                        CountryExposure(
-                            country_name=country_name, weight_pct=weight_pct
-                        )
-                    )
-                except ValueError:
+                if not country_name or country_name.lower() in [
+                    "country",
+                    "name",
+                    "weight",
+                ]:
                     continue
+
+                weight_text = cols[1].get_text(strip=True)
+                match = re.search(r"(\d+[.,]?\d*)\s*%", weight_text)
+                if match:
+                    try:
+                        weight_pct = float(match.group(1).replace(",", "."))
+                        countries.append(
+                            CountryExposure(
+                                country_name=country_name,
+                                weight_pct=weight_pct,
+                            )
+                        )
+                    except ValueError:
+                        continue
 
         return countries
 
     def _parse_ter(self, soup: BeautifulSoup) -> float | None:
-        # Procura por elementos que contenham "TER" ou "Total Expense Ratio"
-        for label in soup.find_all(string=lambda t: t and "TER" in t):
+        for label in soup.find_all(
+            string=re.compile(r"TER|Total\s*Expense\s*Ratio", re.IGNORECASE)
+        ):
             parent = label.parent
             if parent:
-                val_elem = parent.find_next_sibling() or parent.find_next()
-                if val_elem:
-                    val_str = (
-                        val_elem.get_text(strip=True).replace("%", "").replace(",", ".")
-                    )
+                search_scope = parent.parent if parent.parent else parent
+                text_content = search_scope.get_text()
+                match = re.search(r"(\d+[.,]?\d*)\s*%", text_content)
+                if match:
                     try:
-                        return float(val_str)
+                        return float(match.group(1).replace(",", "."))
                     except ValueError:
                         pass
         return None
