@@ -62,6 +62,9 @@ def calculate_portfolio_exposure(
     for isin, asset in asset_map.items():
         if not asset.isin or len(asset.isin) != 12:
             continue
+        # Filter strictly by ETF asset type to ignore individual stocks
+        if asset.asset_type != "etf":
+            continue
 
         asset_value_eur: float = snapshot_map.get(isin, 0.0)
         if asset_value_eur <= 0.0:
@@ -131,7 +134,9 @@ def analyze_overall_performance(
         return
 
     latest_asset_values: dict[str, float] = {
-        asset.isin: asset.value_eur for asset in latest_snapshot.assets_snapshot
+        asset.isin: asset.value_eur
+        for asset in latest_snapshot.assets_snapshot
+        if asset.isin
     }
 
     valid_acquisition_cost: float = 0.0
@@ -141,7 +146,9 @@ def analyze_overall_performance(
         logger.subsection(asset.name)
 
         acquisition_cost: float = asset.acquisition_cost
-        latest_value: float | None = latest_asset_values.get(asset.isin)
+        latest_value: float | None = (
+            latest_asset_values.get(asset.isin) if asset.isin else None
+        )
 
         if latest_value is None:
             logger.warning(f"No recent market data found for {asset.name}. Skipping.")

@@ -5,6 +5,7 @@ Infrastructure client for scraping ETF details from JustETF.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -34,17 +35,17 @@ class JustETFClient:
     }
 
     def __init__(self, timeout: float = 10.0, max_retries: int = 3) -> None:
-        self.timeout = timeout
-        self.session = requests.Session()
+        self.timeout: float = timeout
+        self.session: requests.Session = requests.Session()
         self.session.headers.update(self.DEFAULT_HEADERS)
 
-        retries = Retry(
+        retries: Retry = Retry(
             total=max_retries,
             backoff_factor=1.0,
             status_forcelist=[429, 500, 502, 503, 504],
             raise_on_status=False,
         )
-        adapter = HTTPAdapter(max_retries=retries)
+        adapter: HTTPAdapter = HTTPAdapter(max_retries=retries)
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
 
@@ -55,9 +56,9 @@ class JustETFClient:
         Raises:
             JustETFScrapeError: If request fails or HTML cannot be parsed.
         """
-        url = f"{self.BASE_URL}?isin={isin}"
+        url: str = f"{self.BASE_URL}?isin={isin}"
         try:
-            response = self.session.get(url, timeout=self.timeout)
+            response: requests.Response = self.session.get(url, timeout=self.timeout)
             if response.status_code != 200:
                 raise JustETFScrapeError(
                     f"HTTP error {response.status_code} while fetching ISIN {isin}"
@@ -68,11 +69,11 @@ class JustETFClient:
             ) from e
 
         try:
-            soup = BeautifulSoup(response.text, "html.parser")
-            holdings = self._parse_holdings(soup)
-            sectors = self._parse_sectors(soup)
-            countries = self._parse_countries(soup)
-            ter_pct = self._parse_ter(soup)
+            soup: BeautifulSoup = BeautifulSoup(response.text, "html.parser")
+            holdings: list[Holding] = self._parse_holdings(soup)
+            sectors: list[SectorExposure] = self._parse_sectors(soup)
+            countries: list[CountryExposure] = self._parse_countries(soup)
+            ter_pct: float | None = self._parse_ter(soup)
 
             return ETFDetails(
                 holdings=holdings,
@@ -90,55 +91,109 @@ class JustETFClient:
     def _parse_holdings(self, soup: BeautifulSoup) -> list[Holding]:
         holdings: list[Holding] = []
 
-        table = soup.find("table", {"id": "top-holdings"})
-        if not isinstance(table, Tag):
-            container = soup.find(
+        # 1. Procurar por linhas com data-testid
+        rows: list[Tag] = soup.find_all(
+            "tr", {"data-testid": lambda x: x and "top-holdings_row" in x}
+        )
+
+        # 2. Fallback: ID clássico top-holdings
+        if not rows:
+            container_res: Any = soup.find("table", {"id": "top-holdings"})
+            container: Tag | None = (
+                container_res if isinstance(container_res, Tag) else None
+            )
+            if isinstance(container, Tag):
+                rows = container.find_all("tr")
+
+        # 3. Fallback: Div ou section de holdings
+        if not rows:
+            container_res = soup.find(
                 lambda tag: tag.name in ["div", "section", "table"]
                 and tag.get("id")
                 and "holding" in str(tag.get("id")).lower()
             )
+            container = container_res if isinstance(container_res, Tag) else None
             if isinstance(container, Tag):
-                table = (
+                target_res: Any = (
                     container if container.name == "table" else container.find("table")
                 )
+                target_table: Tag | None = (
+                    target_res if isinstance(target_res, Tag) else None
+                )
+                if isinstance(target_table, Tag):
+                    rows = target_table.find_all("tr")
 
-        if not isinstance(table, Tag):
-            for tbl in soup.find_all("table"):
-                header_text = tbl.get_text().lower()
+        # 4. Fallback: Procurar por cabeçalho textual
+        if not rows:
+            for table in soup.find_all("table"):
+                header_text: str = table.get_text().lower()
                 if (
-                    "holding" in header_text
-                    or "weight" in header_text
-                    or "name" in header_text
-                ) and "inception" not in header_text:
-                    table = tbl
+                    ("top holdings" in header_text or "holding" in header_text)
+                    and "sector" not in header_text
+                    and "country" not in header_text
+                    and "inception" not in header_text
+                ):
+                    rows = table.find_all("tr")
                     break
 
-        if not isinstance(table, Tag):
-            return holdings
+        for row in rows:
+            raw_name_elem: Any = row.find(
+                attrs={"data-testid": lambda x: x and "link_name" in str(x)}
+            )
+            name_elem: Tag | None = (
+                raw_name_elem if isinstance(raw_name_elem, Tag) else None
+            )
 
-        for row in table.find_all("tr"):
-            cols = row.find_all(["td", "th"])
-            if len(cols) < 2:
-                continue
+            raw_weight_elem: Any = row.find(
+                attrs={"data-testid": lambda x: x and "value_percentage" in str(x)}
+            )
+            weight_elem: Tag | None = (
+                raw_weight_elem if isinstance(raw_weight_elem, Tag) else None
+            )
 
-            name = cols[0].get_text(strip=True)
+            name: str = ""
+            isin: str = ""
+            weight_text: str = ""
+
+            if name_elem and weight_elem:
+                name = name_elem.get_text(strip=True)
+                weight_text = weight_elem.get_text(strip=True)
+                if name_elem.name == "a":
+                    href_attr: Any = name_elem.get("href", "")
+                    href: str = str(href_attr) if isinstance(href_attr, str) else ""
+                    if "stock-profiles/" in href:
+                        isin = href.split("stock-profiles/")[-1].split("/")[0].upper()
+            else:
+                cols: list[Tag] = row.find_all(["td", "th"])
+                if len(cols) >= 2:
+                    name = cols[0].get_text(strip=True)
+                    weight_text = cols[-1].get_text(strip=True)
+                    link: Any = cols[0].find("a")
+                    if isinstance(link, Tag):
+                        href_attr = link.get("href", "")
+                        href = str(href_attr) if isinstance(href_attr, str) else ""
+                        if "stock-profiles/" in href:
+                            isin = (
+                                href.split("stock-profiles/")[-1].split("/")[0].upper()
+                            )
+
             if not name or name.lower() in [
                 "name",
                 "holding",
                 "top holdings",
                 "weight",
+                "components",
             ]:
                 continue
 
-            weight_text = cols[-1].get_text(strip=True)
-            match = re.search(r"(\d+[.,]?\d*)\s*%", weight_text)
+            match: re.Match[str] | None = re.search(r"(\d+[.,]?\d*)\s*%", weight_text)
             if match:
                 try:
-                    weight_pct = float(match.group(1).replace(",", "."))
+                    weight_pct: float = float(match.group(1).replace(",", "."))
                     holdings.append(
                         Holding(
                             name=name,
-                            isin="",
+                            isin=isin,
                             ticker=None,
                             weight_pct=weight_pct,
                         )
@@ -150,33 +205,54 @@ class JustETFClient:
 
     def _parse_sectors(self, soup: BeautifulSoup) -> list[SectorExposure]:
         sectors: list[SectorExposure] = []
-        container = soup.find("div", {"id": "sectors"})
-        if not isinstance(container, Tag):
-            container = soup.find(
-                lambda tag: tag.name in ["div", "section", "table"]
-                and tag.get("id")
-                and "sector" in str(tag.get("id")).lower()
+        rows: list[Tag] = soup.find_all(
+            "tr",
+            {
+                "data-testid": lambda x: x
+                and "sector" in str(x).lower()
+                and "row" in str(x).lower()
+            },
+        )
+        if not rows:
+            container_res: Any = soup.find("div", {"id": "sectors"})
+            container: Tag | None = (
+                container_res if isinstance(container_res, Tag) else None
             )
-
-        target = container if isinstance(container, Tag) else soup
-        rows = target.find_all("tr") if isinstance(target, Tag) else []
+            if isinstance(container, Tag):
+                target_res: Any = (
+                    container if container.name == "table" else container.find("table")
+                )
+                target_table: Tag | None = (
+                    target_res if isinstance(target_res, Tag) else None
+                )
+                if isinstance(target_table, Tag):
+                    rows = target_table.find_all("tr")
+        if not rows:
+            for table in soup.find_all("table"):
+                header_text: str = table.get_text().lower()
+                if "sector" in header_text and "country" not in header_text:
+                    rows = table.find_all("tr")
+                    break
 
         for row in rows:
-            cols = row.find_all(["td", "th"])
+            cols: list[Tag] = row.find_all(["td", "th"])
             if len(cols) >= 2:
-                sector_name = cols[0].get_text(strip=True)
+                sector_name: str = cols[0].get_text(strip=True)
                 if not sector_name or sector_name.lower() in [
                     "sector",
                     "name",
                     "weight",
+                    "breakdown",
                 ]:
                     continue
 
-                weight_text = cols[1].get_text(strip=True)
-                match = re.search(r"(\d+[.,]?\d*)\s*%", weight_text)
+                weight_text: str = cols[-1].get_text(strip=True)
+                match: re.Match[str] | None = re.search(
+                    r"(\d+[.,]?\d*)\s*%", weight_text
+                )
                 if match:
                     try:
-                        weight_pct = float(match.group(1).replace(",", "."))
+                        weight_pct: float = float(match.group(1).replace(",", "."))
                         sectors.append(
                             SectorExposure(
                                 sector_name=sector_name,
@@ -190,33 +266,60 @@ class JustETFClient:
 
     def _parse_countries(self, soup: BeautifulSoup) -> list[CountryExposure]:
         countries: list[CountryExposure] = []
-        container = soup.find("div", {"id": "countries"})
-        if not isinstance(container, Tag):
-            container = soup.find(
-                lambda tag: tag.name in ["div", "section", "table"]
-                and tag.get("id")
-                and "countr" in str(tag.get("id")).lower()
+        rows: list[Tag] = soup.find_all(
+            "tr",
+            {
+                "data-testid": lambda x: x
+                and "countr" in str(x).lower()
+                and "row" in str(x).lower()
+            },
+        )
+        if not rows:
+            container_res: Any = soup.find("div", {"id": "countries"})
+            container: Tag | None = (
+                container_res if isinstance(container_res, Tag) else None
             )
-
-        target = container if isinstance(container, Tag) else soup
-        rows = target.find_all("tr") if isinstance(target, Tag) else []
+            if isinstance(container, Tag):
+                target_res: Any = (
+                    container if container.name == "table" else container.find("table")
+                )
+                target_table: Tag | None = (
+                    target_res if isinstance(target_res, Tag) else None
+                )
+                if isinstance(target_table, Tag):
+                    rows = target_table.find_all("tr")
+        if not rows:
+            for table in soup.find_all("table"):
+                header_text: str = table.get_text().lower()
+                if (
+                    "country" in header_text
+                    or "countries" in header_text
+                    or "region" in header_text
+                ) and "sector" not in header_text:
+                    rows = table.find_all("tr")
+                    break
 
         for row in rows:
-            cols = row.find_all(["td", "th"])
+            cols: list[Tag] = row.find_all(["td", "th"])
             if len(cols) >= 2:
-                country_name = cols[0].get_text(strip=True)
+                country_name: str = cols[0].get_text(strip=True)
                 if not country_name or country_name.lower() in [
                     "country",
+                    "countries",
+                    "region",
                     "name",
                     "weight",
+                    "breakdown",
                 ]:
                     continue
 
-                weight_text = cols[1].get_text(strip=True)
-                match = re.search(r"(\d+[.,]?\d*)\s*%", weight_text)
+                weight_text: str = cols[-1].get_text(strip=True)
+                match: re.Match[str] | None = re.search(
+                    r"(\d+[.,]?\d*)\s*%", weight_text
+                )
                 if match:
                     try:
-                        weight_pct = float(match.group(1).replace(",", "."))
+                        weight_pct: float = float(match.group(1).replace(",", "."))
                         countries.append(
                             CountryExposure(
                                 country_name=country_name,
@@ -232,11 +335,13 @@ class JustETFClient:
         for label in soup.find_all(
             string=re.compile(r"TER|Total\s*Expense\s*Ratio", re.IGNORECASE)
         ):
-            parent = label.parent
+            parent: Tag | None = label.parent
             if parent:
-                search_scope = parent.parent if parent.parent else parent
-                text_content = search_scope.get_text()
-                match = re.search(r"(\d+[.,]?\d*)\s*%", text_content)
+                search_scope: Tag = parent.parent if parent.parent else parent
+                text_content: str = search_scope.get_text()
+                match: re.Match[str] | None = re.search(
+                    r"(\d+[.,]?\d*)\s*%", text_content
+                )
                 if match:
                     try:
                         return float(match.group(1).replace(",", "."))
