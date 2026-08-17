@@ -2,12 +2,25 @@
 Unit tests for portfolio snapshot logic in src/core/snapshot.py.
 """
 
+from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.core.models import Asset, PortfolioSnapshot, Quotation
 from src.core.snapshot import get_snapshot
+
+
+@pytest.fixture(autouse=True)
+def mock_provider_details() -> Generator[None]:
+    """Mocks provider details to prevent unmocked yfinance SQLite cache
+    initialization.
+    """
+    with (
+        patch("src.core.providers.StockProvider.get_details", return_value=None),
+        patch("src.core.providers.ETFProvider.get_details", return_value=None),
+    ):
+        yield
 
 
 @pytest.fixture

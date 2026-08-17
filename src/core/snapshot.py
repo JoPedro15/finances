@@ -4,7 +4,6 @@ This file contains the logic for creating and managing portfolio value snapshots
 
 from __future__ import annotations
 
-import os
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
@@ -15,16 +14,12 @@ from src.core.models import Asset, AssetSnapshot, PortfolioSnapshot, Quotation
 from src.core.providers import AssetDataProvider, ETFProvider, StockProvider
 from src.core.repositories import (
     HistoryRepository,
-    JsonHistoryRepository,
-    JsonPortfolioRepository,
     PortfolioRepository,
+    SqliteHistoryRepository,
+    SqlitePortfolioRepository,
 )
+from src.infra.database.connection import DEFAULT_DB_PATH
 from src.utils.logger.logger import logger
-
-# --- Configuration ---
-DATA_DIR: str = os.path.join(os.path.dirname(__file__), "../..", "data")
-PORTFOLIO_FILE: str = os.path.join(DATA_DIR, "portfolio.json")
-HISTORY_FILE: str = os.path.join(DATA_DIR, "history.json")
 
 
 def get_provider_for_asset(asset: Asset) -> AssetDataProvider:
@@ -41,8 +36,8 @@ def get_snapshot(
     """Calculates the current value of all assets in the portfolio concurrently."""
     logger.section("Getting Portfolio Snapshot")
 
-    repo: PortfolioRepository = portfolio_repo or JsonPortfolioRepository(
-        PORTFOLIO_FILE
+    repo: PortfolioRepository = portfolio_repo or SqlitePortfolioRepository(
+        DEFAULT_DB_PATH
     )
 
     try:
@@ -160,7 +155,7 @@ def save_snapshot(
         else PortfolioSnapshot.from_dict(snapshot_data)
     )
 
-    repo: HistoryRepository = history_repo or JsonHistoryRepository(HISTORY_FILE)
+    repo: HistoryRepository = history_repo or SqliteHistoryRepository(DEFAULT_DB_PATH)
 
     try:
         repo.save_snapshot(snapshot)
@@ -168,4 +163,4 @@ def save_snapshot(
         logger.error(f"Failed to write history snapshot: {e}", exception=e)
         return
 
-    logger.success(f"Snapshot successfully saved to {HISTORY_FILE}")
+    logger.success(f"Snapshot successfully saved to database ({DEFAULT_DB_PATH})")

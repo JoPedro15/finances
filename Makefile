@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean get-snapshot save-snapshot analyze check-dips etf-details stock-details analyze-exposure
+.PHONY: help install format lint security-check test quality clean get-snapshot save-snapshot analyze check-dips etf-details stock-details analyze-exposure migrate
 
 # ==============================================================================
 # 📖 Help
@@ -22,6 +22,7 @@ help:
 	@echo "  make quality          - Runs full quality gate (lint + security-check + test)."
 	@echo "  make clean            - Cleans Python temporary cache files and coverage reports."
 	@echo "  --- Project Utils ---"
+	@echo "  make migrate          - Migrates existing JSON data to SQLite database."
 	@echo "  make get-snapshot     - Displays the current portfolio value."
 	@echo "  make save-snapshot    - Saves the current portfolio value to history."
 	@echo "  make analyze          - Analyzes overall portfolio performance."
@@ -76,6 +77,9 @@ clean:
 # ==============================================================================
 # 📈 Project Utils
 # ==============================================================================
+migrate:
+	PYTHONPATH=. $(PYTHON) src/migrate_json_to_sqlite.py
+
 get-snapshot:
 	PYTHONPATH=src $(PYTHON) main.py get-snapshot
 
