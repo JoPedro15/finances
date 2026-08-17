@@ -18,6 +18,7 @@ from src.core.models import (
     PortfolioSnapshot,
     Quotation,
     SectorExposure,
+    StockDetails,
 )
 
 # ==============================================================================
@@ -314,3 +315,49 @@ def test_asset_immutability() -> None:
 
     with pytest.raises(FrozenInstanceError):
         asset.quantity = 99.0
+
+
+# ==============================================================================
+# StockDetails
+# ==============================================================================
+
+
+def test_stock_details_round_trip() -> None:
+    """Validates StockDetails serialises and deserialises all fields correctly."""
+    details: StockDetails = StockDetails(
+        market_cap=3000000000000.0,
+        pe_ratio=32.5,
+        forward_pe=28.0,
+        dividend_yield_pct=0.55,
+        fifty_two_week_high=235.0,
+        fifty_two_week_low=165.0,
+        sector="Technology",
+        industry="Consumer Electronics",
+    )
+
+    result: StockDetails = StockDetails.from_dict(details.to_dict())
+
+    assert result.market_cap == 3000000000000.0
+    assert result.pe_ratio == 32.5
+    assert result.forward_pe == 28.0
+    assert result.dividend_yield_pct == 0.55
+    assert result.fifty_two_week_high == 235.0
+    assert result.fifty_two_week_low == 165.0
+    assert result.sector == "Technology"
+    assert result.industry == "Consumer Electronics"
+
+
+def test_stock_details_none_values() -> None:
+    """Validates StockDetails handles None values correctly in round-trip."""
+    details: StockDetails = StockDetails()
+
+    result: StockDetails = StockDetails.from_dict(details.to_dict())
+
+    assert result.market_cap is None
+    assert result.pe_ratio is None
+    assert result.forward_pe is None
+    assert result.dividend_yield_pct is None
+    assert result.fifty_two_week_high is None
+    assert result.fifty_two_week_low is None
+    assert result.sector is None
+    assert result.industry is None
