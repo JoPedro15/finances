@@ -65,6 +65,7 @@ Concurrent I/O execution powered by `ThreadPoolExecutor`:
 Computes overall portfolio health and asset metrics:
 - **Asset Gain/Loss**: Calculates acquisition costs vs. current market values per ISIN.
 - **Global ROI Analysis**: Determines global Return on Investment (ROI) based strictly on active snapshot assets.
+- **Portfolio Exposure**: Calculates weighted sector and country breakdown across active portfolio ETFs.
 
 ## 💻 CLI Usage (`main.py`)
 
@@ -82,3 +83,9 @@ python main.py analyze
 
 # Scan watchlist for price dips (with optional parameters)
 python main.py check-dips --watchlist data/watchlist.json --min-drop 5.0 --max-drop 10.0 --lookback 5
+
+# Inspect details, holdings, and breakdowns for a specific ETF ISIN
+python main.py etf-details IE00B4L5Y983
+
+# Analyze consolidated portfolio exposure across sectors and countries
+python main.py analyze-exposure

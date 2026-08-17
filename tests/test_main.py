@@ -3,12 +3,18 @@ Unit tests for main.py CLI commands using Typer's CliRunner.
 """
 
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
 from main import app
-from src.core.models import PortfolioSnapshot
+from src.core.models import (
+    CountryExposure,
+    ETFDetails,
+    Holding,
+    PortfolioSnapshot,
+    SectorExposure,
+)
 
 runner: CliRunner = CliRunner()
 
@@ -87,3 +93,61 @@ def test_check_dips_command_empty_watchlist() -> None:
     with patch("main.load_watchlist", return_value=[]):
         result = runner.invoke(app, ["check-dips"])
         assert result.exit_code == 1
+
+
+@patch("main.ETFProvider")
+def test_etf_details_cmd_success(mock_provider_cls: MagicMock) -> None:
+    """Tests 'etf-details' CLI command on successful execution."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+
+    mock_provider.get_details.return_value = ETFDetails(
+        holdings=[
+            Holding(
+                name="Apple",
+                isin="US0378331005",
+                ticker="AAPL",
+                weight_pct=5.0,
+            )
+        ],
+        sector_breakdown=[SectorExposure(sector_name="Tech", weight_pct=30.0)],
+        country_breakdown=[CountryExposure(country_name="USA", weight_pct=70.0)],
+        ter_pct=0.20,
+    )
+
+    result = runner.invoke(app, ["etf-details", "IE00B4L5Y983"])
+
+    assert result.exit_code == 0
+    assert "ETF DETAILS INSPECTION: IE00B4L5Y983" in result.output
+    assert "Apple" in result.output
+    assert "Tech: 30.00%" in result.output
+
+
+def test_etf_details_cmd_invalid_isin() -> None:
+    """Tests 'etf-details' CLI command with an invalid ISIN format."""
+    result = runner.invoke(app, ["etf-details", "INVALID"])
+
+    assert result.exit_code == 1
+    assert "Invalid ISIN format" in result.output
+
+
+@patch("main.get_snapshot")
+@patch("main.calculate_portfolio_exposure")
+def test_analyze_exposure_cmd_success(
+    mock_calc_exposure: MagicMock, mock_get_snapshot: MagicMock
+) -> None:
+    """Tests 'analyze-exposure' CLI command on successful execution."""
+    mock_snapshot: MagicMock = MagicMock()
+    mock_get_snapshot.return_value = mock_snapshot
+
+    mock_exposure: MagicMock = MagicMock()
+    mock_exposure.total_etf_value_eur = 1000.0
+    mock_exposure.sector_exposure = {"Technology": 60.0}
+    mock_exposure.country_exposure = {"United States": 80.0}
+    mock_calc_exposure.return_value = mock_exposure
+
+    result = runner.invoke(app, ["analyze-exposure"])
+
+    assert result.exit_code == 0
+    assert "ANALYZING CONSOLIDATED PORTFOLIO EXPOSURE" in result.output
+    assert "Technology: 60.00%" in result.output
