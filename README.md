@@ -24,6 +24,7 @@ The repository follows a clean modular design, strictly separating portfolio dat
 | `Data Storage` | `data/` | Centralized repository for asset holdings (`portfolio.json`), historical snapshots (`history.json`), and target watchlist (`watchlist.json`). |
 | `Core Domain` | `src/core/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, and repository abstractions. |
 | `Google Drive Integration` | `src/infra/gdrive/` | Infrastructure service and OAuth2 authentication handlers for remote backup capabilities. |
+| `JustETF Integration` | `src/infra/justetf/` | Scraper client extracting ETF composition, sector allocation, country exposure, and TER directly from JustETF profile pages. |
 | `Logging System` | `src/utils/logger/` | Standardized internal logger enforcing clean output formatting across operations. |
 | `Automation` | `.github/workflows/` | CI Quality Pipeline (`ci.yml`). |
 | `Entrypoint` | `main.py` | Typer-powered CLI application orchestrating system commands and options. |
@@ -45,6 +46,7 @@ Custom error hierarchy eliminating generic exception handling:
 - **`QuotationFetchError` / `ExchangeRateFetchError`**: Market data network or parsing issues.
 - **`StorageReadError` / `StorageWriteError`**: I/O and persistence failures.
 - **`InvalidWatchlistError`**: Malformed or unreadable watchlist configurations.
+- **`JustETFScrapeError`**: Network or HTML parsing issues during JustETF data extraction.
 
 ### 🗄️ Repository Abstraction (`src/core/repositories.py`)
 Decouples domain logic from filesystem operations using Python Protocols:
