@@ -180,25 +180,31 @@ def etf_details_cmd(
     provider: ETFProvider = ETFProvider()
     repo: JsonPortfolioRepository = JsonPortfolioRepository("data/portfolio.json")
 
-    try:
-        assets: list[Asset] = repo.load_assets()
-    except Exception as e:
-        logger.error(f"Failed to load portfolio assets: {e}")
-        raise typer.Exit(code=1) from e
-
     if isin:
         clean_isin: str = isin.strip().upper()
         if len(clean_isin) != 12:
             logger.error(f"Invalid ISIN format '{isin}'. Expected a 12-character code.")
             raise typer.Exit(code=1)
 
+        assets_lookup: list[Asset] = []
+        try:
+            assets_lookup = repo.load_assets()
+        except Exception:
+            assets_lookup = []
+
         matched_asset: Asset | None = next(
-            (a for a in assets if a.isin and a.isin.upper() == clean_isin),
+            (a for a in assets_lookup if a.isin and a.isin.upper() == clean_isin),
             None,
         )
         asset_name: str = matched_asset.name if matched_asset else clean_isin
         _display_single_etf_details(clean_isin, asset_name, provider)
         return
+
+    try:
+        assets: list[Asset] = repo.load_assets()
+    except Exception as e:
+        logger.error(f"Failed to load portfolio assets: {e}")
+        raise typer.Exit(code=1) from e
 
     etf_assets: list[Asset] = [
         a for a in assets if a.asset_type == "etf" and a.isin and len(a.isin) == 12
