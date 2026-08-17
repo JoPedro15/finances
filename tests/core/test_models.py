@@ -1,223 +1,316 @@
 """
-Domain models for the finances application.
+Unit tests for domain models in src/core/models.py.
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
+import pytest
 
-@dataclass(frozen=True, slots=True)
-class Quotation:
-    """Represents a market quotation for a ticker."""
+from src.core.models import (
+    Asset,
+    AssetSnapshot,
+    CountryExposure,
+    ETFDetails,
+    Holding,
+    PortfolioSnapshot,
+    Quotation,
+    SectorExposure,
+)
 
-    price: float
-    currency: str
-    timestamp: datetime = field(default_factory=datetime.now)
-
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "price": self.price,
-            "currency": self.currency,
-            "timestamp": self.timestamp.isoformat(),
-        }
+# ==============================================================================
+# Quotation
+# ==============================================================================
 
 
-@dataclass(frozen=True, slots=True)
-class Asset:
-    """Represents an asset in the user's portfolio configuration."""
+def test_quotation_to_dict() -> None:
+    """Validates Quotation.to_dict() serialises all fields correctly."""
+    ts: datetime = datetime(2026, 8, 17, 10, 0, 0)
+    q: Quotation = Quotation(price=150.5, currency="USD", timestamp=ts)
 
-    name: str
-    isin: str
-    yahoo_ticker: str
-    quantity: float
-    average_buy_price: float
+    result: dict[str, Any] = q.to_dict()
 
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Asset:
-        return cls(
-            name=data.get("name", ""),
-            isin=data.get("isin", ""),
-            yahoo_ticker=data.get("yahoo_ticker", ""),
-            quantity=float(data.get("quantity", 0.0)),
-            average_buy_price=float(
-                data.get("averageBuyPrice", data.get("average_buy_price", 0.0))
-            ),
-        )
-
-    @property
-    def acquisition_cost(self) -> float:
-        return self.quantity * self.average_buy_price
+    assert result["price"] == 150.5
+    assert result["currency"] == "USD"
+    assert result["timestamp"] == ts.isoformat()
 
 
-@dataclass(frozen=True, slots=True)
-class AssetSnapshot:
-    """Represents the valuation of an asset at a specific point in time."""
+def test_quotation_default_timestamp() -> None:
+    """Validates Quotation sets a default timestamp when none is provided."""
+    before: datetime = datetime.now()
+    q: Quotation = Quotation(price=100.0, currency="EUR")
+    after: datetime = datetime.now()
 
-    name: str
-    isin: str
-    yahoo_ticker: str
-    native_price: float
-    native_currency: str
-    value_eur: float
-
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> AssetSnapshot:
-        return cls(
-            name=data.get("name", ""),
-            isin=data.get("isin", ""),
-            yahoo_ticker=data.get("yahoo_ticker", ""),
-            native_price=float(data.get("native_price", 0.0)),
-            native_currency=str(data.get("native_currency", "EUR")),
-            value_eur=float(data.get("value_eur", 0.0)),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    assert before <= q.timestamp <= after
 
 
-@dataclass(frozen=True, slots=True)
-class PortfolioSnapshot:
-    """Represents a complete portfolio valuation snapshot."""
-
-    timestamp: str
-    total_value_eur: float
-    assets_snapshot: list[AssetSnapshot]
-
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> PortfolioSnapshot:
-        return cls(
-            timestamp=str(data.get("timestamp", "")),
-            total_value_eur=float(data.get("total_value_eur", 0.0)),
-            assets_snapshot=[
-                AssetSnapshot.from_dict(item)
-                for item in data.get("assets_snapshot", [])
-            ],
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "timestamp": self.timestamp,
-            "total_value_eur": self.total_value_eur,
-            "assets_snapshot": [item.to_dict() for item in self.assets_snapshot],
-        }
+# ==============================================================================
+# Asset
+# ==============================================================================
 
 
-@dataclass(frozen=True, slots=True)
-class Holding:
-    """Represents an individual stock or asset holding within an ETF."""
+def test_asset_from_dict_standard_key() -> None:
+    """Validates Asset.from_dict() reads average_buy_price key correctly."""
+    data: dict[str, Any] = {
+        "name": "Apple",
+        "isin": "US0378331005",
+        "yahoo_ticker": "AAPL",
+        "quantity": 10.0,
+        "average_buy_price": 150.0,
+    }
+    asset: Asset = Asset.from_dict(data)
 
-    name: str
-    isin: str
-    ticker: str | None
-    weight_pct: float
-
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Holding:
-        return cls(
-            name=str(data.get("name", "")),
-            isin=str(data.get("isin", "")),
-            ticker=data.get("ticker"),
-            weight_pct=float(data.get("weight_pct", 0.0)),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    assert asset.name == "Apple"
+    assert asset.isin == "US0378331005"
+    assert asset.yahoo_ticker == "AAPL"
+    assert asset.quantity == 10.0
+    assert asset.average_buy_price == 150.0
 
 
-@dataclass(frozen=True, slots=True)
-class SectorExposure:
-    """Represents sector breakdown weight within an ETF."""
+def test_asset_from_dict_legacy_key() -> None:
+    """Validates Asset.from_dict() falls back to averageBuyPrice (legacy JSON key)."""
+    data: dict[str, Any] = {
+        "name": "NVIDIA",
+        "isin": "US67066G1040",
+        "yahoo_ticker": "NVDA",
+        "quantity": 2.0,
+        "averageBuyPrice": 117.06,
+    }
+    asset: Asset = Asset.from_dict(data)
 
-    sector_name: str
-    weight_pct: float
-
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> SectorExposure:
-        return cls(
-            sector_name=str(data.get("sector_name", "")),
-            weight_pct=float(data.get("weight_pct", 0.0)),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    assert asset.average_buy_price == 117.06
 
 
-@dataclass(frozen=True, slots=True)
-class CountryExposure:
-    """Represents country breakdown weight within an ETF."""
+def test_asset_from_dict_legacy_key_takes_precedence() -> None:
+    """Validates averageBuyPrice takes precedence when both keys
 
-    country_name: str
-    weight_pct: float
+    are present (legacy behaviour).
+    """
+    data: dict[str, Any] = {
+        "name": "Test",
+        "isin": "XX0000000000",
+        "yahoo_ticker": "TST",
+        "quantity": 1.0,
+        "average_buy_price": 200.0,
+        "averageBuyPrice": 100.0,
+    }
+    asset: Asset = Asset.from_dict(data)
 
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> CountryExposure:
-        return cls(
-            country_name=str(data.get("country_name", "")),
-            weight_pct=float(data.get("weight_pct", 0.0)),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    assert asset.average_buy_price == 100.0
 
 
-@dataclass(frozen=True, slots=True)
-class ETFDetails:
-    """Consolidates ETF holdings, sector exposure, country exposure, and TER."""
+def test_asset_acquisition_cost() -> None:
+    """Validates acquisition_cost property returns quantity * average_buy_price."""
+    asset: Asset = Asset(
+        name="Apple",
+        isin="US0378331005",
+        yahoo_ticker="AAPL",
+        quantity=10.0,
+        average_buy_price=150.0,
+    )
 
-    holdings: list[Holding]
-    sector_breakdown: list[SectorExposure]
-    country_breakdown: list[CountryExposure]
-    ter_pct: float | None = None
+    assert asset.acquisition_cost == 1500.0
 
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ETFDetails:
-        raw_ter = data.get("ter_pct")
-        ter_pct = float(raw_ter) if raw_ter is not None else None
+def test_asset_acquisition_cost_zero_quantity() -> None:
+    """Validates acquisition_cost returns 0.0 when quantity is zero."""
+    asset: Asset = Asset(
+        name="Apple",
+        isin="US0378331005",
+        yahoo_ticker="AAPL",
+        quantity=0.0,
+        average_buy_price=150.0,
+    )
 
-        return cls(
-            holdings=[Holding.from_dict(item) for item in data.get("holdings", [])],
-            sector_breakdown=[
-                SectorExposure.from_dict(item)
-                for item in data.get("sector_breakdown", [])
-            ],
-            country_breakdown=[
-                CountryExposure.from_dict(item)
-                for item in data.get("country_breakdown", [])
-            ],
-            ter_pct=ter_pct,
-        )
+    assert asset.acquisition_cost == 0.0
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "holdings": [item.to_dict() for item in self.holdings],
-            "sector_breakdown": [item.to_dict() for item in self.sector_breakdown],
-            "country_breakdown": [item.to_dict() for item in self.country_breakdown],
-            "ter_pct": self.ter_pct,
-        }
+
+# ==============================================================================
+# AssetSnapshot
+# ==============================================================================
+
+
+def test_asset_snapshot_round_trip() -> None:
+    """Validates AssetSnapshot serialises and deserialises correctly."""
+    snapshot: AssetSnapshot = AssetSnapshot(
+        name="Apple",
+        isin="US0378331005",
+        yahoo_ticker="AAPL",
+        native_price=180.0,
+        native_currency="USD",
+        value_eur=162.0,
+    )
+
+    result: AssetSnapshot = AssetSnapshot.from_dict(snapshot.to_dict())
+
+    assert result.name == snapshot.name
+    assert result.isin == snapshot.isin
+    assert result.native_price == snapshot.native_price
+    assert result.native_currency == snapshot.native_currency
+    assert result.value_eur == snapshot.value_eur
+
+
+# ==============================================================================
+# PortfolioSnapshot
+# ==============================================================================
+
+
+def test_portfolio_snapshot_round_trip() -> None:
+    """Validates PortfolioSnapshot serialises and deserialises correctly."""
+    asset_snap: AssetSnapshot = AssetSnapshot(
+        name="Apple",
+        isin="US0378331005",
+        yahoo_ticker="AAPL",
+        native_price=180.0,
+        native_currency="USD",
+        value_eur=162.0,
+    )
+    snapshot: PortfolioSnapshot = PortfolioSnapshot(
+        timestamp="2026-08-17T10:00:00",
+        total_value_eur=162.0,
+        assets_snapshot=[asset_snap],
+    )
+
+    result: PortfolioSnapshot = PortfolioSnapshot.from_dict(snapshot.to_dict())
+
+    assert result.timestamp == snapshot.timestamp
+    assert result.total_value_eur == snapshot.total_value_eur
+    assert len(result.assets_snapshot) == 1
+    assert result.assets_snapshot[0].name == "Apple"
+
+
+def test_portfolio_snapshot_empty_assets() -> None:
+    """Validates PortfolioSnapshot handles empty asset list."""
+    snapshot: PortfolioSnapshot = PortfolioSnapshot(
+        timestamp="2026-08-17T10:00:00",
+        total_value_eur=0.0,
+        assets_snapshot=[],
+    )
+
+    result: PortfolioSnapshot = PortfolioSnapshot.from_dict(snapshot.to_dict())
+
+    assert result.assets_snapshot == []
+    assert result.total_value_eur == 0.0
+
+
+# ==============================================================================
+# Holding
+# ==============================================================================
+
+
+def test_holding_round_trip_with_ticker() -> None:
+    """Validates Holding serialises and deserialises correctly when ticker is set."""
+    holding: Holding = Holding(
+        name="Apple", isin="US0378331005", ticker="AAPL", weight_pct=5.0
+    )
+
+    result: Holding = Holding.from_dict(holding.to_dict())
+
+    assert result.name == holding.name
+    assert result.isin == holding.isin
+    assert result.ticker == holding.ticker
+    assert result.weight_pct == holding.weight_pct
+
+
+def test_holding_round_trip_without_ticker() -> None:
+    """Validates Holding handles None ticker correctly."""
+    holding: Holding = Holding(
+        name="Apple", isin="US0378331005", ticker=None, weight_pct=5.0
+    )
+
+    result: Holding = Holding.from_dict(holding.to_dict())
+
+    assert result.ticker is None
+
+
+# ==============================================================================
+# SectorExposure
+# ==============================================================================
+
+
+def test_sector_exposure_round_trip() -> None:
+    """Validates SectorExposure serialises and deserialises correctly."""
+    sector: SectorExposure = SectorExposure(sector_name="Technology", weight_pct=24.5)
+
+    result: SectorExposure = SectorExposure.from_dict(sector.to_dict())
+
+    assert result.sector_name == "Technology"
+    assert result.weight_pct == 24.5
+
+
+# ==============================================================================
+# CountryExposure
+# ==============================================================================
+
+
+def test_country_exposure_round_trip() -> None:
+    """Validates CountryExposure serialises and deserialises correctly."""
+    country: CountryExposure = CountryExposure(
+        country_name="United States", weight_pct=70.2
+    )
+
+    result: CountryExposure = CountryExposure.from_dict(country.to_dict())
+
+    assert result.country_name == "United States"
+    assert result.weight_pct == 70.2
+
+
+# ==============================================================================
+# ETFDetails
+# ==============================================================================
+
+
+def test_etf_details_round_trip() -> None:
+    """Validates ETFDetails serialises and deserialises all nested models."""
+    details: ETFDetails = ETFDetails(
+        holdings=[
+            Holding(name="Apple", isin="US0378331005", ticker="AAPL", weight_pct=5.0)
+        ],
+        sector_breakdown=[SectorExposure(sector_name="Technology", weight_pct=24.5)],
+        country_breakdown=[
+            CountryExposure(country_name="United States", weight_pct=70.2)
+        ],
+        ter_pct=0.20,
+    )
+
+    result: ETFDetails = ETFDetails.from_dict(details.to_dict())
+
+    assert result.ter_pct == 0.20
+    assert len(result.holdings) == 1
+    assert result.holdings[0].name == "Apple"
+    assert len(result.sector_breakdown) == 1
+    assert result.sector_breakdown[0].sector_name == "Technology"
+    assert len(result.country_breakdown) == 1
+    assert result.country_breakdown[0].country_name == "United States"
+
+
+def test_etf_details_none_ter() -> None:
+    """Validates ETFDetails handles None TER correctly in round-trip."""
+    details: ETFDetails = ETFDetails(
+        holdings=[],
+        sector_breakdown=[],
+        country_breakdown=[],
+        ter_pct=None,
+    )
+
+    result: ETFDetails = ETFDetails.from_dict(details.to_dict())
+
+    assert result.ter_pct is None
+
+
+def test_asset_immutability() -> None:
+    """Validates Asset is immutable (frozen dataclass)."""
+    from dataclasses import FrozenInstanceError
+
+    asset: Asset = Asset(
+        name="Apple",
+        isin="US0378331005",
+        yahoo_ticker="AAPL",
+        quantity=10.0,
+        average_buy_price=150.0,
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        asset.quantity = 99.0

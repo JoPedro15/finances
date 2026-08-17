@@ -11,12 +11,14 @@ import typer
 
 from src.config import DEFAULT_DIP_CONFIG
 from src.core.analysis import (
+    PortfolioExposure,
     analyze_overall_performance,
     calculate_portfolio_exposure,
 )
 from src.core.dip_detector import load_watchlist, scan_watchlist
 from src.core.models import Asset, ETFDetails, PortfolioSnapshot
 from src.core.providers import ETFProvider
+from src.core.repositories import JsonPortfolioRepository
 from src.core.snapshot import display_snapshot, get_snapshot, save_snapshot
 from src.utils.logger.logger import logger
 
@@ -113,37 +115,25 @@ def check_dips_cmd(
         logger.info("No tickers met the dip criteria.")
 
 
-@app.command(name="etf-details")
-def etf_details_cmd(
-    isin: Annotated[
-        str,
-        typer.Argument(
-            help="ISIN of the ETF to inspect (e.g. IE00B4L5Y983).",
-        ),
-    ],
-) -> None:
-    """Inspects composition, TER, holdings, and breakdowns for an ETF ISIN."""
-    clean_isin: str = isin.strip().upper()
-    if len(clean_isin) != 12:
-        logger.error(f"Invalid ISIN format '{isin}'. Expected a 12-character code.")
-        raise typer.Exit(code=1)
-
-    logger.section(f"ETF Details Inspection: {clean_isin}")
+def _display_single_etf_details(isin: str, name: str, provider: ETFProvider) -> None:
+    """Helper function to fetch and print formatted details for a single ETF ISIN."""
+    logger.section("ETF Details Inspection")
+    logger.info(f"ETF Name: {name}")
+    logger.info(f"ETF ISIN: {isin}")
 
     dummy_asset: Asset = Asset(
-        name=clean_isin,
-        isin=clean_isin,
+        name=name,
+        isin=isin,
         yahoo_ticker="",
         quantity=0,
         average_buy_price=0.0,
     )
 
-    provider: ETFProvider = ETFProvider()
     details: ETFDetails | None = provider.get_details(dummy_asset)
 
     if details is None:
-        logger.error(f"Failed to fetch details for ETF ISIN {clean_isin}.")
-        raise typer.Exit(code=1)
+        logger.error(f"Failed to fetch details for ETF ISIN {isin}.")
+        return
 
     ter_str: str = f"{details.ter_pct:.2f}%" if details.ter_pct is not None else "N/A"
     logger.info(f"TER (Total Expense Ratio): {ter_str}")
@@ -171,6 +161,56 @@ def etf_details_cmd(
         logger.print("  No country breakdown available.")
 
 
+@app.command(name="etf-details")
+def etf_details_cmd(
+    isin: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Optional ISIN of the ETF to inspect. "
+                "If omitted, inspects all ETFs in portfolio."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Inspects composition, TER, holdings, and breakdowns
+
+    for an ETF ISIN or all portfolio ETFs.
+    """
+    provider: ETFProvider = ETFProvider()
+    repo: JsonPortfolioRepository = JsonPortfolioRepository("data/portfolio.json")
+
+    try:
+        assets: list[Asset] = repo.load_assets()
+    except Exception as e:
+        logger.error(f"Failed to load portfolio assets: {e}")
+        raise typer.Exit(code=1) from e
+
+    if isin:
+        clean_isin: str = isin.strip().upper()
+        if len(clean_isin) != 12:
+            logger.error(f"Invalid ISIN format '{isin}'. Expected a 12-character code.")
+            raise typer.Exit(code=1)
+
+        matched_asset: Asset | None = next(
+            (a for a in assets if a.isin and a.isin.upper() == clean_isin),
+            None,
+        )
+        asset_name: str = matched_asset.name if matched_asset else clean_isin
+        _display_single_etf_details(clean_isin, asset_name, provider)
+        return
+
+    etf_assets: list[Asset] = [
+        a for a in assets if a.asset_type == "etf" and a.isin and len(a.isin) == 12
+    ]
+    if not etf_assets:
+        logger.warning("No active ETF holdings found in portfolio.")
+        return
+
+    for asset in etf_assets:
+        _display_single_etf_details(asset.isin, asset.name, provider)
+
+
 @app.command(name="analyze-exposure")
 def analyze_exposure_cmd() -> None:
     """Analyzes consolidated portfolio sector and country exposure."""
@@ -181,7 +221,7 @@ def analyze_exposure_cmd() -> None:
         logger.error("Failed to calculate portfolio snapshot for exposure analysis.")
         raise typer.Exit(code=1)
 
-    exposure = calculate_portfolio_exposure(snapshot)
+    exposure: PortfolioExposure = calculate_portfolio_exposure(snapshot)
 
     if exposure.total_etf_value_eur == 0.0:
         logger.warning("No active ETF holdings found in portfolio.")

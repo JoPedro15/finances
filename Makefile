@@ -72,6 +72,7 @@ clean:
 	find . -type d -name "htmlcov" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name ".coverage" -delete
+	rm -f data/etf_cache.json
 
 # ==============================================================================
 # 📈 Project Utils
@@ -89,7 +90,7 @@ check-dips:
 	PYTHONPATH=src $(PYTHON) main.py check-dips
 
 etf-details:
-	PYTHONPATH=src $(PYTHON) main.py etf-details $(ISIN)
+	PYTHONPATH=src $(PYTHON) main.py etf-details
 
 analyze-exposure:
 	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
