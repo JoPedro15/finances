@@ -5,7 +5,7 @@ This file contains the logic for creating and managing portfolio value snapshots
 from __future__ import annotations
 
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 
@@ -28,8 +28,8 @@ HISTORY_FILE: str = os.path.join(DATA_DIR, "history.json")
 
 
 def get_provider_for_asset(asset: Asset) -> AssetDataProvider:
-    """Selects the appropriate data provider based on asset classification."""
-    if asset.isin and len(asset.isin) == 12:
+    """Selects the appropriate data provider based on asset type."""
+    if getattr(asset, "asset_type", "stock") == "etf":
         return ETFProvider()
     return StockProvider()
 
@@ -71,8 +71,12 @@ def get_snapshot(
 
     quotations_map: dict[str, Quotation] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(fetch_asset_quotation, asset) for asset in assets]
+        futures: list[Future[tuple[Asset, Quotation | None]]] = [
+            executor.submit(fetch_asset_quotation, asset) for asset in assets
+        ]
         for future in as_completed(futures):
+            asset: Asset
+            fetched_quotation: Quotation | None
             asset, fetched_quotation = future.result()
             if fetched_quotation:
                 quotations_map[asset.yahoo_ticker] = fetched_quotation

@@ -3,6 +3,8 @@ Unit tests for src/core/analysis.py covering portfolio performance analysis,
 loss scenarios, missing/corrupted data files, and edge cases.
 """
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 from src.core.analysis import analyze_overall_performance
@@ -11,12 +13,14 @@ from src.core.models import Asset, AssetSnapshot, PortfolioSnapshot
 
 
 @patch("src.core.analysis.logger")
-def test_analyze_overall_performance_gain_scenario(mock_logger: MagicMock) -> None:
-    """
-    Validates calculations and log outputs for individual
+def test_analyze_overall_performance_gain_scenario(
+    mock_logger: MagicMock,
+) -> None:
+    """Validates calculations and log outputs for individual
+
     assets and overall portfolio gain using repository mocks.
     """
-    mock_p_repo = MagicMock()
+    mock_p_repo: MagicMock = MagicMock()
     mock_p_repo.load_assets.return_value = [
         Asset(
             name="Apple",
@@ -34,7 +38,7 @@ def test_analyze_overall_performance_gain_scenario(mock_logger: MagicMock) -> No
         ),
     ]
 
-    mock_h_repo = MagicMock()
+    mock_h_repo: MagicMock = MagicMock()
     mock_h_repo.load_history.return_value = [
         PortfolioSnapshot(
             timestamp="2026-08-15T20:00:00",
@@ -71,12 +75,14 @@ def test_analyze_overall_performance_gain_scenario(mock_logger: MagicMock) -> No
 
 
 @patch("src.core.analysis.logger")
-def test_analyze_overall_performance_loss_scenario(mock_logger: MagicMock) -> None:
-    """
-    Validates log outputs when the overall portfolio
+def test_analyze_overall_performance_loss_scenario(
+    mock_logger: MagicMock,
+) -> None:
+    """Validates log outputs when the overall portfolio
+
     produces an absolute loss and negative ROI.
     """
-    mock_p_repo = MagicMock()
+    mock_p_repo: MagicMock = MagicMock()
     mock_p_repo.load_assets.return_value = [
         Asset(
             name="Tesla",
@@ -87,7 +93,7 @@ def test_analyze_overall_performance_loss_scenario(mock_logger: MagicMock) -> No
         )
     ]
 
-    mock_h_repo = MagicMock()
+    mock_h_repo: MagicMock = MagicMock()
     mock_h_repo.load_history.return_value = [
         PortfolioSnapshot(
             timestamp="2026-08-15T20:00:00",
@@ -115,13 +121,11 @@ def test_analyze_overall_performance_loss_scenario(mock_logger: MagicMock) -> No
 def test_analyze_overall_performance_zero_acquisition_cost(
     mock_logger: MagicMock,
 ) -> None:
-    """
-    Ensures zero acquisition cost handles division by zero safely and reports 0.00% ROI.
-    """
-    mock_p_repo = MagicMock()
+    """Ensures zero acquisition cost handles division by zero safely."""
+    mock_p_repo: MagicMock = MagicMock()
     mock_p_repo.load_assets.return_value = []
 
-    mock_h_repo = MagicMock()
+    mock_h_repo: MagicMock = MagicMock()
     mock_h_repo.load_history.return_value = [
         PortfolioSnapshot(
             timestamp="2026-08-15T20:00:00",
@@ -139,14 +143,12 @@ def test_analyze_overall_performance_zero_acquisition_cost(
 def test_analyze_overall_performance_missing_or_corrupted_file(
     mock_logger: MagicMock,
 ) -> None:
-    """
-    Tests handling of empty history lists and repository read exceptions.
-    """
+    """Tests handling of empty history lists and repository read exceptions."""
     # 1. Empty history list
-    mock_p_repo = MagicMock()
+    mock_p_repo: MagicMock = MagicMock()
     mock_p_repo.load_assets.return_value = []
 
-    mock_h_repo = MagicMock()
+    mock_h_repo: MagicMock = MagicMock()
     mock_h_repo.load_history.return_value = []
 
     analyze_overall_performance(portfolio_repo=mock_p_repo, history_repo=mock_h_repo)
@@ -166,10 +168,8 @@ def test_analyze_overall_performance_missing_or_corrupted_file(
 def test_analyze_overall_performance_mismatched_assets(
     mock_logger: MagicMock,
 ) -> None:
-    """
-    Confirms that assets omitted from historical snapshots are skipped cleanly.
-    """
-    mock_p_repo = MagicMock()
+    """Confirms that assets omitted from historical snapshots are skipped cleanly."""
+    mock_p_repo: MagicMock = MagicMock()
     mock_p_repo.load_assets.return_value = [
         Asset(
             name="Apple",
@@ -187,7 +187,7 @@ def test_analyze_overall_performance_mismatched_assets(
         ),
     ]
 
-    mock_h_repo = MagicMock()
+    mock_h_repo: MagicMock = MagicMock()
     mock_h_repo.load_history.return_value = [
         PortfolioSnapshot(
             timestamp="2026-08-15T20:00:00",
