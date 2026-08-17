@@ -4,94 +4,78 @@
 ![CI Quality Pipeline](https://github.com/JoPedro15/finances/actions/workflows/ci.yml/badge.svg?branch=main)
 <br />
 ![Formatter](https://img.shields.io/badge/formatter-Black-000000?style=flat-square&logo=python&logoColor=white)
-![Linter](https://img.shields.io/badge/linter-Flake8-000000?style=flat-square&logo=python&logoColor=white)
+![Linter](https://img.shields.io/badge/linter-Ruff-000000?style=python&logoColor=white)
 ![Security](https://img.shields.io/badge/security-Bandit%20%7C%20Audit-44cc11?style=flat-square&logo=shield&logoColor=white)
 ![GNU Make](https://img.shields.io/badge/env-GNU%20Make-active?style=flat-square&logo=gnu-make&logoColor=white)
 <br />
-![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20pytest%20%7C%20dotenv-FF9900?style=flat-square&logo=python&logoColor=white)
+![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20Typer%20%7C%20pytest%20%7C%20mypy-FF9900?style=flat-square&logo=python&logoColor=white)
 ![MIT License](https://img.shields.io/badge/license-MIT-607D8B?style=flat-square)
 
 The **Finances Portfolio Tracker** is a lightweight, production-grade CLI application designed to track, record, analyze personal investment portfolios, and monitor target asset dip opportunities.
 
-By integrating live market data with multi-currency conversion, historical record-keeping, and centralized environment configuration, this project provides a **Single Source of Truth (SSoT)** for evaluating asset performance, portfolio ROI, and capital allocation.
+By integrating live market data with multi-currency conversion, concurrent API fetching, structured domain models, and centralized environment configuration, this project provides a **Single Source of Truth (SSoT)** for evaluating asset performance, portfolio ROI, and capital allocation.
 
 ## 🏗️ Architecture & Structure
 
-The repository follows a clean modular design, strictly separating portfolio datasets, domain processing logic, automation workflows, and execution utilities.
+The repository follows a clean modular design, strictly separating portfolio datasets, domain processing logic, data persistence layers, and execution utilities.
 
 | Layer | Path | Description |
 | :--- | :--- | :--- |
 | `Data Storage` | `data/` | Centralized repository for asset holdings (`portfolio.json`), historical snapshots (`history.json`), and target watchlist (`watchlist.json`). |
-| `Core Utilities` | `utils/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, and central configuration. |
-| `Logging System` | `utils/logger/` | Standardized internal logger enforcing clean output formatting across operations. |
+| `Core Domain` | `src/core/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, and repository abstractions. |
+| `Google Drive Integration` | `src/infra/gdrive/` | Infrastructure service and OAuth2 authentication handlers for remote backup capabilities. |
+| `Logging System` | `src/utils/logger/` | Standardized internal logger enforcing clean output formatting across operations. |
 | `Automation` | `.github/workflows/` | CI Quality Pipeline (`ci.yml`). |
-| `Entrypoint` | `main.py` | CLI command router orchestrating system execution modes. |
-| `Tooling` | `root` | Dependency definitions (`requirements.txt`), environment template (`.env.example`), linter rules (`.flake8`), and quality gates (`Makefile`). |
+| `Entrypoint` | `main.py` | Typer-powered CLI application orchestrating system commands and options. |
+| `Tooling` | `root` | Modern project definitions (`pyproject.toml`), environment template (`.env.example`), and quality gates (`Makefile`). |
 
-## 🔌 Core Utilities (utils/)
+## 🔌 Core Modules (`src/core/`)
 
-Each module inside `utils/` adheres to standard type hinting, strict error handling, and modular design principles.
+Each module inside `src/core/` adheres to standard type hinting, explicit domain exceptions, and modular design principles.
 
-### ⚙️ Central Configuration (`utils/config.py`)
+### 📐 Domain Models (`src/core/models.py`)
+Defines strongly-typed, immutable dataclasses representing business concepts:
+- **`Quotation`**: Represents ticker price, currency, and retrieval timestamp.
+- **`Asset`**: Portfolio asset configuration (name, ISIN, ticker, quantity, buy price).
+- **`AssetSnapshot` & `PortfolioSnapshot`**: Normalized valuations for individual assets and total portfolio state.
 
-Centralized Single Source of Truth (SSoT) for strategy parameters and environment variables:
-- **`python-dotenv` Integration**: Loads local `.env` variables seamlessly during local runs.
-- **Typed Dataclass**: Defines immutable defaults for dip detection thresholds (`min_drop_pct`, `max_drop_pct`, `lookback_days`).
+### ⚠️ Domain Exceptions (`src/core/exceptions.py`)
+Custom error hierarchy eliminating generic exception handling:
+- **`FinancesError`**: Base exception class.
+- **`QuotationFetchError` / `ExchangeRateFetchError`**: Market data network or parsing issues.
+- **`StorageReadError` / `StorageWriteError`**: I/O and persistence failures.
+- **`InvalidWatchlistError`**: Malformed or unreadable watchlist configurations.
 
-### 📊 Snapshot Manager (`utils/snapshot.py`)
+### 🗄️ Repository Abstraction (`src/core/repositories.py`)
+Decouples domain logic from filesystem operations using Python Protocols:
+- **`PortfolioRepository`**: Interface for loading asset definitions.
+- **`HistoryRepository`**: Interface for reading and persisting portfolio snapshots.
+- **`JsonPortfolioRepository` / `JsonHistoryRepository`**: Default JSON file implementations.
 
-Handles real-time value evaluation and multi-currency normalization:
+### ⚡ Parallel Processing & Snapshot Engine (`src/core/snapshot.py` & `src/core/dip_detector.py`)
+Concurrent I/O execution powered by `ThreadPoolExecutor`:
+- **Concurrent Quotes**: Multithreaded retrieval of asset prices and dip scans to reduce total execution time.
 - **Exchange Normalization**: Dynamic fetching and caching of conversion rates via Yahoo Finance (default target: `EUR`).
-- **Snapshot Persistence**: Appends timestamped valuation snapshots directly into `data/history.json`.
+- **Snapshot Persistence**: Appends timestamped valuation snapshots directly into storage via repositories.
 
-### 📈 Performance Analyzer (`utils/analysis.py`)
-
+### 📈 Performance Analyzer (`src/core/analysis.py`)
 Computes overall portfolio health and asset metrics:
 - **Asset Gain/Loss**: Calculates acquisition costs vs. current market values per ISIN.
 - **Global ROI Analysis**: Determines global Return on Investment (ROI) based strictly on active snapshot assets.
 
-### 💰 Quotation Engine (`utils/get_quotation.py`)
+## 💻 CLI Usage (`main.py`)
 
-Market data retrieval wrapper powered by `yfinance`:
-- **Real-Time Quotes**: Fetches latest ticker price and native currency.
-- **Currency Exchange**: Resolves dynamic currency exchange pairs (e.g., `USDEUR=X`, `GBPEUR=X`).
+The application exposes a modern CLI built with **Typer**:
 
-### 📉 Dip Detector (`utils/dip_detector.py`)
+```bash
+# Display current portfolio valuation
+python main.py get-snapshot
 
-Scans watchlist assets for potential buying opportunities:
-- **Watchlist Ingestion**: Loads asset metadata (Name, ISIN, Ticker) from `data/watchlist.json`.
-- **Peak Drop Analysis**: Identifies assets dropping within configurable percentage thresholds (`min_drop_pct` to `max_drop_pct`) from recent high peaks.
+# Calculate valuation and persist snapshot to history
+python main.py save-snapshot
 
-## ⚙️ Automated Workflows (GitHub Actions)
+# Analyze portfolio performance and ROI
+python main.py analyze
 
-- **Continuous Integration (`ci.yml`)**: Executes formatting, linting, static type checking (`mypy`), security audits, and pytest suites on Python 3.13.
-
-## 🛠️ Global Quality Gate (GNU Make)
-
-A unified orchestration layer ensures parity between local development and CI/CD pipelines.
-
-| Command | Description |
-| :--- | :--- |
-| `make install` | Installs all core, linting, security, and test dependencies (`requirements.txt`). |
-| `make get-snapshot` | Displays current portfolio valuation without modifying history records. |
-| `make save-snapshot` | Evaluates portfolio value and appends a timestamped entry to `data/history.json`. |
-| `make analyze` | Analyzes total ROI and individual asset acquisition vs. market performance. |
-| `make check-dips` | Scans watchlist for stock price dip opportunities and logs findings to stdout. |
-| `make check` | Runs code formatting (`black --check`), linting (`flake8`), and type checking (`mypy`). |
-| `make security-check` | Executes SAST security scan (`bandit`) and dependency audit (`pip-audit`). |
-| `make test` | Runs unit test suite with coverage (`pytest`). |
-| `make quality` | Executes the complete quality gate (`check` + `security-check` + `test`). |
-| `make clean` | Removes temporary Python caches and build artifacts. |
-
-## 📖 Governance & Standards
-
-To maintain codebase integrity, contributions must adhere to the project's engineering standards:
-
-- **Type Safety**: Explicit type annotations are required for all function signatures and local variables.
-- **Documentation**: Code comments, docstrings, variable names, and READMEs must be written in English.
-- **Zero-Print Policy**: Direct `print()` statements are avoided in favor of the structured logger module.
-- **Security & Quality**: Secrets and runtime parameters are managed via `.env`. All PRs must pass SAST scans, dependency vulnerability audits, and unit tests with coverage.
-
----
-
-João Pedro | Automation Engineer <br /> [GitHub profile](https://github.com/JoPedro15)
+# Scan watchlist for price dips (with optional parameters)
+python main.py check-dips --watchlist data/watchlist.json --min-drop 5.0 --max-drop 10.0 --lookback 5

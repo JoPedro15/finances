@@ -160,5 +160,113 @@
         "value_eur": 132.76
       }
     ]
+  },
+  {
+    "timestamp": "2026-08-16T21:37:12.273446",
+    "total_value_eur": 984.1,
+    "assets_snapshot": [
+      {
+        "name": "Apple",
+        "isin": "US0378331005",
+        "yahoo_ticker": "AAPL",
+        "native_price": 305.93,
+        "native_currency": "USD",
+        "value_eur": 233.0
+      },
+      {
+        "name": "NVIDIA",
+        "isin": "US67066G1040",
+        "yahoo_ticker": "NVDA",
+        "native_price": 225.16,
+        "native_currency": "USD",
+        "value_eur": 126.29
+      },
+      {
+        "name": "Microsoft",
+        "isin": "US5949181045",
+        "yahoo_ticker": "MSFT",
+        "native_price": 495.4,
+        "native_currency": "USD",
+        "value_eur": 167.35
+      },
+      {
+        "name": "Core MSCI World USD (Acc)",
+        "isin": "IE00B4L5Y983",
+        "yahoo_ticker": "EUNL.DE",
+        "native_price": 128.865,
+        "native_currency": "EUR",
+        "value_eur": 176.13
+      },
+      {
+        "name": "Core S&P 500 USD (Acc)",
+        "isin": "IE00B5BMR087",
+        "yahoo_ticker": "SXR8.DE",
+        "native_price": 724.18,
+        "native_currency": "EUR",
+        "value_eur": 148.57
+      },
+      {
+        "name": "MSCI World Momentum USD (Acc)",
+        "isin": "IE00BL25JP72",
+        "yahoo_ticker": "XDEM.DE",
+        "native_price": 86.04,
+        "native_currency": "EUR",
+        "value_eur": 132.76
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-08-16T22:07:06.243715",
+    "total_value_eur": 984.28,
+    "assets_snapshot": [
+      {
+        "name": "Apple",
+        "isin": "US0378331005",
+        "yahoo_ticker": "AAPL",
+        "native_price": 305.93,
+        "native_currency": "USD",
+        "value_eur": 233.08
+      },
+      {
+        "name": "NVIDIA",
+        "isin": "US67066G1040",
+        "yahoo_ticker": "NVDA",
+        "native_price": 225.16,
+        "native_currency": "USD",
+        "value_eur": 126.34
+      },
+      {
+        "name": "Microsoft",
+        "isin": "US5949181045",
+        "yahoo_ticker": "MSFT",
+        "native_price": 495.4,
+        "native_currency": "USD",
+        "value_eur": 167.4
+      },
+      {
+        "name": "Core MSCI World USD (Acc)",
+        "isin": "IE00B4L5Y983",
+        "yahoo_ticker": "EUNL.DE",
+        "native_price": 128.865,
+        "native_currency": "EUR",
+        "value_eur": 176.13
+      },
+      {
+        "name": "Core S&P 500 USD (Acc)",
+        "isin": "IE00B5BMR087",
+        "yahoo_ticker": "SXR8.DE",
+        "native_price": 724.18,
+        "native_currency": "EUR",
+        "value_eur": 148.57
+      },
+      {
+        "name": "MSCI World Momentum USD (Acc)",
+        "isin": "IE00BL25JP72",
+        "yahoo_ticker": "XDEM.DE",
+        "native_price": 86.04,
+        "native_currency": "EUR",
+        "value_eur": 132.76
+      }
+    ]
   }
 ]

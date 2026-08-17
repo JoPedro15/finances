@@ -32,7 +32,7 @@ jobs:
         run: make install
 
       - name: Run Code Formatting & Linting
-        run: make check
+        run: make lint
 
   security:
     name: Security Audits

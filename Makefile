@@ -4,11 +4,11 @@
 PYTHON = python3
 
 # Define the source files to be checked
-SOURCES = main.py utils/
+SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format check security-check test quality clean get-snapshot save-snapshot analyze check-dips
+.PHONY: help install format lint security-check test quality clean get-snapshot save-snapshot analyze check-dips
 
 # ==============================================================================
 # 📖 Help
@@ -16,54 +16,57 @@ ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 help:
 	@echo "Available commands:"
 	@echo "  --- Setup, Maintenance & Quality ---"
-	@echo "  make install        - Installs dependencies."
-	@echo "  make format         - Formats code automatically (black)."
-	@echo "  make check          - Runs formatter check (black), linter (flake8) and type checker (mypy)."
-	@echo "  make security-check - Runs security analysis (bandit & pip-audit)."
-	@echo "  make test           - Runs unit tests (pytest)."
-	@echo "  make quality        - Runs full quality gate (check + security-check + test)."
-	@echo "  make clean          - Cleans Python temporary cache files and coverage reports."
+	@echo "  make install          - Installs project and dev dependencies."
+	@echo "  make format           - Formats code automatically (black) and fixes lint issues (ruff)."
+	@echo "  make lint             - Runs formatter check (black), linter (ruff) and type checker (mypy)."
+	@echo "  make security-check   - Runs security analysis (bandit & pip-audit)."
+	@echo "  make test             - Runs unit tests (pytest)."
+	@echo "  make quality          - Runs full quality gate (lint + security-check + test)."
+	@echo "  make clean            - Cleans Python temporary cache files and coverage reports."
 	@echo "  --- Project Utils ---"
-	@echo "  make get-snapshot   - Displays the current portfolio value."
-	@echo "  make save-snapshot  - Saves the current portfolio value to history."
-	@echo "  make analyze        - Analyzes overall portfolio performance."
-	@echo "  make check-dips     - Scans watchlist for stock price dip opportunities."
+	@echo "  make get-snapshot     - Displays the current portfolio value."
+	@echo "  make save-snapshot    - Saves the current portfolio value to history."
+	@echo "  make analyze          - Analyzes overall portfolio performance."
+	@echo "  make check-dips       - Scans watchlist for stock price dip opportunities."
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality
 # ==============================================================================
 install:
-	$(PYTHON) -m pip install -r requirements.txt
+	$(PYTHON) -m pip install -e .[dev]
 
 format:
 	@echo "Formatting code (black)..."
 	$(PYTHON) -m black $(ALL_SOURCES)
+	@echo "Fixing lint issues and sorting imports (ruff)..."
+	$(PYTHON) -m ruff check --fix $(ALL_SOURCES)
 
-check:
+lint:
 	@echo "Running formatter check (black)..."
 	$(PYTHON) -m black --check $(ALL_SOURCES)
-	@echo "Running linter (flake8)..."
-	$(PYTHON) -m flake8 $(ALL_SOURCES)
+	@echo "Running linter (ruff)..."
+	$(PYTHON) -m ruff check $(ALL_SOURCES)
 	@echo "Running static type checker (mypy)..."
-	$(PYTHON) -m mypy $(SOURCES)
+	PYTHONPATH=src $(PYTHON) -m mypy $(SOURCES)
 
 security-check:
 	@echo "Running SAST security scan (bandit)..."
 	$(PYTHON) -m bandit -r $(SOURCES)
 	@echo "Checking dependencies for vulnerabilities (pip-audit)..."
-	$(PYTHON) -m pip_audit -r requirements.txt
+	$(PYTHON) -m pip_audit
 
 test:
 	@echo "Running unit tests with coverage..."
-	$(PYTHON) -m pytest --cov=utils --cov-report=html --cov-report=term $(TESTS_DIR)
+	PYTHONPATH=src $(PYTHON) -m pytest $(TESTS_DIR)
 
-quality: check security-check test
+quality: lint security-check test
 
 clean:
 	@echo "Cleaning Python temporary cache files and test reports..."
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type d -name ".mypy_cache" -exec rm -rf {} +
+	find . -type d -name ".ruff_cache" -exec rm -rf {} +
 	find . -type d -name "htmlcov" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name ".coverage" -delete
@@ -72,13 +75,13 @@ clean:
 # 📈 Project Utils
 # ==============================================================================
 get-snapshot:
-	$(PYTHON) main.py get-snapshot
+	PYTHONPATH=src $(PYTHON) main.py get-snapshot
 
 save-snapshot:
-	$(PYTHON) main.py save-snapshot
+	PYTHONPATH=src $(PYTHON) main.py save-snapshot
 
 analyze:
-	$(PYTHON) main.py analyze
+	PYTHONPATH=src $(PYTHON) main.py analyze
 
 check-dips:
-	$(PYTHON) main.py check-dips
+	PYTHONPATH=src $(PYTHON) main.py check-dips

@@ -1,18 +1,16 @@
-# utils/gdrive/auth.py
-
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
-from google.auth.exceptions import RefreshError  # type: ignore
-from google.auth.transport.requests import Request  # type: ignore
-from google.oauth2.credentials import Credentials  # type: ignore
-from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
 
-from utils.logger.logger import logger
+from src.utils.logger.logger import logger
 
 DEFAULT_SCOPES: Final[list[str]] = [
     "https://www.googleapis.com/auth/drive",
@@ -34,7 +32,7 @@ def get_google_service_credentials(
 
     if token_file.exists():
         try:
-            creds = Credentials.from_authorized_user_file(
+            creds = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
                 str(token_file), selected_scopes
             )
         except Exception as e:
@@ -44,7 +42,7 @@ def get_google_service_credentials(
         if creds and creds.expired and creds.refresh_token:
             logger.info("Access token expired. Refreshing session...")
             try:
-                creds.refresh(Request())
+                creds.refresh(Request())  # type: ignore[no-untyped-call]
             except RefreshError:
                 logger.error(
                     "Token refresh failed (Revoked/Expired). Re-authenticating."
@@ -97,7 +95,10 @@ def load_credentials_safe(file_path: str | Path) -> dict[str, Any]:
 
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            data: Any = json.load(f)
+            if not isinstance(data, dict):
+                return {"status": "invalid_json", "path": str(path.absolute())}
+            return cast(dict[str, Any], data)
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON format in {path.name}: {e}")
         return {"status": "invalid_json", "path": str(path.absolute())}
