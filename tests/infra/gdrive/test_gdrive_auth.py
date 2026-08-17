@@ -1,18 +1,21 @@
-# tests/test_gdrive_auth.py
+"""
+Unit tests for src/infra/gdrive/auth.py covering Google Service credentials retrieval,
+token refreshment, headless mode verification, and safe credential loading.
+"""
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from utils.gdrive.auth import (
+from src.infra.gdrive.auth import (
     get_google_service_credentials,
     load_credentials_safe,
 )
 
 
-@patch("utils.gdrive.auth.Credentials")
+@patch("src.infra.gdrive.auth.Credentials")
 def test_valid_token_file_returns_credentials(
     mock_credentials_cls: MagicMock, tmp_path: Path
 ) -> None:
@@ -32,8 +35,8 @@ def test_valid_token_file_returns_credentials(
     assert result == mock_creds
 
 
-@patch("utils.gdrive.auth.Request")
-@patch("utils.gdrive.auth.Credentials")
+@patch("src.infra.gdrive.auth.Request")
+@patch("src.infra.gdrive.auth.Credentials")
 def test_expired_token_refreshes_successfully(
     mock_credentials_cls: MagicMock,
     mock_request_cls: MagicMock,
@@ -95,7 +98,7 @@ def test_missing_credentials_file_raises_file_not_found(tmp_path: Path) -> None:
 
 def test_load_credentials_safe_missing_file(tmp_path: Path) -> None:
     """Tests loading credentials from a non-existent file."""
-    result: Dict[str, Any] = load_credentials_safe(tmp_path / "missing.json")
+    result: dict[str, Any] = load_credentials_safe(tmp_path / "missing.json")
     assert result["status"] == "empty_or_missing"
 
 
@@ -104,7 +107,7 @@ def test_load_credentials_safe_valid_json(tmp_path: Path) -> None:
     file_path: Path = tmp_path / "valid.json"
     file_path.write_text('{"key": "value"}', encoding="utf-8")
 
-    result: Dict[str, Any] = load_credentials_safe(file_path)
+    result: dict[str, Any] = load_credentials_safe(file_path)
     assert result == {"key": "value"}
 
 
@@ -113,5 +116,5 @@ def test_load_credentials_safe_invalid_json(tmp_path: Path) -> None:
     file_path: Path = tmp_path / "invalid.json"
     file_path.write_text("{invalid_json}", encoding="utf-8")
 
-    result: Dict[str, Any] = load_credentials_safe(file_path)
+    result: dict[str, Any] = load_credentials_safe(file_path)
     assert result["status"] == "invalid_json"

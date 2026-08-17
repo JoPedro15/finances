@@ -1,7 +1,8 @@
 import os
 from dataclasses import dataclass
-from dotenv import load_dotenv  # type: ignore[import-untyped]
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 load_dotenv()
 
