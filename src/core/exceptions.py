@@ -31,6 +31,10 @@ class ExchangeRateFetchError(QuotationError):
     """Raised when currency exchange rate conversion fails."""
 
 
+class JustETFScrapeError(FinancesError):
+    """Raised when scraping ETF details from JustETF fails."""
+
+
 class StorageError(FinancesError):
     """Base class for storage or persistence errors."""
 
