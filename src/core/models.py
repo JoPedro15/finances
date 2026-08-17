@@ -37,6 +37,7 @@ class Asset:
     yahoo_ticker: str
     quantity: float
     average_buy_price: float
+    asset_type: str = "stock"
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -44,13 +45,14 @@ class Asset:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Asset:
         return cls(
-            name=data.get("name", ""),
-            isin=data.get("isin", ""),
-            yahoo_ticker=data.get("yahoo_ticker", ""),
+            name=str(data.get("name", "")),
+            isin=str(data.get("isin", "")),
+            yahoo_ticker=str(data.get("yahoo_ticker", "")),
             quantity=float(data.get("quantity", 0.0)),
             average_buy_price=float(
                 data.get("averageBuyPrice", data.get("average_buy_price", 0.0))
             ),
+            asset_type=str(data.get("type", "stock")),
         )
 
     @property
@@ -75,9 +77,9 @@ class AssetSnapshot:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AssetSnapshot:
         return cls(
-            name=data.get("name", ""),
-            isin=data.get("isin", ""),
-            yahoo_ticker=data.get("yahoo_ticker", ""),
+            name=str(data.get("name", "")),
+            isin=str(data.get("isin", "")),
+            yahoo_ticker=str(data.get("yahoo_ticker", "")),
             native_price=float(data.get("native_price", 0.0)),
             native_currency=str(data.get("native_currency", "EUR")),
             value_eur=float(data.get("value_eur", 0.0)),
@@ -198,8 +200,8 @@ class ETFDetails:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ETFDetails:
-        raw_ter = data.get("ter_pct")
-        ter_pct = float(raw_ter) if raw_ter is not None else None
+        raw_ter: Any = data.get("ter_pct")
+        ter_pct: float | None = float(raw_ter) if raw_ter is not None else None
 
         return cls(
             holdings=[Holding.from_dict(item) for item in data.get("holdings", [])],
