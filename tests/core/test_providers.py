@@ -8,10 +8,17 @@ from src.core.models import Asset, ETFDetails, Quotation, StockDetails
 from src.core.providers import ETFProvider, StockProvider
 
 
-@patch("src.core.providers.get_quotation")
-def test_stock_provider_get_price(mock_get_quote: MagicMock) -> None:
-    """Validates StockProvider returns price quotation via get_quotation."""
-    mock_get_quote.return_value = Quotation(price=150.0, currency="USD")
+@patch("src.core.providers.get_exchange_rate")
+@patch("src.core.providers.yf.Ticker")
+def test_stock_provider_get_price_usd_converted_to_eur(
+    mock_ticker_cls: MagicMock, mock_get_fx: MagicMock
+) -> None:
+    """Validates StockProvider converts foreign currency to EUR."""
+    mock_ticker_inst: MagicMock = MagicMock()
+    mock_ticker_inst.info = {"regularMarketPrice": 150.0, "currency": "USD"}
+    mock_ticker_cls.return_value = mock_ticker_inst
+    mock_get_fx.return_value = 0.90  # 150 * 0.90 = 135.0 EUR
+
     asset: Asset = Asset(
         name="Apple",
         isin="US0378331005",
@@ -24,9 +31,34 @@ def test_stock_provider_get_price(mock_get_quote: MagicMock) -> None:
     quote: Quotation | None = provider.get_price(asset)
 
     assert quote is not None
-    assert quote.price == 150.0
-    assert quote.currency == "USD"
-    mock_get_quote.assert_called_once_with("AAPL")
+    assert quote.price == 135.0
+    assert quote.currency == "EUR"
+    mock_get_fx.assert_called_once_with("USD", "EUR")
+
+
+@patch("src.core.providers.yf.Ticker")
+def test_stock_provider_get_price_eur_no_conversion(
+    mock_ticker_cls: MagicMock,
+) -> None:
+    """Validates StockProvider returns EUR price directly without FX conversion."""
+    mock_ticker_inst: MagicMock = MagicMock()
+    mock_ticker_inst.info = {"regularMarketPrice": 100.0, "currency": "EUR"}
+    mock_ticker_cls.return_value = mock_ticker_inst
+
+    asset: Asset = Asset(
+        name="SAP",
+        isin="DE0007164600",
+        yahoo_ticker="SAP.DE",
+        quantity=5.0,
+        average_buy_price=90.0,
+    )
+
+    provider: StockProvider = StockProvider()
+    quote: Quotation | None = provider.get_price(asset)
+
+    assert quote is not None
+    assert quote.price == 100.0
+    assert quote.currency == "EUR"
 
 
 @patch("src.core.providers.yf.Ticker")
@@ -102,10 +134,10 @@ def test_stock_provider_get_details_handles_exception(
     assert provider.get_details(asset) is None
 
 
-@patch("src.core.providers.get_quotation")
-def test_etf_provider_uses_cache_hit(mock_get_quote: MagicMock) -> None:
+@patch("src.core.providers.StockProvider.get_price")
+def test_etf_provider_uses_cache_hit(mock_get_price: MagicMock) -> None:
     """Validates ETFProvider uses cached ETF composition when present."""
-    mock_get_quote.return_value = Quotation(price=100.0, currency="EUR")
+    mock_get_price.return_value = Quotation(price=100.0, currency="EUR")
     mock_cache: MagicMock = MagicMock()
     sample_details: ETFDetails = ETFDetails(
         holdings=[], sector_breakdown=[], country_breakdown=[], ter_pct=0.20
