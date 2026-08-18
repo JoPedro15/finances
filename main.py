@@ -273,7 +273,8 @@ def etf_details_cmd(
 
 
 def _format_market_cap(val: float | None) -> str:
-    """Formats market capitalization numeric values with dynamic scale suffixes (T, B, M)."""
+    """Formats market capitalization numeric values with
+    dynamic scale suffixes (T, B, M)."""
     if val is None:
         return "N/A"
     if val >= 1e12:

@@ -63,7 +63,8 @@ class StockProvider:
                 val: Any = info.get(key)
                 return str(val) if val is not None else None
 
-            # Calculate dividend yield percentage deterministically using nominal dividend rate and current price
+            # Calculate dividend yield percentage deterministically using
+            # nominal dividend rate and current price
             dividend_rate: float | None = _parse_float("dividendRate") or _parse_float(
                 "trailingAnnualDividendRate"
             )
