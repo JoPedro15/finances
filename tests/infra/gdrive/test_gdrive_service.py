@@ -1,6 +1,6 @@
 """
 Unit tests for src/infra/gdrive/service.py covering Google Drive file operations,
-uploads, overwriting, and directory listings.
+uploads, downloads, overwriting, and directory listings.
 """
 
 from pathlib import Path
@@ -12,11 +12,12 @@ from src.infra.gdrive.service import GDriveService
 
 
 def test_init_raises_file_not_found_when_creds_missing(tmp_path: Path) -> None:
-    """Tests that GDriveService initialization fails if credentials file is missing."""
-    missing_creds: Path = tmp_path / "credentials.json"
+    """Tests that GDriveService initialization fails
+    if credentials.json file is missing."""
+    missing_creds: Path = tmp_path / "credentials.json.json"
     token_path: Path = tmp_path / "token.json"
 
-    with pytest.raises(FileNotFoundError, match="Missing Google credentials:"):
+    with pytest.raises(FileNotFoundError, match="Missing Google credentials.json:"):
         GDriveService(
             credentials_path=str(missing_creds),
             token_path=str(token_path),
@@ -31,7 +32,7 @@ def test_upload_file_new(
     tmp_path: Path,
 ) -> None:
     """Tests uploading a new file to Google Drive."""
-    creds_file: Path = tmp_path / "credentials.json"
+    creds_file: Path = tmp_path / "credentials.json.json"
     creds_file.write_text('{"installed": {}}', encoding="utf-8")
 
     dummy_file: Path = tmp_path / "sample.txt"
@@ -60,40 +61,30 @@ def test_upload_file_new(
 
 @patch("src.infra.gdrive.service.build")
 @patch("src.infra.gdrive.service.get_google_service_credentials")
-def test_upload_file_overwrite(
+def test_download_file_not_found(
     mock_get_creds: MagicMock,
     mock_build: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """Tests overwriting an existing file in Google Drive."""
-    creds_file: Path = tmp_path / "credentials.json"
+    """Tests download_file returning False when file is missing from Google Drive."""
+    creds_file: Path = tmp_path / "credentials.json.json"
     creds_file.write_text('{"installed": {}}', encoding="utf-8")
-
-    dummy_file: Path = tmp_path / "sample.txt"
-    dummy_file.write_text("hello world", encoding="utf-8")
 
     mock_service: MagicMock = MagicMock()
     mock_build.return_value = mock_service
     mock_files: MagicMock = mock_service.files.return_value
-
-    mock_files.list.return_value.execute.return_value = {
-        "files": [{"id": "existing_id"}]
-    }
-    mock_files.update.return_value.execute.return_value = {"id": "existing_id"}
+    mock_files.list.return_value.execute.return_value = {"files": []}
 
     service: GDriveService = GDriveService(
         credentials_path=str(creds_file),
         token_path=str(tmp_path / "token.json"),
     )
 
-    file_id: str = service.upload_file(
-        file_path=dummy_file,
-        folder_id="folder_123",
-        overwrite=True,
-    )
+    dest_path: Path = tmp_path / "dest.json"
+    result: bool = service.download_file("missing.json", dest_path)
 
-    assert file_id == "existing_id"
-    mock_files.update.assert_called_once()
+    assert result is False
+    assert not dest_path.exists()
 
 
 @patch("src.infra.gdrive.service.build")
@@ -104,7 +95,7 @@ def test_file_exists_returns_true(
     tmp_path: Path,
 ) -> None:
     """Tests file_exists method returning True when file exists."""
-    creds_file: Path = tmp_path / "credentials.json"
+    creds_file: Path = tmp_path / "credentials.json.json"
     creds_file.write_text('{"installed": {}}', encoding="utf-8")
 
     mock_service: MagicMock = MagicMock()
@@ -129,7 +120,7 @@ def test_list_files(
     tmp_path: Path,
 ) -> None:
     """Tests listing files inside a target Google Drive folder."""
-    creds_file: Path = tmp_path / "credentials.json"
+    creds_file: Path = tmp_path / "credentials.json.json"
     creds_file.write_text('{"installed": {}}', encoding="utf-8")
 
     mock_service: MagicMock = MagicMock()

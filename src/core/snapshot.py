@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from src.core.exceptions import StorageError
@@ -142,11 +143,33 @@ def display_snapshot(snapshot_data: PortfolioSnapshot | dict[str, Any]) -> None:
         logger.print(f"  - {asset.name}: {asset.value_eur:.2f} EUR")
 
 
+def trigger_gdrive_backup(file_path: Path, folder_id: str | None = None) -> bool:
+    """Triggers non-blocking backup of a persistence file to Google Drive."""
+    try:
+        import os
+
+        from src.infra.gdrive.service import GoogleDriveService
+
+        target_folder: str | None = folder_id or os.getenv("GDRIVE_SNAPSHOT_FOLDER_ID")
+        service: GoogleDriveService = GoogleDriveService(folder_id=target_folder)
+        success: bool = service.backup_file(file_path)
+        if success:
+            logger.info(f"Google Drive backup successful for '{file_path.name}'.")
+        else:
+            logger.warning(f"Google Drive backup skipped for '{file_path.name}'.")
+        return success
+    except Exception as e:
+        logger.warning(f"Google Drive backup failed gracefully: {e}")
+        return False
+
+
 def save_snapshot(
     snapshot_data: PortfolioSnapshot | dict[str, Any],
     history_repo: HistoryRepository | None = None,
+    backup_to_gdrive: bool = True,
 ) -> None:
-    """Appends a snapshot to the history storage."""
+    """Appends a snapshot to storage and optionally backs
+    up local database to Google Drive."""
     logger.section("Saving Snapshot")
 
     snapshot: PortfolioSnapshot = (
@@ -164,3 +187,12 @@ def save_snapshot(
         return
 
     logger.success(f"Snapshot successfully saved to database ({DEFAULT_DB_PATH})")
+
+    if backup_to_gdrive:
+        db_file: Path = Path(DEFAULT_DB_PATH)
+        if db_file.exists():
+            trigger_gdrive_backup(db_file)
+
+        history_json: Path = Path("data/history.json")
+        if history_json.exists():
+            trigger_gdrive_backup(history_json)
