@@ -10,7 +10,7 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent
 DATA_DIR: Path = BASE_DIR / "data"
 
 CREDS_PATH_GDRIVE: Path = Path(
-    os.getenv("GDRIVE_CREDS_PATH", str(DATA_DIR / "credentials.json"))
+    os.getenv("GDRIVE_CREDS_PATH", str(DATA_DIR / "credentials.json.json"))
 )
 TOKEN_PATH_GDRIVE: Path = Path(
     os.getenv("GDRIVE_TOKEN_PATH", str(DATA_DIR / "token.json"))

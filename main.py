@@ -26,6 +26,7 @@ from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import SqlitePortfolioRepository
 from src.core.snapshot import display_snapshot, get_snapshot, save_snapshot
 from src.infra.database.connection import DEFAULT_DB_PATH
+from src.infra.gdrive.service import GoogleDriveService
 from src.utils.logger.logger import logger
 
 app: typer.Typer = typer.Typer(
@@ -61,6 +62,57 @@ def save_snapshot_cmd() -> None:
 def analyze_cmd() -> None:
     """Analyzes historical performance and ROI for all portfolio assets."""
     analyze_overall_performance()
+
+
+@app.command(name="pull-config")
+def pull_config_cmd() -> None:
+    """Pulls configuration files (portfolio.json, watchlist.json)
+    from Google Drive to local data directory."""
+    logger.section("Pulling Configuration from Google Drive")
+    service: GoogleDriveService = GoogleDriveService()
+
+    portfolio_ok: bool = service.download_file(
+        "portfolio.json", Path("data/portfolio.json")
+    )
+    watchlist_ok: bool = service.download_file(
+        "watchlist.json", Path("data/watchlist.json")
+    )
+
+    if portfolio_ok and watchlist_ok:
+        logger.success("Successfully pulled configuration files from Google Drive.")
+    else:
+        logger.warning(
+            "One or more configuration files failed to download from Google Drive."
+        )
+
+
+@app.command(name="push-config")
+def push_config_cmd() -> None:
+    """Pushes local configuration files (portfolio.json, watchlist.json)
+    to Google Drive."""
+    logger.section("Pushing Configuration to Google Drive")
+    service: GoogleDriveService = GoogleDriveService()
+
+    portfolio_file: Path = Path("data/portfolio.json")
+    watchlist_file: Path = Path("data/watchlist.json")
+
+    portfolio_ok: bool = (
+        bool(service.upload_file(portfolio_file, overwrite=True))
+        if portfolio_file.exists()
+        else False
+    )
+    watchlist_ok: bool = (
+        bool(service.upload_file(watchlist_file, overwrite=True))
+        if watchlist_file.exists()
+        else False
+    )
+
+    if portfolio_ok and watchlist_ok:
+        logger.success("Successfully pushed configuration files to Google Drive.")
+    else:
+        logger.warning(
+            "One or more configuration files failed to upload to Google Drive."
+        )
 
 
 @app.command(name="check-dips")
