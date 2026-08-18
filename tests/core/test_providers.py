@@ -39,7 +39,7 @@ def test_stock_provider_get_details_success(
         "marketCap": 3000000000000.0,
         "trailingPE": 32.5,
         "forwardPE": 28.0,
-        "dividendYield": 0.0055,
+        "dividendYield": 0.55,
         "fiftyTwoWeekHigh": 235.0,
         "fiftyTwoWeekLow": 165.0,
         "sector": "Technology",
