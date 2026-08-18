@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean get-snapshot save-snapshot analyze check-dips etf-details stock-details analyze-exposure migrate
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze check-dips etf-details stock-details analyze-exposure migrate
 
 # ==============================================================================
 # 📖 Help
@@ -22,6 +22,9 @@ help:
 	@echo "  make quality          - Runs full quality gate (lint + security-check + test)."
 	@echo "  make clean            - Cleans Python temporary cache files and coverage reports."
 	@echo "  --- Project Utils ---"
+	@echo "  make sync-portfolio   - Migrates JSON portfolio to SQLite DB and pushes config to Google Drive."
+	@echo "  make push-config      - Pushes local config files to Google Drive."
+	@echo "  make pull-config      - Pulls config files from Google Drive."
 	@echo "  make migrate          - Migrates existing JSON data to SQLite database."
 	@echo "  make get-snapshot     - Displays the current portfolio value."
 	@echo "  make save-snapshot    - Saves the current portfolio value to history."
@@ -80,6 +83,16 @@ clean:
 migrate:
 	PYTHONPATH=. $(PYTHON) src/migrate_json_to_sqlite.py
 
+push-config:
+	PYTHONPATH=src $(PYTHON) main.py push-config
+
+pull-config:
+	PYTHONPATH=src $(PYTHON) main.py pull-config
+
+sync-portfolio:
+	PYTHONPATH=. $(PYTHON) src/migrate_json_to_sqlite.py
+	PYTHONPATH=src $(PYTHON) main.py push-config
+
 get-snapshot:
 	PYTHONPATH=src $(PYTHON) main.py get-snapshot
 
@@ -93,7 +106,7 @@ check-dips:
 	PYTHONPATH=src $(PYTHON) main.py check-dips
 
 etf-details:
-	PYTHONPATH=src $(PYTHON) main.py etf-details
+	PYTHONPATH=src $(PYTHON) main.py etf-details $(ISIN)
 
 stock-details:
 	PYTHONPATH=src $(PYTHON) main.py stock-details $(TICKER)
