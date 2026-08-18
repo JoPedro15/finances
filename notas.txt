@@ -1,0 +1,5 @@
+ativo: Nvidia
+Oprdem: 1,574472x190,52
+taxa: 1,00euro
+imposto selo: 0,04
+total: 300,97

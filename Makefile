@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze check-dips etf-details stock-details analyze-exposure migrate
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details analyze-exposure migrate recommend
 
 # ==============================================================================
 # 📖 Help
@@ -21,7 +21,7 @@ help:
 	@echo "  make test             - Runs unit tests (pytest)."
 	@echo "  make quality          - Runs full quality gate (lint + security-check + test)."
 	@echo "  make clean            - Cleans Python temporary cache files and coverage reports."
-	@echo "  --- Project Utils ---"
+	@echo "  --- Project Utils & Decision Engine ---"
 	@echo "  make sync-portfolio   - Migrates JSON portfolio to SQLite DB and pushes config to Google Drive."
 	@echo "  make push-config      - Pushes local config files to Google Drive."
 	@echo "  make pull-config      - Pulls config files from Google Drive."
@@ -29,10 +29,10 @@ help:
 	@echo "  make get-snapshot     - Displays the current portfolio value."
 	@echo "  make save-snapshot    - Saves the current portfolio value to history."
 	@echo "  make analyze          - Analyzes overall portfolio performance."
-	@echo "  make check-dips       - Scans watchlist for stock price dip opportunities."
 	@echo "  make etf-details ISIN= - Inspects composition and details for an ETF ISIN."
 	@echo "  make stock-details TICKER= - Inspects fundamental metrics for a stock ticker or ISIN."
 	@echo "  make analyze-exposure - Analyzes portfolio sector and country exposure."
+	@echo "  make recommend        - Ranks investment targets using live market data."
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality
@@ -102,9 +102,6 @@ save-snapshot:
 analyze:
 	PYTHONPATH=src $(PYTHON) main.py analyze
 
-check-dips:
-	PYTHONPATH=src $(PYTHON) main.py check-dips
-
 etf-details:
 	PYTHONPATH=src $(PYTHON) main.py etf-details $(ISIN)
 
@@ -113,3 +110,6 @@ stock-details:
 
 analyze-exposure:
 	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
+
+recommend:
+	PYTHONPATH=src $(PYTHON) -m cli.recommend

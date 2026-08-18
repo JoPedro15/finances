@@ -1,6 +1,4 @@
-"""
-Unit tests for main.py CLI commands using Typer's CliRunner.
-"""
+"""Unit tests for main.py CLI commands using Typer's CliRunner."""
 
 from __future__ import annotations
 
@@ -17,6 +15,7 @@ from src.core.models import (
     Holding,
     PortfolioSnapshot,
     SectorExposure,
+    StockDetails,
 )
 
 runner: CliRunner = CliRunner()
@@ -76,26 +75,48 @@ def test_analyze_command() -> None:
         mock_analyze.assert_called_once()
 
 
-def test_check_dips_command_success() -> None:
-    """Tests 'check-dips' CLI command with matches found."""
-    mock_watchlist: list[dict[str, str]] = [{"name": "Apple", "ticker": "AAPL"}]
-    mock_matches: list[dict[str, Any]] = [
-        {"name": "Apple", "ticker": "AAPL", "drop_pct": 7.0}
-    ]
-    with (
-        patch("main.load_watchlist", return_value=mock_watchlist),
-        patch("main.scan_watchlist", return_value=mock_matches),
-    ):
-        result: Any = runner.invoke(app, ["check-dips"])
-        assert result.exit_code == 0
-        assert "Found 1 dip opportunities" in result.output
+@patch("main.GoogleDriveService")
+def test_pull_config_command_success(mock_gdrive_cls: MagicMock) -> None:
+    """Tests 'pull-config' CLI command on successful download."""
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.download_file.return_value = True
+
+    result: Any = runner.invoke(app, ["pull-config"])
+
+    assert result.exit_code == 0
+    assert "PULLING CONFIGURATION FROM GOOGLE DRIVE" in result.output
+    assert mock_service.download_file.call_count == 2
 
 
-def test_check_dips_command_empty_watchlist() -> None:
-    """Tests 'check-dips' CLI command when watchlist fails to load."""
-    with patch("main.load_watchlist", return_value=[]):
-        result: Any = runner.invoke(app, ["check-dips"])
-        assert result.exit_code == 1
+@patch("main.GoogleDriveService")
+def test_pull_config_command_failure(mock_gdrive_cls: MagicMock) -> None:
+    """Tests 'pull-config' CLI command when download fails."""
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.download_file.return_value = False
+
+    result: Any = runner.invoke(app, ["pull-config"])
+
+    assert result.exit_code == 0
+    assert "failed to download" in result.output
+
+
+@patch("main.GoogleDriveService")
+@patch("pathlib.Path.exists", return_value=True)
+def test_push_config_command_success(
+    mock_exists: MagicMock, mock_gdrive_cls: MagicMock
+) -> None:
+    """Tests 'push-config' CLI command on successful upload."""
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.upload_file.return_value = True
+
+    result: Any = runner.invoke(app, ["push-config"])
+
+    assert result.exit_code == 0
+    assert "PUSHING CONFIGURATION TO GOOGLE DRIVE" in result.output
+    assert mock_service.upload_file.call_count == 2
 
 
 @patch("main.ETFProvider")
@@ -150,6 +171,47 @@ def test_etf_details_cmd_invalid_isin() -> None:
 
     assert result.exit_code == 1
     assert "Invalid ISIN format" in result.output
+
+
+@patch("main.StockProvider")
+@patch("main.SqlitePortfolioRepository")
+def test_stock_details_cmd_success(
+    mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
+) -> None:
+    """Tests 'stock-details' CLI command on successful execution."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+
+    mock_repo: MagicMock = MagicMock()
+    mock_repo_cls.return_value = mock_repo
+    mock_repo.load_assets.return_value = [
+        Asset(
+            name="Apple",
+            isin="US0378331005",
+            yahoo_ticker="AAPL",
+            quantity=1.0,
+            average_buy_price=180.0,
+            asset_type="stock",
+        )
+    ]
+
+    mock_provider.get_details.return_value = StockDetails(
+        sector="Technology",
+        industry="Consumer Electronics",
+        market_cap=3000000000000.0,
+        pe_ratio=30.0,
+        forward_pe=25.0,
+        dividend_yield_pct=0.5,
+        fifty_two_week_high=200.0,
+        fifty_two_week_low=160.0,
+    )
+
+    result: Any = runner.invoke(app, ["stock-details", "AAPL"])
+
+    assert result.exit_code == 0
+    assert "STOCK DETAILS INSPECTION" in result.output
+    assert "AAPL" in result.output
+    assert "Technology" in result.output
 
 
 @patch("main.get_snapshot")
