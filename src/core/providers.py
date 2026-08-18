@@ -50,17 +50,6 @@ class StockProvider:
                 )
                 return None
 
-            raw_div: Any = info.get("dividendYield")
-            dividend_yield_pct: float | None = None
-            if raw_div is not None:
-                try:
-                    val_float: float = float(raw_div)
-                    dividend_yield_pct = (
-                        round(val_float * 100.0, 4) if val_float < 1.0 else val_float
-                    )
-                except (ValueError, TypeError):
-                    dividend_yield_pct = None
-
             def _parse_float(key: str) -> float | None:
                 val: Any = info.get(key)
                 if val is None:
@@ -73,6 +62,29 @@ class StockProvider:
             def _parse_str(key: str) -> str | None:
                 val: Any = info.get(key)
                 return str(val) if val is not None else None
+
+            # Calculate dividend yield percentage deterministically using
+            # nominal dividend rate and current price
+            dividend_rate: float | None = _parse_float("dividendRate") or _parse_float(
+                "trailingAnnualDividendRate"
+            )
+            current_price: float | None = (
+                _parse_float("currentPrice")
+                or _parse_float("previousClose")
+                or _parse_float("regularMarketPrice")
+            )
+
+            dividend_yield_pct: float | None = None
+            if (
+                dividend_rate is not None
+                and current_price is not None
+                and current_price > 0
+            ):
+                dividend_yield_pct = round((dividend_rate / current_price) * 100.0, 4)
+            else:
+                raw_div: float | None = _parse_float("dividendYield")
+                if raw_div is not None:
+                    dividend_yield_pct = round(raw_div, 4)
 
             return StockDetails(
                 market_cap=_parse_float("marketCap"),
