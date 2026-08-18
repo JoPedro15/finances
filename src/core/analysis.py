@@ -4,7 +4,6 @@ This file contains functions for analyzing portfolio performance.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 
 from src.core.exceptions import StorageError
@@ -12,16 +11,12 @@ from src.core.models import Asset, ETFDetails, PortfolioSnapshot
 from src.core.providers import ETFProvider
 from src.core.repositories import (
     HistoryRepository,
-    JsonHistoryRepository,
-    JsonPortfolioRepository,
     PortfolioRepository,
+    SqliteHistoryRepository,
+    SqlitePortfolioRepository,
 )
+from src.infra.database.connection import DEFAULT_DB_PATH
 from src.utils.logger.logger import logger
-
-# --- Configuration ---
-DATA_DIR: str = os.path.join(os.path.dirname(__file__), "../..", "data")
-PORTFOLIO_FILE: str = os.path.join(DATA_DIR, "portfolio.json")
-HISTORY_FILE: str = os.path.join(DATA_DIR, "history.json")
 
 
 @dataclass
@@ -39,8 +34,8 @@ def calculate_portfolio_exposure(
     etf_provider: ETFProvider | None = None,
 ) -> PortfolioExposure:
     """Calculates value-weighted sector and country exposure for portfolio ETFs."""
-    repo: PortfolioRepository = portfolio_repo or JsonPortfolioRepository(
-        PORTFOLIO_FILE
+    repo: PortfolioRepository = portfolio_repo or SqlitePortfolioRepository(
+        DEFAULT_DB_PATH
     )
     provider: ETFProvider = etf_provider or ETFProvider()
 
@@ -62,7 +57,6 @@ def calculate_portfolio_exposure(
     for isin, asset in asset_map.items():
         if not asset.isin or len(asset.isin) != 12:
             continue
-        # Filter strictly by ETF asset type to ignore individual stocks
         if asset.asset_type != "etf":
             continue
 
@@ -115,22 +109,22 @@ def analyze_overall_performance(
     """Analyzes performance of individual assets and the overall portfolio."""
     logger.section("Portfolio Performance Analysis")
 
-    p_repo: PortfolioRepository = portfolio_repo or JsonPortfolioRepository(
-        PORTFOLIO_FILE
+    p_repo: PortfolioRepository = portfolio_repo or SqlitePortfolioRepository(
+        DEFAULT_DB_PATH
     )
-    h_repo: HistoryRepository = history_repo or JsonHistoryRepository(HISTORY_FILE)
+    h_repo: HistoryRepository = history_repo or SqliteHistoryRepository(DEFAULT_DB_PATH)
 
     try:
         assets: list[Asset] = p_repo.load_assets()
         history: list[PortfolioSnapshot] = h_repo.load_history()
 
         if not history:
-            logger.warning("History file is empty. Cannot perform analysis.")
+            logger.warning("History storage is empty. Cannot perform analysis.")
             return
 
         latest_snapshot: PortfolioSnapshot = history[-1]
     except StorageError as e:
-        logger.error(f"Could not read data files: {e}")
+        logger.error(f"Could not read data from storage: {e}")
         return
 
     latest_asset_values: dict[str, float] = {

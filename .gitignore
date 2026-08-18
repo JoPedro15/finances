@@ -13,6 +13,7 @@ env/
 .env
 .env.*
 !.env.example
+secrets/
 
 # Testing & Coverage
 .coverage
@@ -35,4 +36,7 @@ Thumbs.db
 
 # Project-specific Data & Logs
 data/history.json
+data/portfolio.json
+data/watchlist.json
+*.db
 *.log

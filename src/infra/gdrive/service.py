@@ -1,9 +1,13 @@
+"""
+Service wrapper for Google Drive file upload, download, and backup operations.
+"""
+
 from __future__ import annotations
 
 import io
 import os
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 from googleapiclient.discovery import Resource, build  # type: ignore[import-untyped]
 from googleapiclient.http import (  # type: ignore[import-untyped]
@@ -11,159 +15,212 @@ from googleapiclient.http import (  # type: ignore[import-untyped]
     MediaIoBaseDownload,
 )
 
-from src.config import (
-    CREDS_PATH_GDRIVE,
-    GDRIVE_FOLDER_ID,
-    TOKEN_PATH_GDRIVE,
-)
+from src.infra.gdrive.auth import get_google_service_credentials
 from src.utils.logger.logger import logger
-
-from .auth import get_google_service_credentials
-
-__all__: list[str] = ["GDriveService"]
 
 
 class GDriveService:
-    """Module to interact with Google Drive API v3."""
-
-    _MIME_EXPORT_MAP: Final[dict[str, str]] = {
-        "application/vnd.google-apps.spreadsheet": (
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-        "application/vnd.google-apps.document": (
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
-        "application/vnd.google-apps.presentation": (
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        ),
-    }
+    """Service wrapper for uploading, downloading,
+    and backing up files to Google Drive."""
 
     def __init__(
         self,
-        credentials_path: str = str(CREDS_PATH_GDRIVE),
-        token_path: str = str(TOKEN_PATH_GDRIVE),
-        output_folder_id: str | None = None,
+        credentials_path: str | Path | None = None,
+        token_path: str | Path | None = None,
+        folder_id: str | None = None,
     ) -> None:
-        self.credentials_path: str = credentials_path
-        self.token_path: str = token_path
-        self.output_folder_id: str | None = output_folder_id or GDRIVE_FOLDER_ID
-
-        Path(self.token_path).parent.mkdir(parents=True, exist_ok=True)
-
-        self.scopes: Final[list[str]] = ["https://www.googleapis.com/auth/drive"]
-        self.service: Resource = self._init_service()
-
-    def _init_service(self) -> Resource:
-        """Builds the authorized Google Drive API service resource."""
-        if not os.path.exists(self.credentials_path):
-            logger.error(f"Credentials file not found at: {self.credentials_path}")
+        if credentials_path and not Path(credentials_path).exists():
             raise FileNotFoundError(
-                f"Missing Google credentials: {self.credentials_path}"
+                f"Missing Google credentials.json: {credentials_path}"
             )
 
-        creds: Any = get_google_service_credentials(
-            self.credentials_path, self.token_path, self.scopes
-        )
-        return build("drive", "v3", credentials=creds)
+        self.credentials_path: str | Path | None = credentials_path
+        self.token_path: str | Path | None = token_path
+        self.folder_id: str | None = folder_id or os.getenv("GDRIVE_CONFIG_FOLDER_ID")
+        self._service: Resource | None = None
 
-    def upload_file(
-        self, file_path: str | Path, folder_id: str, overwrite: bool = True
-    ) -> str:
-        """Uploads a file to a specific GDrive folder."""
-        str_path: str = str(file_path)
-        file_name: str = os.path.basename(str_path)
-        media: MediaFileUpload = MediaFileUpload(str_path, resumable=True)
-
-        if overwrite:
-            safe_name: str = file_name.replace("'", "\\'")
-            query: str = (
-                f"name = '{safe_name}' and '{folder_id}' in parents and trashed = false"
-            )
-            response: dict[str, Any] = (
-                self.service.files().list(q=query, fields="files(id)").execute()
-            )
-            existing_files: list[dict[str, str]] = response.get("files", [])
-
-            if existing_files:
-                file_id: str = existing_files[0]["id"]
-                logger.info(f"Overwriting file: {file_name} (ID: {file_id})")
-                updated_file = (
-                    self.service.files()
-                    .update(fileId=file_id, media_body=media)
-                    .execute()
+    def _get_service(self) -> Resource | None:
+        if self._service is None:
+            try:
+                creds: Any = get_google_service_credentials(
+                    credentials_path=self.credentials_path,
+                    token_path=self.token_path,
                 )
-                return str(updated_file.get("id"))
+                if creds is None:
+                    logger.warning("No valid Google Drive credentials.json available.")
+                    return None
+                self._service = build("drive", "v3", credentials=creds)
+            except Exception as e:
+                logger.warning(f"Failed to build Google Drive API service: {e}")
+                return None
+        return self._service
 
-        file_metadata: dict[str, Any] = {
-            "name": file_name,
-            "parents": [folder_id],
-        }
-        logger.info(f"Creating new file: {file_name}")
-        new_file = (
-            self.service.files()
-            .create(body=file_metadata, media_body=media, fields="id")
-            .execute()
-        )
+    def file_exists(self, file_name: str, folder_id: str | None = None) -> bool:
+        """Checks if a file exists in the target Google Drive folder."""
+        service: Resource | None = self._get_service()
+        if service is None:
+            return False
 
-        return str(new_file.get("id"))
+        target_folder: str | None = folder_id or self.folder_id
+        query: str = f"name = '{file_name}' and trashed = false"
+        if target_folder:
+            query += f" and '{target_folder}' in parents"
 
-    def file_exists(self, file_name: str, folder_id: str) -> bool:
-        """Verifies if a file exists within a specific folder."""
-        safe_name: str = file_name.replace("'", "\\'")
-        query: str = (
-            f"name = '{safe_name}' and '{folder_id}' in parents and trashed = false"
-        )
-        results: dict[str, Any] = (
-            self.service.files()
-            .list(q=query, spaces="drive", fields="files(id)")
-            .execute()
-        )
-
-        return len(results.get("files", [])) > 0
-
-    def download_file(self, file_id: str, local_path: str | Path) -> None:
-        """Downloads a file. Supports binary files and Workspace exports."""
-        str_local_path: str = str(local_path)
-        file_metadata: dict[str, Any] = (
-            self.service.files().get(fileId=file_id, fields="mimeType, name").execute()
-        )
-
-        mime_type: str = file_metadata.get("mimeType", "")
-        logger.info(f"Downloading {file_metadata.get('name')} (MIME: {mime_type})")
-
-        if mime_type in self._MIME_EXPORT_MAP:
-            export_mime: str = self._MIME_EXPORT_MAP[mime_type]
-            request = self.service.files().export_media(
-                fileId=file_id, mimeType=export_mime
+        try:
+            response: dict[str, Any] = (
+                service.files().list(q=query, fields="files(id, name)").execute()
             )
-        else:
-            request = self.service.files().get_media(fileId=file_id)
-
-        with io.FileIO(str_local_path, "wb") as fh:
-            downloader: MediaIoBaseDownload = MediaIoBaseDownload(fh, request)
-            done: bool = False
-            while not done:
-                status, done = downloader.next_chunk()
-                if status:
-                    logger.info(f"Download Progress: {int(status.progress() * 100)}%")
-
-        logger.success(f"File saved to: {str_local_path}")
+            files: list[dict[str, Any]] = response.get("files", [])
+            return len(files) > 0
+        except Exception as e:
+            logger.warning(f"Failed to check file existence for '{file_name}': {e}")
+            return False
 
     def list_files(
         self, folder_id: str | None = None, limit: int = 10
     ) -> list[dict[str, str]]:
-        """Lists files in a specific folder or default output folder."""
-        query: str = "trashed = false"
-        target_folder: str | None = folder_id or self.output_folder_id
+        """Lists files inside a target Google Drive folder."""
+        service: Resource | None = self._get_service()
+        if service is None:
+            return []
 
+        target_folder: str | None = folder_id or self.folder_id
+        query: str = "trashed = false"
         if target_folder:
             query += f" and '{target_folder}' in parents"
 
-        results: dict[str, Any] = (
-            self.service.files()
-            .list(q=query, spaces="drive", fields="files(id, name)", pageSize=limit)
-            .execute()
+        try:
+            response: dict[str, Any] = (
+                service.files()
+                .list(q=query, pageSize=limit, fields="files(id, name)")
+                .execute()
+            )
+            raw_files: list[dict[str, Any]] = response.get("files", [])
+            return [
+                {"id": str(f.get("id")), "name": str(f.get("name"))} for f in raw_files
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to list files in Google Drive: {e}")
+            return []
+
+    def upload_file(
+        self,
+        file_path: str | Path,
+        folder_id: str | None = None,
+        overwrite: bool = False,
+        mime_type: str = "application/octet-stream",
+    ) -> Any:
+        """Uploads or updates a file on Google Drive."""
+        path: Path = Path(file_path)
+        if not path.exists():
+            logger.warning(f"Cannot upload non-existent file '{path}'.")
+            return False
+
+        service: Resource | None = self._get_service()
+        if service is None:
+            return False
+
+        target_folder: str | None = folder_id or self.folder_id
+        media: MediaFileUpload = MediaFileUpload(
+            str(path), mimetype=mime_type, resumable=True
         )
 
-        files: list[dict[str, str]] = results.get("files", [])
-        return files
+        try:
+            if overwrite:
+                query: str = f"name = '{path.name}' and trashed = false"
+                if target_folder:
+                    query += f" and '{target_folder}' in parents"
+
+                existing_resp: dict[str, Any] = (
+                    service.files().list(q=query, fields="files(id)").execute()
+                )
+                existing_files: list[dict[str, Any]] = existing_resp.get("files", [])
+
+                if existing_files:
+                    file_id: str = str(existing_files[0]["id"])
+                    updated_file: dict[str, Any] = (
+                        service.files()
+                        .update(
+                            fileId=file_id,
+                            media_body=media,
+                            fields="id",
+                        )
+                        .execute()
+                    )
+                    logger.info(
+                        f"File '{path.name}' updated successfully on Google Drive."
+                    )
+                    return updated_file.get("id", file_id)
+
+            file_metadata: dict[str, Any] = {"name": path.name}
+            if target_folder:
+                file_metadata["parents"] = [target_folder]
+
+            created_file: dict[str, Any] = (
+                service.files()
+                .create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id, name",
+                )
+                .execute()
+            )
+            logger.info(f"File '{path.name}' uploaded successfully to Google Drive.")
+            return created_file.get("id", True)
+        except Exception as e:
+            logger.warning(f"Google Drive upload failed for '{path.name}': {e}")
+            return False
+
+    def download_file(
+        self,
+        file_name: str,
+        destination_path: str | Path,
+        folder_id: str | None = None,
+    ) -> bool:
+        """Downloads a file from Google Drive to local disk."""
+        dest: Path = Path(destination_path)
+        service: Resource | None = self._get_service()
+        if service is None:
+            return False
+
+        target_folder: str | None = folder_id or self.folder_id
+        query: str = f"name = '{file_name}' and trashed = false"
+        if target_folder:
+            query += f" and '{target_folder}' in parents"
+
+        try:
+            response: dict[str, Any] = (
+                service.files().list(q=query, fields="files(id, name)").execute()
+            )
+            files: list[dict[str, Any]] = response.get("files", [])
+            if not files:
+                logger.warning(f"File '{file_name}' not found on Google Drive.")
+                return False
+
+            file_id: str = str(files[0]["id"])
+            request = service.files().get_media(fileId=file_id)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+
+            fh.seek(0)
+            with open(dest, "wb") as f:
+                f.write(fh.read())
+
+            logger.info(f"File '{file_name}' downloaded successfully to '{dest}'.")
+            return True
+        except Exception as e:
+            logger.warning(f"Google Drive download failed for '{file_name}': {e}")
+            return False
+
+    def backup_file(self, file_path: str | Path, folder_id: str | None = None) -> bool:
+        """Helper method to back up a critical file to Google Drive non-blockingly."""
+        res: Any = self.upload_file(file_path, folder_id=folder_id, overwrite=True)
+        return bool(res)
+
+
+GoogleDriveService = GDriveService

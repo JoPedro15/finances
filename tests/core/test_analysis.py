@@ -17,7 +17,6 @@ def test_analyze_overall_performance_gain_scenario(
     mock_logger: MagicMock,
 ) -> None:
     """Validates calculations and log outputs for individual
-
     assets and overall portfolio gain using repository mocks.
     """
     mock_p_repo: MagicMock = MagicMock()
@@ -79,7 +78,6 @@ def test_analyze_overall_performance_loss_scenario(
     mock_logger: MagicMock,
 ) -> None:
     """Validates log outputs when the overall portfolio
-
     produces an absolute loss and negative ROI.
     """
     mock_p_repo: MagicMock = MagicMock()
@@ -153,7 +151,7 @@ def test_analyze_overall_performance_missing_or_corrupted_file(
 
     analyze_overall_performance(portfolio_repo=mock_p_repo, history_repo=mock_h_repo)
     mock_logger.warning.assert_called_with(
-        "History file is empty. Cannot perform analysis."
+        "History storage is empty. Cannot perform analysis."
     )
 
     # 2. StorageReadError / StorageError
