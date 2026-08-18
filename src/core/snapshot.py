@@ -9,8 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.core.currency_exchange import get_exchange_rate
 from src.core.exceptions import StorageError
-from src.core.get_quotation import get_exchange_rate
 from src.core.models import Asset, AssetSnapshot, PortfolioSnapshot, Quotation
 from src.core.providers import AssetDataProvider, ETFProvider, StockProvider
 from src.core.repositories import (
