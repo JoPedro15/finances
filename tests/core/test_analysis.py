@@ -1,15 +1,24 @@
-"""
-Unit tests for src/core/analysis.py covering portfolio performance analysis,
-loss scenarios, missing/corrupted data files, and edge cases.
+"""Unit tests for src/core/analysis.py covering portfolio performance analysis,
+exposure calculations, loss scenarios, missing/corrupted data files, and edge cases.
 """
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from src.core.analysis import analyze_overall_performance
+from src.core.analysis import (
+    PortfolioExposure,
+    analyze_overall_performance,
+    calculate_portfolio_exposure,
+)
 from src.core.exceptions import StorageReadError
-from src.core.models import Asset, AssetSnapshot, PortfolioSnapshot
+from src.core.models import (
+    Asset,
+    AssetSnapshot,
+    ETFDetails,
+    PortfolioSnapshot,
+)
 
 
 @patch("src.core.analysis.logger")
@@ -211,3 +220,125 @@ def test_analyze_overall_performance_mismatched_assets(
     mock_logger.info.assert_any_call("Total Acquisition Cost: 1000.00 EUR")
     mock_logger.info.assert_any_call("Latest Market Value:   1500.00 EUR")
     mock_logger.success.assert_any_call("Return on Investment (ROI): +50.00%")
+
+
+def test_calculate_portfolio_exposure_normalized_to_100_percent() -> None:
+    """Verifies that calculate_portfolio_exposure sums up to 100% even
+    when some ETFs lack full breakdown details.
+    """
+    mock_p_repo: MagicMock = MagicMock()
+    mock_p_repo.load_assets.return_value = [
+        Asset(
+            name="Core MSCI World",
+            isin="IE00B4L5Y983",
+            yahoo_ticker="EUNL.DE",
+            asset_type="etf",
+            quantity=10.0,
+            average_buy_price=90.0,
+        ),
+        Asset(
+            name="Leveraged ETF without breakdown",
+            isin="LU0411078552",
+            yahoo_ticker="DBPG.DE",
+            asset_type="etf",
+            quantity=5.0,
+            average_buy_price=170.0,
+        ),
+        Asset(
+            name="Apple Stock",
+            isin="US0378331005",
+            yahoo_ticker="AAPL",
+            asset_type="stock",
+            quantity=1.0,
+            average_buy_price=180.0,
+        ),
+    ]
+
+    mock_provider: MagicMock = MagicMock()
+    mock_provider.get_details.side_effect = lambda asset: (
+        ETFDetails(
+            holdings=[],
+            sector_breakdown=[
+                SimpleNamespace(sector_name="Technology", weight_pct=30.0),
+                SimpleNamespace(sector_name="Finance", weight_pct=20.0),
+                SimpleNamespace(sector_name="Other", weight_pct=50.0),
+            ],
+            country_breakdown=[
+                SimpleNamespace(country_name="United States", weight_pct=70.0),
+                SimpleNamespace(country_name="Japan", weight_pct=30.0),
+            ],
+        )
+        if asset.isin == "IE00B4L5Y983"
+        else ETFDetails(
+            holdings=[],
+            sector_breakdown=[],
+            country_breakdown=[],
+        )
+    )
+
+    snapshot: PortfolioSnapshot = PortfolioSnapshot(
+        timestamp="2026-08-18T20:00:00",
+        total_value_eur=2000.0,
+        assets_snapshot=[
+            AssetSnapshot(
+                name="Core MSCI World",
+                isin="IE00B4L5Y983",
+                yahoo_ticker="EUNL.DE",
+                native_price=100.0,
+                native_currency="EUR",
+                value_eur=1000.0,
+            ),
+            AssetSnapshot(
+                name="Leveraged ETF without breakdown",
+                isin="LU0411078552",
+                yahoo_ticker="DBPG.DE",
+                native_price=170.0,
+                native_currency="EUR",
+                value_eur=850.0,
+            ),
+            AssetSnapshot(
+                name="Apple Stock",
+                isin="US0378331005",
+                yahoo_ticker="AAPL",
+                native_price=150.0,
+                native_currency="USD",
+                value_eur=150.0,
+            ),
+        ],
+    )
+
+    exposure: PortfolioExposure = calculate_portfolio_exposure(
+        snapshot=snapshot,
+        portfolio_repo=mock_p_repo,
+        etf_provider=mock_provider,
+    )
+
+    assert exposure.total_etf_value_eur == 1850.0
+    assert sum(exposure.sector_exposure.values()) == 100.0
+    assert sum(exposure.country_exposure.values()) == 100.0
+    assert exposure.sector_exposure["Technology"] == 30.0
+    assert exposure.country_exposure["United States"] == 70.0
+
+
+@patch("src.core.analysis.logger")
+def test_calculate_portfolio_exposure_exception_handling(
+    mock_logger: MagicMock,
+) -> None:
+    """Verifies that repository errors return an empty PortfolioExposure."""
+    mock_p_repo: MagicMock = MagicMock()
+    mock_p_repo.load_assets.side_effect = Exception("Database error")
+
+    snapshot: PortfolioSnapshot = PortfolioSnapshot(
+        timestamp="2026-08-18T20:00:00",
+        total_value_eur=0.0,
+        assets_snapshot=[],
+    )
+
+    exposure: PortfolioExposure = calculate_portfolio_exposure(
+        snapshot=snapshot, portfolio_repo=mock_p_repo
+    )
+
+    assert exposure.total_etf_value_eur == 0.0
+    assert exposure.sector_exposure == {}
+    assert exposure.country_exposure == {}
+    mock_logger.error.assert_called_once()
