@@ -13,28 +13,29 @@
 
 The **Finances Portfolio Tracker** is a lightweight, production-grade CLI application designed to track, record, analyze personal investment portfolios, and monitor target asset dip opportunities.
 
-By integrating live market data with multi-currency conversion, concurrent API fetching, relational SQLite persistence, structured domain models, and centralized environment configuration, this project provides a **Single Source of Truth (SSoT)** for evaluating asset performance, portfolio ROI, and capital allocation.
+By integrating live market data with multi-currency conversion, concurrent API fetching, relational SQLite persistence, structured domain models, and automated Google Drive cloud synchronization, this project provides a **Single Source of Truth (SSoT)** for evaluating asset performance, portfolio ROI, and capital allocation.
 
 ## 🏗️ Architecture & Structure
 
-The repository follows a clean modular design, strictly separating portfolio datasets, domain processing logic, data persistence layers, and execution utilities.
+The repository follows a clean modular design, strictly separating portfolio datasets, domain processing logic, data persistence layers, remote backups, and execution utilities.
 
 | Layer | Path | Description |
 | :--- | :--- | :--- |
-| `Data Storage` | `data/` | SQLite relational database (`finances.db`), watchlist configuration (`watchlist.json`), and ETF metadata cache (`etf_cache.json`). |
+| `Data Storage` | `data/` | Local SQLite database (`finances.db`), portfolio configuration (`portfolio.json`), watchlist configuration (`watchlist.json`), and ETF metadata cache (`etf_cache.json`). |
 | `Core Domain` | `src/core/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, data provider abstractions (`providers.py`), and repository abstractions. |
 | `Database Infrastructure` | `src/infra/database/` | SQLite connection management (`connection.py`), foreign key enforcement, transactional contexts, and schema initialization DDL (`schema.py`). |
-| `Google Drive Integration` | `src/infra/gdrive/` | Infrastructure service and OAuth2 authentication handlers for remote backup capabilities. |
+| `Google Drive Integration` | `src/infra/gdrive/` | Remote synchronization service (`service.py`) and OAuth2 authentication handler (`auth.py`) for automated database backups and bidirectional config file sync. |
 | `JustETF Integration` | `src/infra/justetf/` | Scraper client extracting ETF composition, sector allocation, country exposure, and TER directly from JustETF profile pages. |
 | `Logging System` | `src/utils/logger/` | Standardized internal logger enforcing clean output formatting across operations. |
 | `Data Migration` | `src/migrate_json_to_sqlite.py` | Idempotent migration utility transferring legacy JSON datasets into the SQLite database engine. |
+| `Secrets & Credentials` | `secrets/` | Isolated local directory storing sensitive OAuth2 client secrets (`credentials.json`) and active tokens (`token.json`). |
 | `Automation` | `.github/workflows/` | CI Quality Pipeline (`ci.yml`). |
 | `Entrypoint` | `main.py` | Typer-powered CLI application orchestrating system commands and options. |
 | `Tooling` | `root` | Modern project definitions (`pyproject.toml`), environment template (`.env.example`), and quality gates (`Makefile`). |
 
-## 🔌 Core Modules (`src/core/`)
+## 🔌 Core Modules (`src/core/` & `src/infra/`)
 
-Each module inside `src/core/` adheres to standard type hinting, explicit domain exceptions, and modular design principles.
+Each module adheres to standard type hinting, explicit domain exceptions, and modular design principles.
 
 ### 📐 Domain Models (`src/core/models.py`)
 Defines strongly-typed, immutable dataclasses representing business concepts:
@@ -53,8 +54,13 @@ Implements the `AssetDataProvider` protocol to decouple market data sources:
 Decouples domain logic from database persistence using Python Protocols:
 - **`SqlitePortfolioRepository`**: Default SQLite implementation for loading and persisting portfolio asset configurations.
 - **`SqliteHistoryRepository`**: Default SQLite implementation for reading and recording timestamped valuation snapshots.
-- **`JsonPortfolioRepository` / `JsonHistoryRepository`**: Legacy JSON file implementations maintained for backwards compatibility and migration pipelines.
 - **`ETFCacheRepository`**: Interface for reading and persisting cached ETF composition and exposure details with TTL validation.
+
+### ☁️ Google Drive Cloud Backup & Sync (`src/infra/gdrive/`)
+Provides non-blocking remote synchronization and backup capabilities:
+- **`GDriveService`**: Handles downloading, uploading, and checking files against target Google Drive folders.
+- **Automated Database Backups**: Automatically backs up the relational database (`finances.db`) to Google Drive upon executing `save-snapshot`.
+- **Bidirectional Config Sync**: Downloads and uploads JSON configuration files (`portfolio.json`, `watchlist.json`) between local storage and Google Drive.
 
 ### ⚠️ Domain Exceptions (`src/core/exceptions.py`)
 Custom error hierarchy eliminating generic exception handling:
@@ -81,6 +87,12 @@ Computes overall portfolio health and asset metrics:
 The application exposes a modern CLI built with **Typer**:
 
 ```bash
+# Pull configuration files (portfolio.json, watchlist.json) from Google Drive to local data directory
+python main.py pull-config
+
+# Push local configuration files (portfolio.json, watchlist.json) to Google Drive
+python main.py push-config
+
 # Migrate legacy JSON data (portfolio.json / history.json) to SQLite database
 make migrate
 # or manually:
@@ -89,7 +101,7 @@ PYTHONPATH=. python3 src/migrate_json_to_sqlite.py
 # Display current portfolio valuation
 python main.py get-snapshot
 
-# Calculate valuation and persist snapshot to SQLite history
+# Calculate valuation, persist snapshot to SQLite history, and back up database to Google Drive
 python main.py save-snapshot
 
 # Analyze portfolio performance and ROI
