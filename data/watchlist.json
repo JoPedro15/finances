@@ -28,5 +28,10 @@
     "name": "MSCI World Momentum USD (Acc)",
     "isin": "IE00BL25JP72",
     "ticker": "XDEM.DE"
+  },
+  {
+    "name": "Xtrackers S&P 500 2x Leveraged Daily",
+    "isin": "LU0411078552",
+    "ticker": "DBPG.DE"
   }
 ]
