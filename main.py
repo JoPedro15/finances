@@ -5,17 +5,15 @@ CLI entry point for the finances application powered by Typer.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 
-from src.config import DEFAULT_DIP_CONFIG
 from src.core.analysis import (
     PortfolioExposure,
     analyze_overall_performance,
     calculate_portfolio_exposure,
 )
-from src.core.dip_detector import load_watchlist, scan_watchlist
 from src.core.models import (
     Asset,
     ETFDetails,
@@ -31,7 +29,8 @@ from src.utils.logger.logger import logger
 
 app: typer.Typer = typer.Typer(
     name="finances",
-    help="CLI tool for monitoring portfolio performance and stock price dips.",
+    help="CLI tool for monitoring portfolio performance and "
+    "investment decision ranking.",
     add_completion=False,
 )
 
@@ -66,7 +65,7 @@ def analyze_cmd() -> None:
 
 @app.command(name="pull-config")
 def pull_config_cmd() -> None:
-    """Pulls configuration files (portfolio.json, watchlist.json)
+    """Pulls configuration files (portfolio.json, portfolio_targets.json)
     from Google Drive to local data directory."""
     logger.section("Pulling Configuration from Google Drive")
     service: GoogleDriveService = GoogleDriveService()
@@ -74,11 +73,11 @@ def pull_config_cmd() -> None:
     portfolio_ok: bool = service.download_file(
         "portfolio.json", Path("data/portfolio.json")
     )
-    watchlist_ok: bool = service.download_file(
-        "watchlist.json", Path("data/watchlist.json")
+    targets_ok: bool = service.download_file(
+        "portfolio_targets.json", Path("data/portfolio_targets.json")
     )
 
-    if portfolio_ok and watchlist_ok:
+    if portfolio_ok and targets_ok:
         logger.success("Successfully pulled configuration files from Google Drive.")
     else:
         logger.warning(
@@ -88,89 +87,31 @@ def pull_config_cmd() -> None:
 
 @app.command(name="push-config")
 def push_config_cmd() -> None:
-    """Pushes local configuration files (portfolio.json, watchlist.json)
+    """Pushes local configuration files (portfolio.json, portfolio_targets.json)
     to Google Drive."""
     logger.section("Pushing Configuration to Google Drive")
     service: GoogleDriveService = GoogleDriveService()
 
     portfolio_file: Path = Path("data/portfolio.json")
-    watchlist_file: Path = Path("data/watchlist.json")
+    targets_file: Path = Path("data/portfolio_targets.json")
 
     portfolio_ok: bool = (
         bool(service.upload_file(portfolio_file, overwrite=True))
         if portfolio_file.exists()
         else False
     )
-    watchlist_ok: bool = (
-        bool(service.upload_file(watchlist_file, overwrite=True))
-        if watchlist_file.exists()
+    targets_ok: bool = (
+        bool(service.upload_file(targets_file, overwrite=True))
+        if targets_file.exists()
         else False
     )
 
-    if portfolio_ok and watchlist_ok:
+    if portfolio_ok and targets_ok:
         logger.success("Successfully pushed configuration files to Google Drive.")
     else:
         logger.warning(
             "One or more configuration files failed to upload to Google Drive."
         )
-
-
-@app.command(name="check-dips")
-def check_dips_cmd(
-    watchlist_path: Annotated[
-        Path,
-        typer.Option(
-            "--watchlist",
-            "-w",
-            help="Path to the watchlist JSON file.",
-        ),
-    ] = Path("data/watchlist.json"),
-    min_drop: Annotated[
-        float,
-        typer.Option(
-            "--min-drop",
-            help="Minimum dip percentage threshold.",
-        ),
-    ] = DEFAULT_DIP_CONFIG.min_drop_pct,
-    max_drop: Annotated[
-        float,
-        typer.Option(
-            "--max-drop",
-            help="Maximum dip percentage threshold.",
-        ),
-    ] = DEFAULT_DIP_CONFIG.max_drop_pct,
-    lookback_days: Annotated[
-        int,
-        typer.Option(
-            "--lookback",
-            "-l",
-            help="Number of days to search for historical peak.",
-        ),
-    ] = DEFAULT_DIP_CONFIG.lookback_days,
-) -> None:
-    """Scans watchlist assets for stock price dip opportunities."""
-    logger.section("Scanning Watchlist for Price Dips")
-    items: list[dict[str, str]] = load_watchlist(str(watchlist_path))
-
-    if not items:
-        logger.error(
-            f"No items found or failed to load watchlist from '{watchlist_path}'."
-        )
-        raise typer.Exit(code=1)
-
-    matches: list[dict[str, Any]] = scan_watchlist(
-        items=items,
-        min_drop_pct=min_drop,
-        max_drop_pct=max_drop,
-        lookback_days=lookback_days,
-    )
-
-    if matches:
-        logger.info(f"Found {len(matches)} dip opportunities:")
-        for match in matches:
-            logger.info(f" -> {match}")
-    else:
-        logger.info("No tickers met the dip criteria.")
 
 
 def _display_single_etf_details(isin: str, name: str, provider: ETFProvider) -> None:

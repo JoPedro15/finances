@@ -44,23 +44,23 @@ def sample_assets() -> list[Asset]:
 
 
 @patch("src.core.snapshot.get_exchange_rate")
-@patch("src.core.providers.get_quotation")
+@patch("src.core.providers.StockProvider.get_price")
 def test_get_snapshot_multi_currency(
-    mock_get_quote: MagicMock,
+    mock_get_price: MagicMock,
     mock_get_fx: MagicMock,
     sample_assets: list[Asset],
 ) -> None:
-    def quote_side_effect(ticker: str) -> Quotation | None:
-        if ticker == "AAPL":
+    def price_side_effect(asset: Asset) -> Quotation | None:
+        if asset.yahoo_ticker == "AAPL":
             return Quotation(price=180.0, currency="USD")
-        if ticker == "EUNL.DE":
+        if asset.yahoo_ticker == "EUNL.DE":
             return Quotation(price=85.0, currency="EUR")
         return None
 
-    mock_get_quote.side_effect = quote_side_effect
+    mock_get_price.side_effect = price_side_effect
     mock_get_fx.return_value = 0.90  # 1 USD = 0.90 EUR
 
-    mock_repo = MagicMock()
+    mock_repo: MagicMock = MagicMock()
     mock_repo.load_assets.return_value = sample_assets
 
     snapshot: PortfolioSnapshot | None = get_snapshot(portfolio_repo=mock_repo)
@@ -74,39 +74,37 @@ def test_get_snapshot_multi_currency(
 
 
 @patch("src.core.snapshot.get_exchange_rate")
-@patch("src.core.providers.get_quotation")
+@patch("src.core.providers.StockProvider.get_price")
 def test_get_snapshot_currency_caching(
-    mock_get_quote: MagicMock,
+    mock_get_price: MagicMock,
     mock_get_fx: MagicMock,
     sample_assets: list[Asset],
 ) -> None:
-    mock_get_quote.return_value = Quotation(price=100.0, currency="USD")
+    mock_get_price.return_value = Quotation(price=100.0, currency="USD")
     mock_get_fx.return_value = 0.85
 
-    mock_repo = MagicMock()
+    mock_repo: MagicMock = MagicMock()
     mock_repo.load_assets.return_value = sample_assets
 
-    snapshot = get_snapshot(portfolio_repo=mock_repo)
+    snapshot: PortfolioSnapshot | None = get_snapshot(portfolio_repo=mock_repo)
 
     assert snapshot is not None
-    # Deve chamar o FX rate apenas 1 vez para USD (cache local reutilizado)
     mock_get_fx.assert_called_once_with("USD", "EUR")
 
 
 @patch("src.core.snapshot.get_exchange_rate")
-@patch("src.core.providers.get_quotation")
+@patch("src.core.providers.StockProvider.get_price")
 def test_get_snapshot_missing_asset_quotation(
-    mock_get_quote: MagicMock,
+    mock_get_price: MagicMock,
     mock_get_fx: MagicMock,
     sample_assets: list[Asset],
 ) -> None:
-    # Simular falha na cotação do primeiro ativo
-    mock_get_quote.side_effect = [None, Quotation(price=80.0, currency="EUR")]
+    mock_get_price.side_effect = [None, Quotation(price=80.0, currency="EUR")]
 
-    mock_repo = MagicMock()
+    mock_repo: MagicMock = MagicMock()
     mock_repo.load_assets.return_value = sample_assets
 
-    snapshot = get_snapshot(portfolio_repo=mock_repo)
+    snapshot: PortfolioSnapshot | None = get_snapshot(portfolio_repo=mock_repo)
 
     assert snapshot is not None
     assert len(snapshot.assets_snapshot) == 1
@@ -114,19 +112,19 @@ def test_get_snapshot_missing_asset_quotation(
 
 
 @patch("src.core.snapshot.get_exchange_rate")
-@patch("src.core.providers.get_quotation")
+@patch("src.core.providers.StockProvider.get_price")
 def test_get_snapshot_exchange_rate_failure(
-    mock_get_quote: MagicMock,
+    mock_get_price: MagicMock,
     mock_get_fx: MagicMock,
     sample_assets: list[Asset],
 ) -> None:
-    mock_get_quote.return_value = Quotation(price=100.0, currency="USD")
-    mock_get_fx.return_value = None  # Falha no câmbio
+    mock_get_price.return_value = Quotation(price=100.0, currency="USD")
+    mock_get_fx.return_value = None
 
-    mock_repo = MagicMock()
+    mock_repo: MagicMock = MagicMock()
     mock_repo.load_assets.return_value = sample_assets
 
-    snapshot = get_snapshot(portfolio_repo=mock_repo)
+    snapshot: PortfolioSnapshot | None = get_snapshot(portfolio_repo=mock_repo)
 
     assert snapshot is not None
     assert len(snapshot.assets_snapshot) == 0

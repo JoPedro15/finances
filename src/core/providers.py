@@ -1,14 +1,13 @@
-"""
-Data provider abstractions and implementations for stocks and ETFs.
-"""
+"""Data provider abstractions and implementations for stocks and ETFs."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Protocol
 
 import yfinance as yf  # type: ignore[import-untyped]
 
-from src.core.get_quotation import get_quotation
+from src.core.currency_exchange import get_exchange_rate
 from src.core.models import Asset, ETFDetails, Quotation, StockDetails
 from src.core.repositories import ETFCacheRepository, JsonETFCacheRepository
 from src.infra.justetf.client import JustETFClient
@@ -31,8 +30,46 @@ class StockProvider:
     """Data provider for standard equity/stock assets using yfinance."""
 
     def get_price(self, asset: Asset) -> Quotation | None:
-        """Retrieves real-time quotation for a single stock using yfinance."""
-        return get_quotation(asset.yahoo_ticker)
+        """Retrieves real-time quotation for a stock, converting to EUR if necessary."""
+        if not asset.yahoo_ticker:
+            logger.error(f"No Yahoo ticker provided for stock asset '{asset.name}'.")
+            return None
+
+        try:
+            ticker: yf.Ticker = yf.Ticker(asset.yahoo_ticker)
+            info: dict[str, Any] = ticker.info
+
+            price: float | None = (
+                info.get("regularMarketPrice")
+                or info.get("currentPrice")
+                or info.get("previousClose")
+            )
+
+            if not price:
+                hist: Any = ticker.history(period="1d")
+                if not hist.empty:
+                    price = float(hist["Close"].iloc[-1])
+
+            if price:
+                currency: str = str(info.get("currency", "EUR")).upper()
+                if currency != "EUR":
+                    rate: float | None = get_exchange_rate(currency, "EUR")
+                    if rate:
+                        price = price * rate
+                        currency = "EUR"
+
+                return Quotation(
+                    price=price,
+                    currency=currency,
+                    timestamp=datetime.now(),
+                )
+
+            logger.error(f"Could not retrieve price for ticker '{asset.yahoo_ticker}'.")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching quotation for '{asset.yahoo_ticker}': {e}")
+            return None
 
     def get_details(self, asset: Asset) -> StockDetails | None:
         """Retrieves fundamental metrics for a stock via yfinance."""
@@ -63,8 +100,6 @@ class StockProvider:
                 val: Any = info.get(key)
                 return str(val) if val is not None else None
 
-            # Calculate dividend yield percentage deterministically using
-            # nominal dividend rate and current price
             dividend_rate: float | None = _parse_float("dividendRate") or _parse_float(
                 "trailingAnnualDividendRate"
             )
@@ -112,13 +147,15 @@ class ETFProvider:
         self,
         justetf_client: JustETFClient | None = None,
         cache_repo: ETFCacheRepository | None = None,
+        stock_provider: StockProvider | None = None,
     ) -> None:
         self.justetf_client: JustETFClient = justetf_client or JustETFClient()
         self.cache_repo: ETFCacheRepository = cache_repo or JsonETFCacheRepository()
+        self._stock_provider: StockProvider = stock_provider or StockProvider()
 
     def get_price(self, asset: Asset) -> Quotation | None:
         """Retrieves real-time ETF market quotation via yfinance."""
-        return get_quotation(asset.yahoo_ticker)
+        return self._stock_provider.get_price(asset)
 
     def get_details(self, asset: Asset) -> ETFDetails | None:
         """Retrieves ETF composition, checking local cache before scraping."""
