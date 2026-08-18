@@ -1,6 +1,5 @@
-"""
-This file contains functions for analyzing portfolio performance.
-"""
+"""This file contains functions for analyzing portfolio
+performance and asset exposures."""
 
 from __future__ import annotations
 
@@ -85,11 +84,20 @@ def calculate_portfolio_exposure(
     sector_pcts: dict[str, float] = {}
     country_pcts: dict[str, float] = {}
 
-    if total_etf_val > 0.0:
+    total_analyzed_sector_val: float = sum(sector_weighted_val.values())
+    total_analyzed_country_val: float = sum(country_weighted_val.values())
+
+    if total_analyzed_sector_val > 0.0:
         for sector_name, val in sector_weighted_val.items():
-            sector_pcts[sector_name] = round((val / total_etf_val) * 100.0, 2)
+            sector_pcts[sector_name] = round(
+                (val / total_analyzed_sector_val) * 100.0, 2
+            )
+
+    if total_analyzed_country_val > 0.0:
         for country_name, val in country_weighted_val.items():
-            country_pcts[country_name] = round((val / total_etf_val) * 100.0, 2)
+            country_pcts[country_name] = round(
+                (val / total_analyzed_country_val) * 100.0, 2
+            )
 
     return PortfolioExposure(
         sector_exposure=dict(
