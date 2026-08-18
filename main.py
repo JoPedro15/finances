@@ -272,6 +272,19 @@ def etf_details_cmd(
         _display_single_etf_details(asset.isin, asset.name, provider)
 
 
+def _format_market_cap(val: float | None) -> str:
+    """Formats market capitalization numeric values with dynamic scale suffixes (T, B, M)."""
+    if val is None:
+        return "N/A"
+    if val >= 1e12:
+        return f"{val / 1e12:.2f}T"
+    if val >= 1e9:
+        return f"{val / 1e9:.2f}B"
+    if val >= 1e6:
+        return f"{val / 1e6:.2f}M"
+    return f"{val:.2f}"
+
+
 def _display_single_stock_details(
     identifier: str, name: str, provider: StockProvider, asset: Asset | None = None
 ) -> None:
@@ -297,9 +310,7 @@ def _display_single_stock_details(
         logger.error(f"Failed to fetch details for stock '{identifier}'.")
         return
 
-    mcap_str: str = (
-        f"{details.market_cap / 1e9:.2f}B" if details.market_cap is not None else "N/A"
-    )
+    mcap_str: str = _format_market_cap(details.market_cap)
     pe_str: str = f"{details.pe_ratio:.2f}" if details.pe_ratio is not None else "N/A"
     fwd_pe_str: str = (
         f"{details.forward_pe:.2f}" if details.forward_pe is not None else "N/A"
