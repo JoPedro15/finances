@@ -1,8 +1,10 @@
-"""Portfolio decision engine orchestrating asset scoring strategies."""
+"""Portfolio decision engine orchestrating asset scoring strategies using Pandas."""
 
 from __future__ import annotations
 
 from typing import Any
+
+import pandas as pd
 
 from src.core.decision.base import AssetScore, AssetType, ScoringStrategy
 from src.core.decision.etf_strategy import EtfScoringStrategy
@@ -52,7 +54,7 @@ class PortfolioDecisionEngine:
             )
 
     def rank_assets(self, assets_data: list[dict[str, Any]]) -> list[AssetScore]:
-        """Calculates scores for all assets and ranks them in descending order.
+        """Calculates scores for all assets using DataFrame processing and ranks them.
 
         Args:
             assets_data: List of enriched asset payload dictionaries.
@@ -64,12 +66,21 @@ class PortfolioDecisionEngine:
             ValueError: If an asset type is invalid or unsupported.
             KeyError: If mandatory fields are missing in an asset dict.
         """
-        scores: list[AssetScore] = []
+        if not assets_data:
+            return []
 
+        # Validate all assets first
         for asset in assets_data:
             self._validate_required_keys(asset)
 
-            raw_type: Any = asset.get("asset_type")
+        # Convert input list to a pandas DataFrame for batch processing
+        df: pd.DataFrame = pd.DataFrame(assets_data)
+        scores: list[AssetScore] = []
+
+        for _, row in df.iterrows():
+            raw_type: Any = row.get("asset_type")
+            symbol_str: str = str(row["symbol"])
+
             try:
                 asset_type: AssetType = (
                     raw_type
@@ -77,10 +88,9 @@ class PortfolioDecisionEngine:
                     else AssetType(str(raw_type))
                 )
             except ValueError as err:
-                symbol: str = str(asset["symbol"])
                 raise ValueError(
                     f"Unsupported or missing asset_type '{raw_type}' "
-                    f"for asset '{symbol}'"
+                    f"for asset '{symbol_str}'"
                 ) from err
 
             if asset_type not in self._strategies:
@@ -91,17 +101,43 @@ class PortfolioDecisionEngine:
             strategy: ScoringStrategy = self._strategies[asset_type]
 
             score: AssetScore = strategy.calculate_score(
-                symbol=str(asset["symbol"]),
-                current_price=float(asset["current_price"]),
-                peak_price=float(asset["peak_price"]),
-                target_allocation_pct=float(asset["target_allocation_pct"]),
-                current_allocation_pct=float(asset["current_allocation_pct"]),
-                ter=asset.get("ter"),
-                trailing_pe=asset.get("trailing_pe"),
-                forward_pe=asset.get("forward_pe"),
-                low_52w=asset.get("low_52w"),
-                high_52w=asset.get("high_52w"),
+                symbol=symbol_str,
+                current_price=float(row["current_price"]),
+                peak_price=float(row["peak_price"]),
+                target_allocation_pct=float(row["target_allocation_pct"]),
+                current_allocation_pct=float(row["current_allocation_pct"]),
+                ter=row.get("ter") if pd.notna(row.get("ter")) else None,
+                trailing_pe=(
+                    row.get("trailing_pe") if pd.notna(row.get("trailing_pe")) else None
+                ),
+                forward_pe=(
+                    row.get("forward_pe") if pd.notna(row.get("forward_pe")) else None
+                ),
+                low_52w=row.get("low_52w") if pd.notna(row.get("low_52w")) else None,
+                high_52w=row.get("high_52w") if pd.notna(row.get("high_52w")) else None,
             )
             scores.append(score)
 
-        return sorted(scores, key=lambda x: x.total_score, reverse=True)
+        if not scores:
+            return []
+
+        # Convert scores back to DataFrame for vectorised sorting
+        scores_df: pd.DataFrame = pd.DataFrame(
+            [
+                {
+                    "symbol": s.symbol,
+                    "asset_type": s.asset_type,
+                    "dip_score": s.dip_score,
+                    "cost_score": s.cost_score,
+                    "allocation_score": s.allocation_score,
+                    "total_score": s.total_score,
+                    "_obj": s,
+                }
+                for s in scores
+            ]
+        )
+
+        sorted_df: pd.DataFrame = scores_df.sort_values(
+            by="total_score", ascending=False
+        )
+        return list(sorted_df["_obj"])
