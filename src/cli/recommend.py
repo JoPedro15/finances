@@ -31,9 +31,9 @@ from src.core.models import (
     StockDetails,
     UrgencyLevel,
 )
-from src.core.providers import ETFProvider, StockProvider
 from src.infra.ai.client import GeminiClient
 from src.infra.notifications.discord import send_discord_notification
+from src.utils.graphics.allocation import generate_allocation_chart
 from src.utils.logger.logger import logger
 
 DEFAULT_OUTPUT_CSV: Path = Path("output") / "recommend_output.csv"
