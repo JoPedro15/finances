@@ -1,0 +1,447 @@
+{
+  "LU0411078552": {
+    "cached_at": "2026-08-18T19:15:22.017327+00:00",
+    "details": {
+      "holdings": [],
+      "sector_breakdown": [],
+      "country_breakdown": [],
+      "ter_pct": 0.6
+    }
+  },
+  "IE00B5BMR087": {
+    "cached_at": "2026-08-18T19:29:50.752724+00:00",
+    "details": {
+      "holdings": [
+        {
+          "name": "NVIDIA Corp.",
+          "isin": "US67066G1040",
+          "ticker": null,
+          "weight_pct": 7.51
+        },
+        {
+          "name": "Apple",
+          "isin": "US0378331005",
+          "ticker": null,
+          "weight_pct": 6.58
+        },
+        {
+          "name": "Microsoft Corp",
+          "isin": "US5949181045",
+          "ticker": null,
+          "weight_pct": 4.29
+        },
+        {
+          "name": "Amazon.com, Inc.",
+          "isin": "US0231351067",
+          "ticker": null,
+          "weight_pct": 3.61
+        },
+        {
+          "name": "Alphabet, Inc. A",
+          "isin": "US02079K3059",
+          "ticker": null,
+          "weight_pct": 3.25
+        },
+        {
+          "name": "Broadcom Inc.",
+          "isin": "US11135F1012",
+          "ticker": null,
+          "weight_pct": 2.77
+        },
+        {
+          "name": "Alphabet, Inc. C",
+          "isin": "US02079K1079",
+          "ticker": null,
+          "weight_pct": 2.59
+        },
+        {
+          "name": "Micron Technology",
+          "isin": "US5951121038",
+          "ticker": null,
+          "weight_pct": 2.02
+        },
+        {
+          "name": "Meta Platforms",
+          "isin": "US30303M1027",
+          "ticker": null,
+          "weight_pct": 1.92
+        },
+        {
+          "name": "Tesla",
+          "isin": "US88160R1014",
+          "ticker": null,
+          "weight_pct": 1.83
+        }
+      ],
+      "sector_breakdown": [
+        {
+          "sector_name": "Technology",
+          "weight_pct": 45.78
+        },
+        {
+          "sector_name": "Finance",
+          "weight_pct": 13.15
+        },
+        {
+          "sector_name": "Consumer Non-Cyclicals",
+          "weight_pct": 8.77
+        },
+        {
+          "sector_name": "Healthcare",
+          "weight_pct": 8.67
+        },
+        {
+          "sector_name": "Other",
+          "weight_pct": 23.63
+        }
+      ],
+      "country_breakdown": [
+        {
+          "country_name": "United States",
+          "weight_pct": 97.46
+        },
+        {
+          "country_name": "Ireland",
+          "weight_pct": 1.13
+        },
+        {
+          "country_name": "Other",
+          "weight_pct": 1.41
+        }
+      ],
+      "ter_pct": 0.07
+    }
+  },
+  "IE00B4L5Y983": {
+    "cached_at": "2026-08-18T19:29:50.957045+00:00",
+    "details": {
+      "holdings": [
+        {
+          "name": "NVIDIA Corp.",
+          "isin": "US67066G1040",
+          "ticker": null,
+          "weight_pct": 5.17
+        },
+        {
+          "name": "Apple",
+          "isin": "US0378331005",
+          "ticker": null,
+          "weight_pct": 4.76
+        },
+        {
+          "name": "Microsoft Corp",
+          "isin": "US5949181045",
+          "ticker": null,
+          "weight_pct": 2.95
+        },
+        {
+          "name": "Amazon.com, Inc.",
+          "isin": "US0231351067",
+          "ticker": null,
+          "weight_pct": 2.58
+        },
+        {
+          "name": "Alphabet, Inc. A",
+          "isin": "US02079K3059",
+          "ticker": null,
+          "weight_pct": 2.33
+        },
+        {
+          "name": "Broadcom Inc.",
+          "isin": "US11135F1012",
+          "ticker": null,
+          "weight_pct": 1.9
+        },
+        {
+          "name": "Alphabet, Inc. C",
+          "isin": "US02079K1079",
+          "ticker": null,
+          "weight_pct": 1.83
+        },
+        {
+          "name": "Micron Technology",
+          "isin": "US5951121038",
+          "ticker": null,
+          "weight_pct": 1.46
+        },
+        {
+          "name": "Meta Platforms",
+          "isin": "US30303M1027",
+          "ticker": null,
+          "weight_pct": 1.38
+        },
+        {
+          "name": "Tesla",
+          "isin": "US88160R1014",
+          "ticker": null,
+          "weight_pct": 1.33
+        }
+      ],
+      "sector_breakdown": [
+        {
+          "sector_name": "Technology",
+          "weight_pct": 36.18
+        },
+        {
+          "sector_name": "Finance",
+          "weight_pct": 17.41
+        },
+        {
+          "sector_name": "Industrials",
+          "weight_pct": 10.03
+        },
+        {
+          "sector_name": "Healthcare",
+          "weight_pct": 8.81
+        },
+        {
+          "sector_name": "Other",
+          "weight_pct": 27.57
+        }
+      ],
+      "country_breakdown": [
+        {
+          "country_name": "United States",
+          "weight_pct": 70.32
+        },
+        {
+          "country_name": "Japan",
+          "weight_pct": 5.71
+        },
+        {
+          "country_name": "United Kingdom",
+          "weight_pct": 3.59
+        },
+        {
+          "country_name": "Canada",
+          "weight_pct": 3.3
+        },
+        {
+          "country_name": "Other",
+          "weight_pct": 17.08
+        }
+      ],
+      "ter_pct": 0.2
+    }
+  },
+  "IE00BL25JP72": {
+    "cached_at": "2026-08-18T19:29:51.534348+00:00",
+    "details": {
+      "holdings": [
+        {
+          "name": "Micron Technology",
+          "isin": "US5951121038",
+          "ticker": null,
+          "weight_pct": 7.51
+        },
+        {
+          "name": "AMD",
+          "isin": "US0079031078",
+          "ticker": null,
+          "weight_pct": 3.13
+        },
+        {
+          "name": "Intel Corp.",
+          "isin": "US4581401001",
+          "ticker": null,
+          "weight_pct": 2.99
+        },
+        {
+          "name": "ASML Holding NV",
+          "isin": "NL0010273215",
+          "ticker": null,
+          "weight_pct": 2.7
+        },
+        {
+          "name": "Lam Research",
+          "isin": "US5128073062",
+          "ticker": null,
+          "weight_pct": 2.59
+        },
+        {
+          "name": "Caterpillar Inc /US",
+          "isin": "US1491231015",
+          "ticker": null,
+          "weight_pct": 2.56
+        },
+        {
+          "name": "Johnson & Johnson",
+          "isin": "US4781601046",
+          "ticker": null,
+          "weight_pct": 2.45
+        },
+        {
+          "name": "Exxon Mobil Corp.",
+          "isin": "US30231G1022",
+          "ticker": null,
+          "weight_pct": 2.32
+        },
+        {
+          "name": "Applied Materials, Inc.",
+          "isin": "US0382221051",
+          "ticker": null,
+          "weight_pct": 2.24
+        },
+        {
+          "name": "Alphabet, Inc. A",
+          "isin": "US02079K3059",
+          "ticker": null,
+          "weight_pct": 2.24
+        }
+      ],
+      "sector_breakdown": [
+        {
+          "sector_name": "Technology",
+          "weight_pct": 41.28
+        },
+        {
+          "sector_name": "Finance",
+          "weight_pct": 13.76
+        },
+        {
+          "sector_name": "Industrials",
+          "weight_pct": 13.43
+        },
+        {
+          "sector_name": "Energy",
+          "weight_pct": 9.47
+        },
+        {
+          "sector_name": "Other",
+          "weight_pct": 22.06
+        }
+      ],
+      "country_breakdown": [
+        {
+          "country_name": "United States",
+          "weight_pct": 58.06
+        },
+        {
+          "country_name": "Japan",
+          "weight_pct": 11.55
+        },
+        {
+          "country_name": "Canada",
+          "weight_pct": 6.25
+        },
+        {
+          "country_name": "United Kingdom",
+          "weight_pct": 4.45
+        },
+        {
+          "country_name": "Other",
+          "weight_pct": 19.69
+        }
+      ],
+      "ter_pct": 0.25
+    }
+  },
+  "IE00BG0J4C88": {
+    "cached_at": "2026-08-18T20:17:57.852957+00:00",
+    "details": {
+      "holdings": [
+        {
+          "name": "Palo Alto Networks",
+          "isin": "US6974351057",
+          "ticker": null,
+          "weight_pct": 3.0
+        },
+        {
+          "name": "CrowdStrike Holdings",
+          "isin": "US22788C1053",
+          "ticker": null,
+          "weight_pct": 2.71
+        },
+        {
+          "name": "Datadog",
+          "isin": "US23804L1035",
+          "ticker": null,
+          "weight_pct": 2.62
+        },
+        {
+          "name": "Okta",
+          "isin": "US6792951054",
+          "ticker": null,
+          "weight_pct": 2.61
+        },
+        {
+          "name": "Zscaler",
+          "isin": "US98980G1022",
+          "ticker": null,
+          "weight_pct": 2.57
+        },
+        {
+          "name": "Rubrik",
+          "isin": "US7811541090",
+          "ticker": null,
+          "weight_pct": 2.56
+        },
+        {
+          "name": "Ciena",
+          "isin": "US1717793095",
+          "ticker": null,
+          "weight_pct": 2.56
+        },
+        {
+          "name": "Arista Networks",
+          "isin": "US0404132054",
+          "ticker": null,
+          "weight_pct": 2.56
+        },
+        {
+          "name": "Fortinet Inc",
+          "isin": "US34959E1091",
+          "ticker": null,
+          "weight_pct": 2.54
+        },
+        {
+          "name": "Dynatrace Inc",
+          "isin": "US2681501092",
+          "ticker": null,
+          "weight_pct": 2.47
+        }
+      ],
+      "sector_breakdown": [
+        {
+          "sector_name": "Technology",
+          "weight_pct": 87.58
+        },
+        {
+          "sector_name": "Business Services",
+          "weight_pct": 6.86
+        },
+        {
+          "sector_name": "Finance",
+          "weight_pct": 5.34
+        },
+        {
+          "sector_name": "Other",
+          "weight_pct": 0.22
+        }
+      ],
+      "country_breakdown": [
+        {
+          "country_name": "United States",
+          "weight_pct": 70.98
+        },
+        {
+          "country_name": "Japan",
+          "weight_pct": 11.17
+        },
+        {
+          "country_name": "Taiwan",
+          "weight_pct": 3.63
+        },
+        {
+          "country_name": "Israel",
+          "weight_pct": 3.57
+        },
+        {
+          "country_name": "Other",
+          "weight_pct": 10.65
+        }
+      ],
+      "ter_pct": 0.4
+    }
+  }
+}
