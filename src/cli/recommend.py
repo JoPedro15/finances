@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from src.utils.graphics.allocation import generate_allocation_chart
 
 from src.config import DATA_DIR
 from src.core.decision.base import AssetScore
@@ -260,7 +261,7 @@ def export_to_csv(
                     "cost_score": score.cost_score,
                     "gap_score": score.allocation_score,
                     "quant_score": score.total_score,
-                    "ai_action": rec.action.value if rec and rec.action else "N/A",
+                    "ai_action": (rec.action.value if rec and rec.action else "N/A"),
                     "ai_urgency": (
                         rec.urgency_level.value if rec and rec.urgency_level else "N/A"
                     ),
@@ -272,7 +273,8 @@ def export_to_csv(
 
         logger.success(f"Successfully exported decision matrix to '{target_path}'.")
         console.print(
-            f"[bold green]✓ Decision matrix exported to CSV:[/bold green] {target_path}"
+            f"[bold green]✓ Decision matrix exported to CSV:[/bold green] "
+            f"{target_path}"
         )
     except Exception as err:
         logger.error(f"Failed to export CSV to '{target_path}': {err}")
@@ -379,7 +381,6 @@ def _display_rebalance_results(
     console.print(table)
     console.print()
 
-    # Renders AI Insight Cards for actionable positions (BUY or SELL)
     score_map: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
     if has_ai and recommendations_map:
         active_recs: list[tuple[str, RebalanceRecommendation]] = [
@@ -573,7 +574,26 @@ def recommend_rebalance(
 
     # Dispatches Discord notification if explicitly requested via CLI flag
     if notify:
-        send_discord_notification(ranked_scores, recommendations_map, total_val)
+        symbols_list: list[str] = [str(a["symbol"]) for a in enriched_assets]
+        current_alloc_list: list[float] = [
+            float(a["current_allocation_pct"]) for a in enriched_assets
+        ]
+        target_alloc_list: list[float] = [
+            float(a["target_allocation_pct"]) for a in enriched_assets
+        ]
+
+        chart_path: Path | None = generate_allocation_chart(
+            symbols=symbols_list,
+            current_allocations=current_alloc_list,
+            target_allocations=target_alloc_list,
+        )
+
+        send_discord_notification(
+            ranked_assets=ranked_scores,
+            recommendations_map=recommendations_map,
+            total_portfolio_value=total_val,
+            image_path=chart_path,
+        )
 
 
 if __name__ == "__main__":

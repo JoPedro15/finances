@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -24,9 +26,11 @@ def send_discord_notification(
     ranked_assets: list[Any],
     recommendations_map: dict[str, RebalanceRecommendation],
     total_portfolio_value: float,
+    image_path: Path | None = None,
 ) -> bool:
-    """Sends formatted rebalance recommendations
-    and AI insights to a Discord webhook."""
+    """Sends formatted rebalance recommendations, AI insights,
+    and optional allocation charts to a Discord webhook.
+    """
     webhook_url: str = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
     if not webhook_url:
         logger.warning("DISCORD_WEBHOOK_URL is not set. Skipping Discord notification.")
@@ -105,9 +109,18 @@ def send_discord_notification(
     }
 
     try:
-        response: requests.Response = requests.post(
-            webhook_url, json=payload, timeout=10
-        )
+        # If an image path is provided and exists, attach it via multipart/form-data
+        if image_path and image_path.exists():
+            payload["embeds"][0]["image"] = {"url": f"attachment://{image_path.name}"}
+            with open(image_path, "rb") as f:
+                files: dict[str, Any] = {"file0": (image_path.name, f, "image/png")}
+                data: dict[str, str] = {"payload_json": json.dumps(payload)}
+                response: requests.Response = requests.post(
+                    webhook_url, data=data, files=files, timeout=15
+                )
+        else:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+
         response.raise_for_status()
         logger.success("Successfully dispatched notification to Discord.")
         return True
