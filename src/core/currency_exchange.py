@@ -44,7 +44,8 @@ def get_usd_to_eur_rate() -> float | None:
     return get_exchange_rate("USD", "EUR")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """CLI execution entry point for currency exchange lookup."""
     if len(sys.argv) < 3:
         logger.error("Currencies not provided.")
         logger.info(
@@ -56,3 +57,7 @@ if __name__ == "__main__":
     to_c: str = sys.argv[2].upper()
     rate_val: float | None = get_exchange_rate(from_c, to_c)
     logger.info(f"Exchange rate {from_c}/{to_c}: {rate_val}")
+
+
+if __name__ == "__main__":
+    main()
