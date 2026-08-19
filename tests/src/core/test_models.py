@@ -1,9 +1,10 @@
-"""
-Unit tests for domain models in src/core/models.py.
+"""Unit tests for domain models in src/core/models.py covering serialisation,
+subscript access, default values, immutability, and edge cases.
 """
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from datetime import datetime
 from typing import Any
 
@@ -47,6 +48,14 @@ def test_quotation_default_timestamp() -> None:
     assert before <= q.timestamp <= after
 
 
+def test_quotation_subscript_access() -> None:
+    """Validates Quotation.__getitem__() subscript field retrieval."""
+    q: Quotation = Quotation(price=250.0, currency="EUR")
+
+    assert q["price"] == 250.0
+    assert q["currency"] == "EUR"
+
+
 # ==============================================================================
 # Asset
 # ==============================================================================
@@ -60,6 +69,7 @@ def test_asset_from_dict_standard_key() -> None:
         "yahoo_ticker": "AAPL",
         "quantity": 10.0,
         "average_buy_price": 150.0,
+        "type": "stock",
     }
     asset: Asset = Asset.from_dict(data)
 
@@ -68,6 +78,7 @@ def test_asset_from_dict_standard_key() -> None:
     assert asset.yahoo_ticker == "AAPL"
     assert asset.quantity == 10.0
     assert asset.average_buy_price == 150.0
+    assert asset.asset_type == "stock"
 
 
 def test_asset_from_dict_legacy_key() -> None:
@@ -78,17 +89,16 @@ def test_asset_from_dict_legacy_key() -> None:
         "yahoo_ticker": "NVDA",
         "quantity": 2.0,
         "averageBuyPrice": 117.06,
+        "type": "etf",
     }
     asset: Asset = Asset.from_dict(data)
 
     assert asset.average_buy_price == 117.06
+    assert asset.asset_type == "etf"
 
 
 def test_asset_from_dict_legacy_key_takes_precedence() -> None:
-    """Validates averageBuyPrice takes precedence when both keys
-
-    are present (legacy behaviour).
-    """
+    """Validates averageBuyPrice takes precedence when both keys are present."""
     data: dict[str, Any] = {
         "name": "Test",
         "isin": "XX0000000000",
@@ -100,6 +110,18 @@ def test_asset_from_dict_legacy_key_takes_precedence() -> None:
     asset: Asset = Asset.from_dict(data)
 
     assert asset.average_buy_price == 100.0
+
+
+def test_asset_from_dict_empty_defaults() -> None:
+    """Validates Asset.from_dict() default values when empty dictionary is provided."""
+    asset: Asset = Asset.from_dict({})
+
+    assert asset.name == ""
+    assert asset.isin == ""
+    assert asset.yahoo_ticker == ""
+    assert asset.quantity == 0.0
+    assert asset.average_buy_price == 0.0
+    assert asset.asset_type == "stock"
 
 
 def test_asset_acquisition_cost() -> None:
@@ -128,6 +150,35 @@ def test_asset_acquisition_cost_zero_quantity() -> None:
     assert asset.acquisition_cost == 0.0
 
 
+def test_asset_subscript_access() -> None:
+    """Validates Asset.__getitem__() subscript field retrieval."""
+    asset: Asset = Asset(
+        name="Microsoft",
+        isin="US5949181045",
+        yahoo_ticker="MSFT",
+        quantity=5.0,
+        average_buy_price=200.0,
+    )
+
+    assert asset["name"] == "Microsoft"
+    assert asset["isin"] == "US5949181045"
+    assert asset["quantity"] == 5.0
+
+
+def test_asset_immutability() -> None:
+    """Validates Asset is immutable (frozen dataclass)."""
+    asset: Asset = Asset(
+        name="Apple",
+        isin="US0378331005",
+        yahoo_ticker="AAPL",
+        quantity=10.0,
+        average_buy_price=150.0,
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        asset.quantity = 99.0  # type: ignore[misc]
+
+
 # ==============================================================================
 # AssetSnapshot
 # ==============================================================================
@@ -151,6 +202,33 @@ def test_asset_snapshot_round_trip() -> None:
     assert result.native_price == snapshot.native_price
     assert result.native_currency == snapshot.native_currency
     assert result.value_eur == snapshot.value_eur
+
+
+def test_asset_snapshot_from_dict_defaults() -> None:
+    """Validates AssetSnapshot.from_dict() defaults for missing values."""
+    snapshot: AssetSnapshot = AssetSnapshot.from_dict({})
+
+    assert snapshot.name == ""
+    assert snapshot.isin == ""
+    assert snapshot.yahoo_ticker == ""
+    assert snapshot.native_price == 0.0
+    assert snapshot.native_currency == "EUR"
+    assert snapshot.value_eur == 0.0
+
+
+def test_asset_snapshot_subscript_access() -> None:
+    """Validates AssetSnapshot.__getitem__() subscript field retrieval."""
+    snapshot: AssetSnapshot = AssetSnapshot(
+        name="Apple",
+        isin="US0378331005",
+        yahoo_ticker="AAPL",
+        native_price=180.0,
+        native_currency="USD",
+        value_eur=162.0,
+    )
+
+    assert snapshot["name"] == "Apple"
+    assert snapshot["native_price"] == 180.0
 
 
 # ==============================================================================
@@ -196,6 +274,18 @@ def test_portfolio_snapshot_empty_assets() -> None:
     assert result.total_value_eur == 0.0
 
 
+def test_portfolio_snapshot_subscript_access() -> None:
+    """Validates PortfolioSnapshot.__getitem__() subscript field retrieval."""
+    snapshot: PortfolioSnapshot = PortfolioSnapshot(
+        timestamp="2026-08-17T10:00:00",
+        total_value_eur=500.0,
+        assets_snapshot=[],
+    )
+
+    assert snapshot["timestamp"] == "2026-08-17T10:00:00"
+    assert snapshot["total_value_eur"] == 500.0
+
+
 # ==============================================================================
 # Holding
 # ==============================================================================
@@ -226,28 +316,34 @@ def test_holding_round_trip_without_ticker() -> None:
     assert result.ticker is None
 
 
+def test_holding_subscript_access() -> None:
+    """Validates Holding.__getitem__() subscript field retrieval."""
+    holding: Holding = Holding(
+        name="Microsoft", isin="US5949181045", ticker="MSFT", weight_pct=8.0
+    )
+
+    assert holding["ticker"] == "MSFT"
+    assert holding["weight_pct"] == 8.0
+
+
 # ==============================================================================
-# SectorExposure
+# SectorExposure & CountryExposure
 # ==============================================================================
 
 
-def test_sector_exposure_round_trip() -> None:
-    """Validates SectorExposure serialises and deserialises correctly."""
+def test_sector_exposure_round_trip_and_subscript() -> None:
+    """Validates SectorExposure round-trip and subscript retrieval."""
     sector: SectorExposure = SectorExposure(sector_name="Technology", weight_pct=24.5)
 
     result: SectorExposure = SectorExposure.from_dict(sector.to_dict())
 
     assert result.sector_name == "Technology"
     assert result.weight_pct == 24.5
+    assert sector["sector_name"] == "Technology"
 
 
-# ==============================================================================
-# CountryExposure
-# ==============================================================================
-
-
-def test_country_exposure_round_trip() -> None:
-    """Validates CountryExposure serialises and deserialises correctly."""
+def test_country_exposure_round_trip_and_subscript() -> None:
+    """Validates CountryExposure round-trip and subscript retrieval."""
     country: CountryExposure = CountryExposure(
         country_name="United States", weight_pct=70.2
     )
@@ -256,6 +352,7 @@ def test_country_exposure_round_trip() -> None:
 
     assert result.country_name == "United States"
     assert result.weight_pct == 70.2
+    assert country["country_name"] == "United States"
 
 
 # ==============================================================================
@@ -287,34 +384,26 @@ def test_etf_details_round_trip() -> None:
     assert result.country_breakdown[0].country_name == "United States"
 
 
-def test_etf_details_none_ter() -> None:
-    """Validates ETFDetails handles None TER correctly in round-trip."""
+def test_etf_details_none_ter_and_string_coercion() -> None:
+    """Validates ETFDetails handles None TER and parses string floats."""
+    details_none: ETFDetails = ETFDetails.from_dict({})
+    assert details_none.ter_pct is None
+
+    details_str: ETFDetails = ETFDetails.from_dict({"ter_pct": "0.15"})
+    assert details_str.ter_pct == 0.15
+
+
+def test_etf_details_subscript_access() -> None:
+    """Validates ETFDetails.__getitem__() subscript field retrieval."""
     details: ETFDetails = ETFDetails(
         holdings=[],
         sector_breakdown=[],
         country_breakdown=[],
-        ter_pct=None,
+        ter_pct=0.07,
     )
 
-    result: ETFDetails = ETFDetails.from_dict(details.to_dict())
-
-    assert result.ter_pct is None
-
-
-def test_asset_immutability() -> None:
-    """Validates Asset is immutable (frozen dataclass)."""
-    from dataclasses import FrozenInstanceError
-
-    asset: Asset = Asset(
-        name="Apple",
-        isin="US0378331005",
-        yahoo_ticker="AAPL",
-        quantity=10.0,
-        average_buy_price=150.0,
-    )
-
-    with pytest.raises(FrozenInstanceError):
-        asset.quantity = 99.0
+    assert details["ter_pct"] == 0.07
+    assert details["holdings"] == []
 
 
 # ==============================================================================
@@ -361,3 +450,15 @@ def test_stock_details_none_values() -> None:
     assert result.fifty_two_week_low is None
     assert result.sector is None
     assert result.industry is None
+
+
+def test_stock_details_subscript_access() -> None:
+    """Validates StockDetails.__getitem__() subscript field retrieval."""
+    details: StockDetails = StockDetails(
+        pe_ratio=15.0,
+        sector="Energy",
+    )
+
+    assert details["pe_ratio"] == 15.0
+    assert details["sector"] == "Energy"
+    assert details["market_cap"] is None
