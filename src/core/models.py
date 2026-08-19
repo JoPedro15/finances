@@ -6,7 +6,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,3 +267,33 @@ class StockDetails:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+class RecommendationAction(StrEnum):
+    """Supported investment decision actions."""
+
+    BUY = "BUY"
+    SELL = "SELL"
+    HOLD = "HOLD"
+
+
+class UrgencyLevel(StrEnum):
+    """Urgency priority levels for recommendation execution."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class RebalanceRecommendation(BaseModel):
+    """Structured AI recommendation schema for asset portfolio rebalancing."""
+
+    action: RecommendationAction
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    reasoning: str = Field(max_length=250)
+    target_allocation_pct: float = Field(ge=0.0, le=100.0)
+    urgency_level: UrgencyLevel
+    risk_score: int = Field(ge=1, le=5)
+    valuation_score: int = Field(ge=1, le=10)
+    expected_dividend_yield_pct: float | None = Field(default=None, ge=0.0, le=100.0)
+    ter_impact_assessment: str | None = Field(default=None, max_length=100)

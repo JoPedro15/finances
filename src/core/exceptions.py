@@ -1,6 +1,4 @@
-"""
-Custom domain and infrastructure exceptions for the finances application.
-"""
+"""Custom domain and infrastructure exceptions for the finances application."""
 
 
 class FinancesError(Exception):
@@ -45,3 +43,19 @@ class StorageReadError(StorageError):
 
 class StorageWriteError(StorageError):
     """Raised when writing to storage (JSON/GDrive) fails."""
+
+
+class GeminiAPIError(FinancesError):
+    """Base exception for Gemini AI service integrations."""
+
+
+class GeminiAuthError(GeminiAPIError):
+    """Raised when Gemini API authentication fails or key is missing."""
+
+
+class GeminiQuotaError(GeminiAPIError):
+    """Raised when Gemini API rate limits or quotas are exceeded."""
+
+
+class GeminiParsingError(GeminiAPIError):
+    """Raised when Gemini API output fails structured validation."""
