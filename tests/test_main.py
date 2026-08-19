@@ -1,5 +1,4 @@
-"""
-Comprehensive unit tests for main.py CLI commands using Typer's CliRunner,
+"""Comprehensive unit tests for main.py CLI commands using Typer's CliRunner,
 covering all commands, helper functions, and exception branches.
 """
 
@@ -289,7 +288,12 @@ def test_etf_details_cmd_empty_breakdowns_and_holding_without_isin(
 
     mock_provider.get_details.return_value = ETFDetails(
         holdings=[
-            Holding(name="Unlisted Asset", isin=None, ticker=None, weight_pct=10.0)
+            Holding(
+                name="Unlisted Asset",
+                isin=None,
+                ticker=None,
+                weight_pct=10.0,
+            )
         ],
         sector_breakdown=[],
         country_breakdown=[],
@@ -342,7 +346,9 @@ def test_etf_details_cmd_all_etfs_success(
 
 
 @patch("main.SqlitePortfolioRepository")
-def test_etf_details_cmd_all_etfs_no_etfs_found(mock_repo_cls: MagicMock) -> None:
+def test_etf_details_cmd_all_etfs_no_etfs_found(
+    mock_repo_cls: MagicMock,
+) -> None:
     """Tests 'etf-details' CLI command when no active ETF
     holdings are found in portfolio."""
     mock_repo: MagicMock = MagicMock()
@@ -365,7 +371,9 @@ def test_etf_details_cmd_all_etfs_no_etfs_found(mock_repo_cls: MagicMock) -> Non
 
 
 @patch("main.SqlitePortfolioRepository")
-def test_etf_details_cmd_all_etfs_repo_exception(mock_repo_cls: MagicMock) -> None:
+def test_etf_details_cmd_all_etfs_repo_exception(
+    mock_repo_cls: MagicMock,
+) -> None:
     """Tests 'etf-details' CLI command exiting with code 1
     when repo fails during all-ETF inspection."""
     mock_repo: MagicMock = MagicMock()
@@ -681,3 +689,47 @@ def test_analyze_exposure_cmd_zero_etf_value(
 
     assert result.exit_code == 0
     assert "No active ETF holdings found in portfolio." in result.output
+
+
+# --- RECOMMEND REBALANCE COMMAND TESTS ---
+
+
+@patch("main.recommend_rebalance")
+def test_recommend_rebalance_command_defaults(
+    mock_recommend: MagicMock,
+) -> None:
+    """Tests 'recommend-rebalance' CLI command execution with defaults."""
+    result: Any = runner.invoke(app, ["recommend-rebalance"])
+
+    assert result.exit_code == 0
+    mock_recommend.assert_called_once()
+    _, kwargs = mock_recommend.call_args
+    assert kwargs["skip_ai"] is False
+    assert kwargs["notify"] is False
+
+
+@patch("main.recommend_rebalance")
+def test_recommend_rebalance_command_custom_options(
+    mock_recommend: MagicMock,
+) -> None:
+    """Tests 'recommend-rebalance' CLI command with custom parameters."""
+    result: Any = runner.invoke(
+        app,
+        [
+            "recommend-rebalance",
+            "--targets-file",
+            "custom_targets.json",
+            "--portfolio-file",
+            "custom_portfolio.json",
+            "--skip-ai",
+            "--notify",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_recommend.assert_called_once()
+    _, kwargs = mock_recommend.call_args
+    assert str(kwargs["targets_file"]) == "custom_targets.json"
+    assert str(kwargs["portfolio_file"]) == "custom_portfolio.json"
+    assert kwargs["skip_ai"] is True
+    assert kwargs["notify"] is True

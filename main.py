@@ -1,6 +1,4 @@
-"""
-CLI entry point for the finances application powered by Typer.
-"""
+"""CLI entry point for the finances application powered by Typer."""
 
 from __future__ import annotations
 
@@ -9,6 +7,8 @@ from typing import Annotated
 
 import typer
 
+from src.cli.recommend import recommend_rebalance
+from src.config import DATA_DIR
 from src.core.analysis import (
     PortfolioExposure,
     analyze_overall_performance,
@@ -65,35 +65,31 @@ def analyze_cmd() -> None:
 
 @app.command(name="pull-config")
 def pull_config_cmd() -> None:
-    """Pulls configuration files (portfolio.json, portfolio_targets.json)
-    from Google Drive to local data directory."""
+    """Pulls configuration files from Google Drive to local data directory."""
     logger.section("Pulling Configuration from Google Drive")
     service: GoogleDriveService = GoogleDriveService()
 
     portfolio_ok: bool = service.download_file(
-        "portfolio.json", Path("data/portfolio.json")
+        "portfolio.json", DATA_DIR / "portfolio.json"
     )
     targets_ok: bool = service.download_file(
-        "portfolio_targets.json", Path("data/portfolio_targets.json")
+        "portfolio_targets.json", DATA_DIR / "portfolio_targets.json"
     )
 
     if portfolio_ok and targets_ok:
         logger.success("Successfully pulled configuration files from Google Drive.")
     else:
-        logger.warning(
-            "One or more configuration files failed to download from Google Drive."
-        )
+        logger.warning("One or more configuration files failed to download from Drive.")
 
 
 @app.command(name="push-config")
 def push_config_cmd() -> None:
-    """Pushes local configuration files (portfolio.json, portfolio_targets.json)
-    to Google Drive."""
+    """Pushes local configuration files to Google Drive."""
     logger.section("Pushing Configuration to Google Drive")
     service: GoogleDriveService = GoogleDriveService()
 
-    portfolio_file: Path = Path("data/portfolio.json")
-    targets_file: Path = Path("data/portfolio_targets.json")
+    portfolio_file: Path = DATA_DIR / "portfolio.json"
+    targets_file: Path = DATA_DIR / "portfolio_targets.json"
 
     portfolio_ok: bool = (
         bool(service.upload_file(portfolio_file, overwrite=True))
@@ -109,13 +105,11 @@ def push_config_cmd() -> None:
     if portfolio_ok and targets_ok:
         logger.success("Successfully pushed configuration files to Google Drive.")
     else:
-        logger.warning(
-            "One or more configuration files failed to upload to Google Drive."
-        )
+        logger.warning("One or more configuration files failed to upload to Drive.")
 
 
 def _display_single_etf_details(isin: str, name: str, provider: ETFProvider) -> None:
-    """Helper function to fetch and print formatted details for a single ETF ISIN."""
+    """Helper to fetch and print formatted details for a single ETF ISIN."""
     logger.section("ETF Details Inspection")
     logger.info(f"ETF Name: {name}")
     logger.info(f"ETF ISIN: {isin}")
@@ -179,7 +173,7 @@ def etf_details_cmd(
     if isin:
         clean_isin: str = isin.strip().upper()
         if len(clean_isin) != 12:
-            logger.error(f"Invalid ISIN format '{isin}'. Expected a 12-character code.")
+            logger.error(f"Invalid ISIN format '{isin}'. Expected 12-character code.")
             raise typer.Exit(code=1)
 
         assets_lookup: list[Asset] = []
@@ -214,8 +208,7 @@ def etf_details_cmd(
 
 
 def _format_market_cap(val: float | None) -> str:
-    """Formats market capitalization numeric values with
-    dynamic scale suffixes (T, B, M)."""
+    """Formats market capitalization values with dynamic scale suffixes."""
     if val is None:
         return "N/A"
     if val >= 1e12:
@@ -228,9 +221,12 @@ def _format_market_cap(val: float | None) -> str:
 
 
 def _display_single_stock_details(
-    identifier: str, name: str, provider: StockProvider, asset: Asset | None = None
+    identifier: str,
+    name: str,
+    provider: StockProvider,
+    asset: Asset | None = None,
 ) -> None:
-    """Helper function to fetch and print formatted fundamental details for a stock."""
+    """Helper function to fetch and print formatted details for a stock."""
     logger.section("Stock Details Inspection")
     logger.info(f"Stock Name: {name}")
     if asset and asset.isin:
@@ -373,6 +369,50 @@ def analyze_exposure_cmd() -> None:
     logger.info("Consolidated Country Exposure:")
     for country, pct in exposure.country_exposure.items():
         logger.print(f"  - {country}: {pct:.2f}%")
+
+
+@app.command(name="recommend-rebalance")
+def recommend_rebalance_cmd(
+    targets_file: Annotated[
+        Path,
+        typer.Option(
+            "--targets-file",
+            "-t",
+            help="Path to JSON file containing target wishlist.",
+        ),
+    ] = DATA_DIR
+    / "portfolio_targets.json",
+    portfolio_file: Annotated[
+        Path,
+        typer.Option(
+            "--portfolio-file",
+            "-p",
+            help="Path to JSON file containing active holdings.",
+        ),
+    ] = DATA_DIR
+    / "portfolio.json",
+    skip_ai: Annotated[
+        bool,
+        typer.Option(
+            "--skip-ai",
+            help="Skip Gemini AI analysis and display quantitative scores only.",
+        ),
+    ] = False,
+    notify: Annotated[
+        bool,
+        typer.Option(
+            "--notify",
+            help="Send rebalancing recommendations to Discord webhook.",
+        ),
+    ] = False,
+) -> None:
+    """Ranks targets and provides AI-driven rebalancing recommendations."""
+    recommend_rebalance(
+        targets_file=targets_file,
+        portfolio_file=portfolio_file,
+        skip_ai=skip_ai,
+        notify=notify,
+    )
 
 
 if __name__ == "__main__":
