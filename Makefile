@@ -62,7 +62,7 @@ security-check:
 
 test:
 	@echo "Running unit tests with coverage..."
-	PYTHONPATH=src $(PYTHON) -m pytest $(TESTS_DIR)
+	PYTHONPATH=src $(PYTHON) -m pytest --cov=src --cov=main --cov-report=term-missing $(TESTS_DIR)
 
 quality: lint security-check test
 

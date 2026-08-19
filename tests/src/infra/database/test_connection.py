@@ -1,5 +1,4 @@
-"""
-Unit tests for SQLite connection and context management in
+"""Unit tests for SQLite connection and transactional context management in
 src/infra/database/connection.py.
 """
 
@@ -7,6 +6,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -14,7 +14,7 @@ from src.infra.database.connection import get_connection, get_db_context
 
 
 def test_get_connection_row_factory_and_foreign_keys(tmp_path: Path) -> None:
-    """Validates get_connection sets sqlite3.Row and enables foreign keys."""
+    """Validates get_connection sets sqlite3.Row factory and enables foreign keys."""
     db_file: Path = tmp_path / "test.db"
     conn: sqlite3.Connection = get_connection(str(db_file))
 
@@ -39,6 +39,21 @@ def test_get_connection_creates_parent_directory(tmp_path: Path) -> None:
     conn.close()
 
     assert nested_dir.exists()
+
+
+def test_get_connection_default_path(tmp_path: Path) -> None:
+    """Validates get_connection fallback using DEFAULT_DB_PATH when no argument
+    is passed.
+    """
+    db_file: Path = tmp_path / "default_test.db"
+
+    with patch("src.infra.database.connection.DEFAULT_DB_PATH", str(db_file)):
+        with patch.object(get_connection, "__defaults__", (str(db_file),)):
+            conn: sqlite3.Connection = get_connection()
+            try:
+                assert db_file.exists()
+            finally:
+                conn.close()
 
 
 def test_get_db_context_commit_on_success(tmp_path: Path) -> None:
