@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Annotated, Any
@@ -15,7 +16,11 @@ from rich.text import Text
 from src.config import DATA_DIR
 from src.core.decision.base import AssetScore
 from src.core.decision.engine import PortfolioDecisionEngine
-from src.core.exceptions import GeminiAPIError, GeminiAuthError
+from src.core.exceptions import (
+    GeminiAPIError,
+    GeminiAuthError,
+    GeminiQuotaError,
+)
 from src.core.models import (
     Asset,
     ETFDetails,
@@ -30,8 +35,12 @@ from src.infra.ai.client import GeminiClient
 from src.infra.notifications.discord import send_discord_notification
 from src.utils.logger.logger import logger
 
-app = typer.Typer(help="Investment decision engine and AI rebalancing CLI commands.")
-console = Console()
+DEFAULT_OUTPUT_CSV: Path = Path("output") / "recommend_output.csv"
+
+app: typer.Typer = typer.Typer(
+    help="Investment decision engine and AI rebalancing CLI commands."
+)
+console: Console = Console()
 
 
 def load_json_data(file_path: Path) -> list[dict[str, Any]]:
@@ -193,6 +202,232 @@ def _format_urgency(urgency: UrgencyLevel | None) -> Text:
     return Text("N/A", style="dim")
 
 
+def export_to_csv(
+    ranked_scores: list[AssetScore],
+    asset_dict_map: dict[str, dict[str, Any]],
+    recommendations_map: dict[str, RebalanceRecommendation],
+    output_path: Path,
+) -> None:
+    """Exports the rebalancing decision matrix to a structured CSV file."""
+    target_path: Path = (
+        DEFAULT_OUTPUT_CSV
+        if str(output_path).startswith("-") or not output_path
+        else output_path
+    )
+
+    fieldnames: list[str] = [
+        "rank",
+        "symbol",
+        "asset_type",
+        "price_eur",
+        "current_allocation_pct",
+        "target_allocation_pct",
+        "dip_score",
+        "cost_score",
+        "gap_score",
+        "quant_score",
+        "ai_action",
+        "ai_urgency",
+        "ai_confidence_pct",
+    ]
+
+    try:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, mode="w", newline="", encoding="utf-8") as csv_file:
+            writer: csv.DictWriter[str] = csv.DictWriter(
+                csv_file, fieldnames=fieldnames
+            )
+            writer.writeheader()
+
+            for rank, score in enumerate(ranked_scores, start=1):
+                target_item: dict[str, Any] = asset_dict_map[score.symbol]
+                rec: RebalanceRecommendation | None = recommendations_map.get(
+                    score.symbol
+                )
+
+                row: dict[str, Any] = {
+                    "rank": rank,
+                    "symbol": score.symbol,
+                    "asset_type": score.asset_type.value.upper(),
+                    "price_eur": float(target_item["current_price"]),
+                    "current_allocation_pct": float(
+                        target_item["current_allocation_pct"]
+                    ),
+                    "target_allocation_pct": float(
+                        target_item["target_allocation_pct"]
+                    ),
+                    "dip_score": score.dip_score,
+                    "cost_score": score.cost_score,
+                    "gap_score": score.allocation_score,
+                    "quant_score": score.total_score,
+                    "ai_action": rec.action.value if rec and rec.action else "N/A",
+                    "ai_urgency": (
+                        rec.urgency_level.value if rec and rec.urgency_level else "N/A"
+                    ),
+                    "ai_confidence_pct": (
+                        round(rec.confidence_score * 100, 2) if rec else "N/A"
+                    ),
+                }
+                writer.writerow(row)
+
+        logger.success(f"Successfully exported decision matrix to '{target_path}'.")
+        console.print(
+            f"[bold green]✓ Decision matrix exported to CSV:[/bold green] {target_path}"
+        )
+    except Exception as err:
+        logger.error(f"Failed to export CSV to '{target_path}': {err}")
+        console.print(f"[bold red]Error exporting CSV:[/bold red] {err}")
+
+
+def _display_rebalance_results(
+    ranked_scores: list[AssetScore],
+    asset_dict_map: dict[str, dict[str, Any]],
+    recommendations_map: dict[str, RebalanceRecommendation],
+    total_val: float,
+    has_ai: bool,
+    verbose: bool = False,
+) -> None:
+    """Renders compact decision matrix and AI insight panels using Rich."""
+    console.print()
+    summary_panel: Panel = Panel(
+        Text.from_markup(
+            f"[bold white]Total Portfolio Value:[/bold white] "
+            f"[green]{total_val:,.2f} EUR[/green]\n"
+            f"[bold white]Target Assets Evaluated:[/bold white] "
+            f"[cyan]{len(ranked_scores)}[/cyan]"
+        ),
+        title="[bold yellow]Portfolio Summary[/bold yellow]",
+        border_style="blue",
+        expand=False,
+    )
+    console.print(summary_panel)
+    console.print()
+
+    table: Table = Table(
+        title="PORTFOLIO REBALANCING & INVESTMENT DECISION MATRIX",
+        header_style="bold magenta",
+        show_header=True,
+    )
+
+    table.add_column("Rank", justify="center", style="cyan", no_wrap=True, width=6)
+    table.add_column("Symbol", style="bold white", no_wrap=True, width=10)
+    table.add_column("Type", style="dim", no_wrap=True, width=8)
+    table.add_column("Price (€)", justify="right", width=10)
+    table.add_column("Cur %", justify="right", width=8)
+    table.add_column("Tar %", justify="right", width=8)
+
+    if verbose:
+        table.add_column("Dip Sc", justify="right", style="dim", no_wrap=True, width=8)
+        table.add_column("Cost Sc", justify="right", style="dim", no_wrap=True, width=8)
+        table.add_column("Gap Sc", justify="right", style="dim", no_wrap=True, width=8)
+
+    table.add_column("Quant Score", justify="right", style="bold blue", width=12)
+
+    if has_ai:
+        table.add_column("AI Action", justify="center", width=10)
+        table.add_column("Urgency", justify="center", width=8)
+        table.add_column("Conf.", justify="right", width=8)
+
+    for rank, score in enumerate(ranked_scores, start=1):
+        target_item: dict[str, Any] = asset_dict_map[score.symbol]
+        price: float = float(target_item["current_price"])
+        curr_pct: float = float(target_item["current_allocation_pct"])
+        targ_pct: float = float(target_item["target_allocation_pct"])
+
+        row_data: list[Any] = [
+            str(rank),
+            score.symbol,
+            score.asset_type.value.upper(),
+            f"{price:,.2f}",
+            f"{curr_pct:.1f}%",
+            f"{targ_pct:.1f}%",
+        ]
+
+        if verbose:
+            row_data.extend(
+                [
+                    f"{score.dip_score:.2f}",
+                    f"{score.cost_score:.2f}",
+                    f"{score.allocation_score:.2f}",
+                ]
+            )
+
+        row_data.append(f"{score.total_score:.4f}")
+
+        if has_ai:
+            rec: RebalanceRecommendation | None = recommendations_map.get(score.symbol)
+            if rec:
+                table_conf_str: str = f"{rec.confidence_score * 100:.0f}%"
+                row_data.extend(
+                    [
+                        _format_action(rec.action),
+                        _format_urgency(rec.urgency_level),
+                        table_conf_str,
+                    ]
+                )
+            else:
+                row_data.extend(
+                    [
+                        Text("ERROR", style="bold red"),
+                        Text("N/A", style="dim"),
+                        "N/A",
+                    ]
+                )
+
+        table.add_row(*row_data)
+
+    console.print(table)
+    console.print()
+
+    # Renders AI Insight Cards for actionable positions (BUY or SELL)
+    score_map: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
+    if has_ai and recommendations_map:
+        active_recs: list[tuple[str, RebalanceRecommendation]] = [
+            (sym, r)
+            for sym, r in recommendations_map.items()
+            if r.action in (RecommendationAction.BUY, RecommendationAction.SELL)
+        ]
+
+        if active_recs:
+            console.print(
+                "[bold yellow]💡 Actionable AI Advisory Insights[/bold yellow]"
+            )
+            for symbol, rec in active_recs:
+                act_text: Text = _format_action(rec.action)
+                urg_text: Text = _format_urgency(rec.urgency_level)
+                confidence_val_str: str = f"{rec.confidence_score * 100:.0f}%"
+
+                score_info: AssetScore | None = score_map.get(symbol)
+                breakdown_str: str = ""
+                if score_info:
+                    breakdown_str = (
+                        f"\n[bold dim]Score Factors:[/bold dim] "
+                        f"[dim]Dip: {score_info.dip_score:.2f} | "
+                        f"Cost: {score_info.cost_score:.2f} | "
+                        f"Gap: {score_info.allocation_score:.2f} "
+                        f"→ Total: {score_info.total_score:.4f}[/dim]"
+                    )
+
+                panel_content: str = (
+                    f"[bold]Action:[/bold] {act_text.markup} | "
+                    f"[bold]Urgency:[/bold] {urg_text.markup} | "
+                    f"[bold]Confidence:[/bold] {confidence_val_str}"
+                    f"{breakdown_str}\n"
+                    f"[italic]{rec.reasoning}[/italic]"
+                )
+                border_style: str = (
+                    "green" if rec.action == RecommendationAction.BUY else "red"
+                )
+                card: Panel = Panel(
+                    panel_content,
+                    title=f"[bold cyan]🔹 {symbol}[/bold cyan]",
+                    border_style=border_style,
+                    expand=False,
+                )
+                console.print(card)
+            console.print()
+
+
 @app.command(name="rebalance")
 def recommend_rebalance(
     targets_file: Annotated[
@@ -227,6 +462,22 @@ def recommend_rebalance(
             help="Send rebalancing recommendations to Discord webhook.",
         ),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Display detailed quantitative score factors breakdown.",
+        ),
+    ] = False,
+    output_csv: Annotated[
+        Path,
+        typer.Option(
+            "--output-csv",
+            "-o",
+            help="Path to export decision matrix as CSV file.",
+        ),
+    ] = DEFAULT_OUTPUT_CSV,
 ) -> None:
     """Ranks targets and provides AI-driven rebalancing recommendations."""
     targets_raw: list[dict[str, Any]] = load_json_data(targets_file)
@@ -279,99 +530,46 @@ def recommend_rebalance(
                 "Running in quantitative-only mode."
             )
 
-    table = Table(
-        title="PORTFOLIO REBALANCING & INVESTMENT DECISION MATRIX",
-        header_style="bold magenta",
-        expand=True,
-    )
-
-    table.add_column("Rank", justify="right", style="cyan", no_wrap=True)
-    table.add_column("Symbol", style="bold white", no_wrap=True)
-    table.add_column("Type", style="dim", no_wrap=True)
-    table.add_column("Price (€)", justify="right")
-    table.add_column("Current %", justify="right")
-    table.add_column("Target %", justify="right")
-    table.add_column("Quant Score", justify="right", style="bold blue")
-
-    if gemini_client:
-        table.add_column("AI Action", justify="center")
-        table.add_column("Urgency", justify="center")
-        table.add_column("Conf.", justify="right")
-        table.add_column("AI Reasoning", style="italic")
-
     recommendations_map: dict[str, RebalanceRecommendation] = {}
-
     asset_dict_map: dict[str, dict[str, Any]] = {
         str(a["symbol"]): a for a in enriched_assets
     }
 
-    with console.status("[bold magenta]Running Gemini AI rebalancing analysis..."):
-        for rank, score in enumerate(ranked_scores, start=1):
-            target_item: dict[str, Any] = asset_dict_map[score.symbol]
-            price: float = float(target_item["current_price"])
-            curr_pct: float = float(target_item["current_allocation_pct"])
-            targ_pct: float = float(target_item["target_allocation_pct"])
+    if gemini_client:
+        with console.status(
+            "[bold magenta]Running Gemini AI batch rebalancing analysis..."
+        ):
+            portfolio_ctx: dict[str, Any] = {
+                "total_portfolio_value_eur": total_val,
+            }
+            try:
+                recommendations_map = gemini_client.analyze_portfolio_batch(
+                    assets_data=enriched_assets,
+                    portfolio_context=portfolio_ctx,
+                )
+            except (GeminiAPIError, GeminiQuotaError, Exception) as err:
+                logger.error(f"Gemini AI batch analysis failed: {err}")
+                console.print(
+                    "[yellow]Warning:[/yellow] Gemini AI analysis unavailable. "
+                    "Displaying quantitative decision matrix only."
+                )
+                gemini_client = None
 
-            row_data: list[Any] = [
-                str(rank),
-                score.symbol,
-                score.asset_type.value,
-                f"{price:.2f}€",
-                f"{curr_pct:.2f}%",
-                f"{targ_pct:.2f}%",
-                f"{score.total_score:.4f}",
-            ]
-
-            if gemini_client:
-                portfolio_ctx: dict[str, Any] = {
-                    "total_portfolio_value_eur": total_val,
-                    "current_allocation_pct": curr_pct,
-                    "target_allocation_pct": targ_pct,
-                }
-                try:
-                    rec: RebalanceRecommendation = gemini_client.analyze_asset(
-                        asset_data=target_item,
-                        portfolio_context=portfolio_ctx,
-                    )
-                    recommendations_map[score.symbol] = rec
-
-                    conf_str: str = f"{rec.confidence_score * 100:.0f}%"
-                    row_data.extend(
-                        [
-                            _format_action(rec.action),
-                            _format_urgency(rec.urgency_level),
-                            conf_str,
-                            rec.reasoning,
-                        ]
-                    )
-                except (GeminiAPIError, Exception) as err:
-                    logger.error(
-                        f"Gemini AI analysis failed for '{score.symbol}': {err}"
-                    )
-                    row_data.extend(
-                        [
-                            Text("ERROR", style="bold red"),
-                            Text("N/A", style="dim"),
-                            "N/A",
-                            "AI analysis failed",
-                        ]
-                    )
-
-            table.add_row(*row_data)
-
-    header_panel = Panel(
-        Text.from_markup(
-            f"[bold white]Total Portfolio Value:[/bold white] "
-            f"[green]{total_val:,.2f} EUR[/green]\n"
-            f"[bold white]Target Assets Evaluated:[/bold white] "
-            f"[cyan]{len(ranked_scores)}[/cyan]"
-        ),
-        title="[bold yellow]Portfolio Summary[/bold yellow]",
-        border_style="blue",
+    _display_rebalance_results(
+        ranked_scores=ranked_scores,
+        asset_dict_map=asset_dict_map,
+        recommendations_map=recommendations_map,
+        total_val=total_val,
+        has_ai=gemini_client is not None,
+        verbose=verbose,
     )
 
-    console.print(header_panel)
-    console.print(table)
+    export_to_csv(
+        ranked_scores=ranked_scores,
+        asset_dict_map=asset_dict_map,
+        recommendations_map=recommendations_map,
+        output_path=output_csv,
+    )
 
     # Dispatches Discord notification if explicitly requested via CLI flag
     if notify:

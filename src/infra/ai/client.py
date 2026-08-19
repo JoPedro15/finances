@@ -1,4 +1,4 @@
-"""Gemini AI API client implementation for structured investment analysis."""
+"""Gemini AI API client implementation for batch investment analysis."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import Any
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from src.core.exceptions import (
     GeminiAPIError,
@@ -36,6 +36,33 @@ SYSTEM_INSTRUCTION: str = (
     "formatting."
 )
 
+SYSTEM_INSTRUCTION_BATCH: str = (
+    "You are an expert Quantitative Portfolio Manager and Asset Rebalancing "
+    "Analyst. Your task is to analyze all provided target assets in the "
+    "portfolio context and provide deterministic, data-driven rebalancing "
+    "recommendations. Return a structured list containing an item for each "
+    "asset symbol adhering strictly to the schema."
+)
+
+
+class AssetRecommendationItem(BaseModel):
+    """Container linking an asset symbol to its rebalance recommendation."""
+
+    symbol: str = Field(
+        description="The exact asset ticker symbol (e.g., 'AAPL', 'EUNL.DE')."
+    )
+    recommendation: RebalanceRecommendation = Field(
+        description="Detailed rebalancing recommendation for the asset."
+    )
+
+
+class BatchRebalanceRecommendations(BaseModel):
+    """Schema container for batch rebalance recommendations list."""
+
+    items: list[AssetRecommendationItem] = Field(
+        description="List of recommendations for all evaluated portfolio assets."
+    )
+
 
 class GeminiClient:
     """Enterprise-grade client wrapper for Google Gemini AI API interactions."""
@@ -45,7 +72,7 @@ class GeminiClient:
         api_key: str | None = None,
         model_name: str = DEFAULT_MODEL,
     ) -> None:
-        """Initializes GeminiClient with API authentication and configuration."""
+        """Initializes GeminiClient with API authentication and config."""
         resolved_key: str | None = api_key or os.getenv("GEMINI_API_KEY")
         if not resolved_key:
             logger.error("Gemini API key is missing from environment.")
@@ -129,6 +156,129 @@ class GeminiClient:
             f"Latency: {elapsed_ms:.2f}ms | Tokens: {token_info}"
         )
 
+    def analyze_portfolio_batch(
+        self,
+        assets_data: list[dict[str, Any]],
+        portfolio_context: dict[str, Any],
+        model_name: str | None = None,
+        temperature: float = 0.1,
+    ) -> dict[str, RebalanceRecommendation]:
+        """Generates structured rebalancing analysis for all assets in batch.
+
+        Args:
+            assets_data: List of enriched target assets.
+            portfolio_context: Global portfolio metrics and total value.
+            model_name: Optional model override.
+            temperature: Output determinism factor.
+
+        Returns:
+            Dictionary mapping asset symbols to RebalanceRecommendation.
+        """
+        if not assets_data:
+            raise ValueError("assets_data payload list cannot be empty.")
+        if not portfolio_context:
+            raise ValueError("portfolio_context payload cannot be empty.")
+
+        target_model: str = model_name or self.model_name
+        payload: dict[str, Any] = {
+            "target_assets": assets_data,
+            "portfolio_context": portfolio_context,
+        }
+        prompt: str = json.dumps(payload, indent=2, default=str)
+
+        config: types.GenerateContentConfig = types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION_BATCH,
+            response_mime_type="application/json",
+            response_schema=BatchRebalanceRecommendations,
+            temperature=temperature,
+        )
+
+        asset_count: int = len(assets_data)
+        logger.info(
+            f"Requesting Gemini batch analysis for {asset_count} assets "
+            f"using model '{target_model}'"
+        )
+        start_time: float = time.perf_counter()
+
+        response: Any = None
+        delay: float = INITIAL_RETRY_DELAY
+
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = self._client.models.generate_content(
+                    model=target_model,
+                    contents=prompt,
+                    config=config,
+                )
+                break
+            except APIError as err:
+                code: int | None = getattr(err, "code", None)
+                err_msg: str = str(err).lower()
+
+                if code in (401, 403) or "auth" in err_msg:
+                    logger.error(f"Auth error during batch call: {err}")
+                    raise GeminiAuthError(f"Authentication failed: {err}") from err
+
+                is_retryable: bool = (
+                    code in (429, 500, 502, 503, 504)
+                    or "quota" in err_msg
+                    or "resource_exhausted" in err_msg
+                )
+
+                if is_retryable and attempt < MAX_RETRIES:
+                    logger.warning(
+                        f"Transient batch API error (Attempt {attempt}/"
+                        f"{MAX_RETRIES}). Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                    delay *= 2.0
+                    continue
+
+                if code == 429 or "quota" in err_msg:
+                    raise GeminiQuotaError(f"API quota exceeded: {err}") from err
+
+                logger.error(f"Gemini API error during batch analysis: {err}")
+                raise GeminiAPIError(f"Gemini API failure: {err}") from err
+            except Exception as err:
+                logger.error(f"Unexpected error calling Gemini API: {err}")
+                raise GeminiAPIError(f"Unexpected API error: {err}") from err
+
+        elapsed_ms: float = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            f"Gemini batch analysis completed for {asset_count} assets | "
+            f"Latency: {elapsed_ms:.2f}ms"
+        )
+
+        return self._parse_batch_response(response)
+
+    def _parse_batch_response(
+        self, response: Any
+    ) -> dict[str, RebalanceRecommendation]:
+        """Extracts and validates BatchRebalanceRecommendations from response."""
+        batch_obj: BatchRebalanceRecommendations | None = None
+
+        if hasattr(response, "parsed") and response.parsed is not None:
+            if isinstance(response.parsed, BatchRebalanceRecommendations):
+                batch_obj = response.parsed
+            elif isinstance(response.parsed, dict):
+                batch_obj = BatchRebalanceRecommendations.model_validate(
+                    response.parsed
+                )
+
+        if batch_obj is None:
+            raw_text: str = self._extract_raw_text_safe(response)
+            cleaned_text: str = self._clean_json_text(raw_text)
+            try:
+                parsed_json: dict[str, Any] = json.loads(cleaned_text)
+                batch_obj = BatchRebalanceRecommendations.model_validate(parsed_json)
+            except (json.JSONDecodeError, ValidationError) as err:
+                logger.error(f"Failed to parse Gemini batch payload: {err}")
+                raise GeminiParsingError(
+                    f"Structured batch validation failed: {err}"
+                ) from err
+
+        return {item.symbol: item.recommendation for item in batch_obj.items}
+
     def analyze_asset(
         self,
         asset_data: dict[str, Any],
@@ -136,17 +286,7 @@ class GeminiClient:
         model_name: str | None = None,
         temperature: float = 0.1,
     ) -> RebalanceRecommendation:
-        """Generates structured rebalancing analysis for a target asset.
-
-        Args:
-            asset_data: Fundamental and market data for the asset.
-            portfolio_context: Portfolio allocations and total value.
-            model_name: Optional override for the target Gemini model.
-            temperature: Sampling temperature for output determinism.
-
-        Returns:
-            Validated RebalanceRecommendation instance.
-        """
+        """Generates structured rebalancing analysis for a target asset."""
         self._validate_inputs(asset_data, portfolio_context)
 
         target_model: str = model_name or self.model_name
@@ -226,17 +366,7 @@ class GeminiClient:
         model_name: str | None = None,
         temperature: float = 0.1,
     ) -> RebalanceRecommendation:
-        """Asynchronously generates structured rebalancing analysis.
-
-        Args:
-            asset_data: Fundamental and market data for the asset.
-            portfolio_context: Portfolio allocations and total value.
-            model_name: Optional override for the target Gemini model.
-            temperature: Sampling temperature for output determinism.
-
-        Returns:
-            Validated RebalanceRecommendation instance.
-        """
+        """Asynchronously generates structured rebalancing analysis."""
         self._validate_inputs(asset_data, portfolio_context)
 
         target_model: str = model_name or self.model_name
