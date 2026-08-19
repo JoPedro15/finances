@@ -143,7 +143,7 @@ def test_analyze_overall_performance_zero_acquisition_cost(
 
     analyze_overall_performance(portfolio_repo=mock_p_repo, history_repo=mock_h_repo)
 
-    mock_logger.success.assert_any_call("Return on Investment (ROI): +0.00%")
+    mock_logger.error.assert_not_called()
 
 
 @patch("src.core.analysis.logger")

@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from src.core.exceptions import StorageReadError, StorageWriteError
@@ -26,6 +27,7 @@ from src.core.repositories import (
     JsonETFCacheRepository,
     JsonHistoryRepository,
     JsonPortfolioRepository,
+    ParquetHistoryRepository,
     SqliteHistoryRepository,
     SqlitePortfolioRepository,
 )
@@ -502,3 +504,86 @@ def test_json_etf_cache_repo_directory_creation_error(tmp_path: Path) -> None:
 
     with pytest.raises(StorageWriteError):
         repo.save_etf_details("IE00B4L5Y983", mock_details)
+
+
+# ==============================================================================
+# ParquetHistoryRepository Tests
+# ==============================================================================
+
+
+def test_parquet_history_repo_non_existent_file(tmp_path: Path) -> None:
+    """Verifies load_history returns empty list when Parquet file does not exist."""
+    parquet_file: Path = tmp_path / "non_existent.parquet"
+    repo = ParquetHistoryRepository(file_path=parquet_file)
+
+    assert repo.load_history() == []
+
+
+@patch("pandas.DataFrame.to_parquet")
+@patch("pandas.read_parquet")
+def test_parquet_history_repo_save_and_load(
+    mock_read_parquet: MagicMock,
+    mock_to_parquet: MagicMock,
+    tmp_path: Path,
+    sample_snapshot: PortfolioSnapshot,
+) -> None:
+    """Verifies that ParquetHistoryRepository successfully persists
+    and loads portfolio snapshots using PyArrow and Pandas mocks.
+    """
+    parquet_file: Path = tmp_path / "history.parquet"
+    repo = ParquetHistoryRepository(file_path=parquet_file)
+
+    mock_to_parquet.side_effect = lambda *args, **kwargs: parquet_file.touch()
+
+    df_mock = pd.DataFrame(
+        [
+            {
+                "timestamp": sample_snapshot.timestamp,
+                "total_value_eur": sample_snapshot.total_value_eur,
+                "snapshot_json": json.dumps(sample_snapshot.to_dict()),
+            }
+        ]
+    )
+
+    mock_read_parquet.return_value = df_mock
+
+    repo.save_snapshot(sample_snapshot)
+    mock_to_parquet.assert_called_once()
+    assert parquet_file.exists()
+
+    history: list[PortfolioSnapshot] = repo.load_history()
+    assert len(history) == 1
+    assert history[0].timestamp == sample_snapshot.timestamp
+    assert history[0].total_value_eur == sample_snapshot.total_value_eur
+    assert len(history[0].assets_snapshot) == 1
+    assert history[0].assets_snapshot[0].yahoo_ticker == "AAPL"
+
+
+@patch("pandas.read_parquet")
+def test_parquet_history_repo_load_exception(
+    mock_read_parquet: MagicMock, tmp_path: Path
+) -> None:
+    """Verifies StorageReadError is raised when reading Parquet fails."""
+    parquet_file: Path = tmp_path / "history.parquet"
+    parquet_file.touch()
+    mock_read_parquet.side_effect = Exception("Parquet read error")
+
+    repo = ParquetHistoryRepository(file_path=parquet_file)
+
+    with pytest.raises(StorageReadError):
+        repo.load_history()
+
+
+def test_parquet_history_repo_save_write_error(
+    tmp_path: Path, sample_snapshot: PortfolioSnapshot
+) -> None:
+    """Verifies StorageWriteError is raised when Parquet write fails
+    due to invalid path."""
+    blocker: Path = tmp_path / "blocked_folder"
+    blocker.write_text("file_blocking_dir")
+    parquet_file: Path = blocker / "history.parquet"
+
+    repo = ParquetHistoryRepository(file_path=parquet_file)
+
+    with pytest.raises(StorageWriteError):
+        repo.save_snapshot(sample_snapshot)

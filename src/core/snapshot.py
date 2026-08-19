@@ -34,7 +34,7 @@ def get_snapshot(
     portfolio_repo: PortfolioRepository | None = None,
     max_workers: int = 5,
 ) -> PortfolioSnapshot | None:
-    """Calculates the current value of all assets in the portfolio concurrently."""
+    """Calculates current value of all assets in the portfolio concurrently."""
     logger.section("Getting Portfolio Snapshot")
 
     repo: PortfolioRepository = portfolio_repo or SqlitePortfolioRepository(
@@ -58,7 +58,6 @@ def get_snapshot(
         provider: AssetDataProvider = get_provider_for_asset(asset)
         raw_quotation: Quotation | None = provider.get_price(asset)
 
-        # Trigger retrieval/caching for ETF composition details if applicable
         provider.get_details(asset)
 
         if not raw_quotation:
