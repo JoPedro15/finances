@@ -1,5 +1,5 @@
 """
-Repository protocols and storage implementations (JSON and SQLite) for
+Repository protocols and storage implementations (JSON, SQLite, and Parquet) for
 portfolio, history, and ETF cache data.
 """
 
@@ -9,6 +9,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
+
+import pandas as pd
 
 from src.config import DEFAULT_ETF_CACHE_TTL_DAYS, ETF_CACHE_FILE
 from src.core.exceptions import StorageReadError, StorageWriteError
@@ -247,6 +249,52 @@ class SqliteHistoryRepository:
         except Exception as e:
             raise StorageWriteError(
                 f"Failed to save snapshot to '{self.db_path}': {e}"
+            ) from e
+
+
+class ParquetHistoryRepository:
+    """Parquet file-backed implementation of HistoryRepository using PyArrow."""
+
+    def __init__(self, file_path: str | Path = "data/history.parquet") -> None:
+        self.file_path: Path = Path(file_path)
+
+    def load_history(self) -> list[PortfolioSnapshot]:
+        """Loads all recorded portfolio snapshots from the Parquet file."""
+        if not self.file_path.exists():
+            return []
+
+        try:
+            df: pd.DataFrame = pd.read_parquet(str(self.file_path))
+            snapshots: list[PortfolioSnapshot] = []
+            for _, row in df.iterrows():
+                raw_data: dict[str, Any] = json.loads(str(row["snapshot_json"]))
+                snapshots.append(PortfolioSnapshot.from_dict(raw_data))
+            return snapshots
+        except Exception as e:
+            raise StorageReadError(
+                f"Failed to read history from Parquet '{self.file_path}': {e}"
+            ) from e
+
+    def save_snapshot(self, snapshot: PortfolioSnapshot) -> None:
+        """Appends a new portfolio snapshot to the Parquet file."""
+        history: list[PortfolioSnapshot] = self.load_history()
+        history.append(snapshot)
+
+        try:
+            self.file_path.parent.mkdir(parents=True, exist_ok=True)
+            records: list[dict[str, Any]] = [
+                {
+                    "timestamp": s.timestamp,
+                    "total_value_eur": s.total_value_eur,
+                    "snapshot_json": json.dumps(s.to_dict()),
+                }
+                for s in history
+            ]
+            df: pd.DataFrame = pd.DataFrame(records)
+            df.to_parquet(str(self.file_path), index=False)
+        except Exception as e:
+            raise StorageWriteError(
+                f"Failed to write history to Parquet '{self.file_path}': {e}"
             ) from e
 
 
