@@ -1,0 +1,56 @@
+name: Scheduled Portfolio Rebalancing
+
+on:
+  schedule:
+    # Executa todas as segundas-feiras às 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rebalance:
+    name: AI Portfolio Analysis & Rebalancing
+    runs-on: ubuntu-latest
+
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }} # <-- Adicionado aqui
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Restore Google Drive Credentials
+        run: |
+          mkdir -p data
+          if [ -n "${{ secrets.GDRIVE_CREDENTIALS_BASE64 }}" ]; then
+            echo "${{ secrets.GDRIVE_CREDENTIALS_BASE64 }}" | base64 -d > data/credentials.json
+          fi
+          if [ -n "${{ secrets.GDRIVE_TOKEN_BASE64 }}" ]; then
+            echo "${{ secrets.GDRIVE_TOKEN_BASE64 }}" | base64 -d > data/token.json
+          fi
+
+      - name: Pull Configurations from Google Drive
+        run: PYTHONPATH=src python3 main.py pull-config
+
+      - name: Run Rebalance & AI Decision Engine
+        run: PYTHONPATH=src python3 main.py recommend-rebalance --notify # <-- Adicionada a flag --notify
+
+      - name: Push Updated Configurations to Google Drive
+        if: always()
+        run: PYTHONPATH=src python3 main.py push-config

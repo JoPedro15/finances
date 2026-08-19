@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -22,7 +23,9 @@ from src.core.exceptions import (
 from src.core.models import RebalanceRecommendation
 from src.utils.logger.logger import logger
 
-DEFAULT_MODEL: str = "gemini-2.5-flash"
+DEFAULT_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+MAX_RETRIES: int = 3
+INITIAL_RETRY_DELAY: float = 1.0
 
 SYSTEM_INSTRUCTION: str = (
     "You are an expert Quantitative Portfolio Manager and Asset Rebalancing "
@@ -143,12 +146,6 @@ class GeminiClient:
 
         Returns:
             Validated RebalanceRecommendation instance.
-
-        Raises:
-            GeminiAuthError: If authentication fails.
-            GeminiQuotaError: If API rate limits are hit.
-            GeminiParsingError: If structured output validation fails.
-            GeminiAPIError: For general API execution failures.
         """
         self._validate_inputs(asset_data, portfolio_context)
 
@@ -172,25 +169,142 @@ class GeminiClient:
         )
         start_time: float = time.perf_counter()
 
-        try:
-            response: Any = self._client.models.generate_content(
-                model=target_model,
-                contents=prompt,
-                config=config,
-            )
-        except APIError as err:
-            logger.error(f"Gemini API error during generation for '{ticker}': {err}")
-            code: int | None = getattr(err, "code", None)
-            err_msg: str = str(err).lower()
+        response: Any = None
+        delay: float = INITIAL_RETRY_DELAY
 
-            if code in (401, 403) or "auth" in err_msg:
-                raise GeminiAuthError(f"Authentication failed: {err}") from err
-            if code == 429 or "quota" in err_msg:
-                raise GeminiQuotaError(f"API quota exceeded: {err}") from err
-            raise GeminiAPIError(f"Gemini API failure: {err}") from err
-        except Exception as err:
-            logger.error(f"Unexpected error calling Gemini API for '{ticker}': {err}")
-            raise GeminiAPIError(f"Unexpected API error: {err}") from err
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = self._client.models.generate_content(
+                    model=target_model,
+                    contents=prompt,
+                    config=config,
+                )
+                break
+            except APIError as err:
+                code: int | None = getattr(err, "code", None)
+                err_msg: str = str(err).lower()
+
+                if code in (401, 403) or "auth" in err_msg:
+                    logger.error(f"Auth error for '{ticker}': {err}")
+                    raise GeminiAuthError(f"Authentication failed: {err}") from err
+
+                is_retryable: bool = (
+                    code in (429, 500, 502, 503, 504)
+                    or "quota" in err_msg
+                    or "resource_exhausted" in err_msg
+                )
+
+                if is_retryable and attempt < MAX_RETRIES:
+                    logger.warning(
+                        f"Transient API error for '{ticker}' (Attempt {attempt}/"
+                        f"{MAX_RETRIES}). Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                    delay *= 2.0
+                    continue
+
+                if code == 429 or "quota" in err_msg:
+                    raise GeminiQuotaError(f"API quota exceeded: {err}") from err
+
+                logger.error(
+                    f"Gemini API error during generation for '{ticker}': {err}"
+                )
+                raise GeminiAPIError(f"Gemini API failure: {err}") from err
+            except Exception as err:
+                logger.error(
+                    f"Unexpected error calling Gemini API for '{ticker}': {err}"
+                )
+                raise GeminiAPIError(f"Unexpected API error: {err}") from err
+
+        self._log_telemetry(ticker=ticker, start_time=start_time, response=response)
+        return self._parse_response(response=response)
+
+    async def analyze_asset_async(
+        self,
+        asset_data: dict[str, Any],
+        portfolio_context: dict[str, Any],
+        model_name: str | None = None,
+        temperature: float = 0.1,
+    ) -> RebalanceRecommendation:
+        """Asynchronously generates structured rebalancing analysis.
+
+        Args:
+            asset_data: Fundamental and market data for the asset.
+            portfolio_context: Portfolio allocations and total value.
+            model_name: Optional override for the target Gemini model.
+            temperature: Sampling temperature for output determinism.
+
+        Returns:
+            Validated RebalanceRecommendation instance.
+        """
+        self._validate_inputs(asset_data, portfolio_context)
+
+        target_model: str = model_name or self.model_name
+        prompt: str = self._build_prompt(
+            asset_data=asset_data,
+            portfolio_context=portfolio_context,
+        )
+
+        config: types.GenerateContentConfig = types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+            response_mime_type="application/json",
+            response_schema=RebalanceRecommendation,
+            temperature=temperature,
+        )
+
+        ticker: str = str(asset_data.get("symbol", asset_data.get("ticker", "UNKNOWN")))
+        logger.info(
+            f"Requesting async Gemini analysis for asset '{ticker}' "
+            f"using model '{target_model}'"
+        )
+        start_time: float = time.perf_counter()
+
+        response: Any = None
+        delay: float = INITIAL_RETRY_DELAY
+
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = await self._client.aio.models.generate_content(
+                    model=target_model,
+                    contents=prompt,
+                    config=config,
+                )
+                break
+            except APIError as err:
+                code: int | None = getattr(err, "code", None)
+                err_msg: str = str(err).lower()
+
+                if code in (401, 403) or "auth" in err_msg:
+                    logger.error(f"Auth error for '{ticker}': {err}")
+                    raise GeminiAuthError(f"Authentication failed: {err}") from err
+
+                is_retryable: bool = (
+                    code in (429, 500, 502, 503, 504)
+                    or "quota" in err_msg
+                    or "resource_exhausted" in err_msg
+                )
+
+                if is_retryable and attempt < MAX_RETRIES:
+                    logger.warning(
+                        f"Transient async API error for '{ticker}' (Attempt "
+                        f"{attempt}/{MAX_RETRIES}). Retrying in {delay:.1f}s..."
+                    )
+                    await asyncio.sleep(delay)
+                    delay *= 2.0
+                    continue
+
+                if code == 429 or "quota" in err_msg:
+                    raise GeminiQuotaError(f"API quota exceeded: {err}") from err
+
+                logger.error(
+                    f"Gemini API error during generation for '{ticker}': {err}"
+                )
+                raise GeminiAPIError(f"Gemini API failure: {err}") from err
+            except Exception as err:
+                logger.error(
+                    f"Unexpected error calling Gemini API for '{ticker}': {err}"
+                )
+                raise GeminiAPIError(f"Unexpected API error: {err}") from err
 
         self._log_telemetry(ticker=ticker, start_time=start_time, response=response)
         return self._parse_response(response=response)
