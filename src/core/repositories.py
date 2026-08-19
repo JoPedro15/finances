@@ -337,9 +337,9 @@ class JsonETFCacheRepository:
             return None
 
         cached_at_str: str | None = entry.get("cached_at")
-        raw_details: dict[str, Any] | None = entry.get("details")
+        raw_details: Any = entry.get("details")
 
-        if not cached_at_str or raw_details is None:
+        if not cached_at_str or not isinstance(raw_details, dict):
             return None
 
         try:
@@ -357,7 +357,7 @@ class JsonETFCacheRepository:
                 return None
 
             return ETFDetails.from_dict(raw_details)
-        except (ValueError, KeyError, TypeError) as e:
+        except (ValueError, KeyError, TypeError, AttributeError) as e:
             logger.warning(f"Failed to parse cached ETF details for ISIN {isin}: {e}")
             return None
 

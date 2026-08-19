@@ -50,8 +50,7 @@ class JustETFClient:
         self.session.mount("http://", adapter)
 
     def get_etf_details(self, isin: str) -> ETFDetails:
-        """
-        Fetches and parses ETF profile page for the given ISIN.
+        """Fetches and parses ETF profile page for the given ISIN.
 
         Raises:
             JustETFScrapeError: If request fails or HTML cannot be parsed.
@@ -88,15 +87,38 @@ class JustETFClient:
                 f"Failed to parse JustETF response for ISIN {isin}: {e}"
             ) from e
 
+    def _extract_isin_from_element(self, element: Tag) -> str:
+        """Extracts a 12-character ISIN from links, attributes,
+        or HTML of an element."""
+        if not element:
+            return ""
+
+        anchors: list[Tag] = [element] if element.name == "a" else []
+        anchors.extend(element.find_all("a"))
+
+        for link in anchors:
+            href: str = str(link.get("href", ""))
+            match: re.Match[str] | None = re.search(
+                r"([A-Z]{2}[A-Z0-9]{9}\d)", href.upper()
+            )
+            if match:
+                return match.group(1)
+
+        match_raw: re.Match[str] | None = re.search(
+            r"([A-Z]{2}[A-Z0-9]{9}\d)", str(element).upper()
+        )
+        if match_raw:
+            return match_raw.group(1)
+
+        return ""
+
     def _parse_holdings(self, soup: BeautifulSoup) -> list[Holding]:
         holdings: list[Holding] = []
 
-        # 1. Procurar por linhas com data-testid
         rows: list[Tag] = soup.find_all(
-            "tr", {"data-testid": lambda x: x and "top-holdings_row" in x}
+            "tr", {"data-testid": lambda x: x and "top-holdings_row" in str(x)}
         )
 
-        # 2. Fallback: ID clássico top-holdings
         if not rows:
             container_res: Any = soup.find("table", {"id": "top-holdings"})
             container: Tag | None = (
@@ -105,7 +127,6 @@ class JustETFClient:
             if isinstance(container, Tag):
                 rows = container.find_all("tr")
 
-        # 3. Fallback: Div ou section de holdings
         if not rows:
             container_res = soup.find(
                 lambda tag: tag.name in ["div", "section", "table"]
@@ -123,7 +144,6 @@ class JustETFClient:
                 if isinstance(target_table, Tag):
                     rows = target_table.find_all("tr")
 
-        # 4. Fallback: Procurar por cabeçalho textual
         if not rows:
             for table in soup.find_all("table"):
                 header_text: str = table.get_text().lower()
@@ -158,24 +178,13 @@ class JustETFClient:
             if name_elem and weight_elem:
                 name = name_elem.get_text(strip=True)
                 weight_text = weight_elem.get_text(strip=True)
-                if name_elem.name == "a":
-                    href_attr: Any = name_elem.get("href", "")
-                    href: str = str(href_attr) if isinstance(href_attr, str) else ""
-                    if "stock-profiles/" in href:
-                        isin = href.split("stock-profiles/")[-1].split("/")[0].upper()
+                isin = self._extract_isin_from_element(row)
             else:
                 cols: list[Tag] = row.find_all(["td", "th"])
                 if len(cols) >= 2:
                     name = cols[0].get_text(strip=True)
                     weight_text = cols[-1].get_text(strip=True)
-                    link: Any = cols[0].find("a")
-                    if isinstance(link, Tag):
-                        href_attr = link.get("href", "")
-                        href = str(href_attr) if isinstance(href_attr, str) else ""
-                        if "stock-profiles/" in href:
-                            isin = (
-                                href.split("stock-profiles/")[-1].split("/")[0].upper()
-                            )
+                    isin = self._extract_isin_from_element(row)
 
             if not name or name.lower() in [
                 "name",
@@ -340,7 +349,9 @@ class JustETFClient:
                 search_scope: Tag = parent.parent if parent.parent else parent
                 text_content: str = search_scope.get_text()
                 match: re.Match[str] | None = re.search(
-                    r"(\d+[.,]?\d*)\s*%", text_content
+                    r"(?:TER|Total\s*Expense\s*Ratio)[^%]*?(\d+[.,]?\d*)\s*%",
+                    text_content,
+                    re.IGNORECASE,
                 )
                 if match:
                     try:
