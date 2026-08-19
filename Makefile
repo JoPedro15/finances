@@ -112,4 +112,4 @@ analyze-exposure:
 	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
 
 recommend:
-	PYTHONPATH=src $(PYTHON) -m cli.recommend
+	PYTHONPATH=src $(PYTHON) -m cli.recommend -v --skip-ai -o --output-csv
