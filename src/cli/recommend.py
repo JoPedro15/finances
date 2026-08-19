@@ -12,7 +12,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from src.utils.graphics.allocation import generate_allocation_chart
 
 from src.config import DATA_DIR
 from src.core.decision.base import AssetScore
@@ -31,6 +30,7 @@ from src.core.models import (
     StockDetails,
     UrgencyLevel,
 )
+from src.core.providers import ETFProvider, StockProvider
 from src.infra.ai.client import GeminiClient
 from src.infra.notifications.discord import send_discord_notification
 from src.utils.graphics.allocation import generate_allocation_chart
