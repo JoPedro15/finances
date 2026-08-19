@@ -1,31 +1,58 @@
-"""CLI module for evaluating and ranking investment targets with live market data."""
+"""CLI module for evaluating investment targets and AI portfolio rebalancing."""
 
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from src.config import DATA_DIR
 from src.core.decision.base import AssetScore
 from src.core.decision.engine import PortfolioDecisionEngine
-from src.core.models import Asset, ETFDetails, Quotation, StockDetails
+from src.core.exceptions import GeminiAPIError, GeminiAuthError
+from src.core.models import (
+    Asset,
+    ETFDetails,
+    Quotation,
+    RebalanceRecommendation,
+    RecommendationAction,
+    StockDetails,
+    UrgencyLevel,
+)
 from src.core.providers import ETFProvider, StockProvider
+from src.infra.ai.client import GeminiClient
+from src.infra.notifications.discord import send_discord_notification
+from src.utils.logger.logger import logger
+
+app = typer.Typer(help="Investment decision engine and AI rebalancing CLI commands.")
+console = Console()
 
 
 def load_json_data(file_path: Path) -> list[dict[str, Any]]:
     """Loads and normalizes JSON data containing asset lists or holdings."""
     if not file_path.exists():
+        logger.warning(f"File not found: {file_path}")
         return []
 
-    with open(file_path, encoding="utf-8") as file:
-        data: Any = json.load(file)
+    try:
+        with open(file_path, encoding="utf-8") as file:
+            data: Any = json.load(file)
+    except Exception as err:
+        logger.error(f"Failed to read JSON file '{file_path}': {err}")
+        return []
 
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
     if isinstance(data, dict) and "assets" in data:
-        return [item for item in data["assets"] if isinstance(item, dict)]
+        raw_assets: Any = data.get("assets")
+        if isinstance(raw_assets, list):
+            return [item for item in raw_assets if isinstance(item, dict)]
 
     return []
 
@@ -34,8 +61,7 @@ def calculate_current_allocations(
     portfolio_items: list[dict[str, Any]],
     stock_provider: StockProvider,
 ) -> tuple[dict[str, float], float]:
-    """Fetches live prices for active holdings and
-    computes real current allocation %."""
+    """Fetches live prices for active holdings and computes real allocation %."""
     holdings_value_map: dict[str, float] = {}
     total_portfolio_value: float = 0.0
 
@@ -57,8 +83,15 @@ def calculate_current_allocations(
 
         quote: Quotation | None = stock_provider.get_price(dummy_asset)
         current_price: float = quote.price if quote else 0.0
-        position_value: float = quantity * current_price
 
+        if current_price <= 0.0:
+            logger.warning(
+                f"Could not retrieve valid price for holding '{symbol}'. "
+                "Skipping position value calculation."
+            )
+            continue
+
+        position_value: float = quantity * current_price
         holdings_value_map[symbol] = position_value
         total_portfolio_value += position_value
 
@@ -79,7 +112,7 @@ def enrich_target_asset(
     stock_provider: StockProvider,
     etf_provider: ETFProvider,
 ) -> dict[str, Any]:
-    """Enriches wishlist asset with real-time market data and valuation metrics."""
+    """Enriches wishlist asset with real-time market data and metrics."""
     symbol: str = str(target.get("yahoo_ticker") or target.get("symbol") or "").strip()
     asset_type: str = str(target.get("type") or target.get("asset_type") or "").upper()
 
@@ -98,6 +131,9 @@ def enrich_target_asset(
     quote: Quotation | None = stock_provider.get_price(dummy_asset)
     current_price: float = quote.price if quote else 0.0
 
+    if current_price <= 0.0:
+        logger.warning(f"Live market price unavailable for target '{symbol}'.")
+
     stock_details: StockDetails | None = stock_provider.get_details(dummy_asset)
 
     peak_price: float = (
@@ -105,6 +141,9 @@ def enrich_target_asset(
         if stock_details and stock_details.fifty_two_week_high
         else current_price
     )
+    if peak_price <= 0.0:
+        peak_price = max(current_price, 0.01)
+
     low_52w: float | None = stock_details.fifty_two_week_low if stock_details else None
 
     ter: float | None = None
@@ -132,81 +171,212 @@ def enrich_target_asset(
     }
 
 
-def run_decision_cli() -> None:
-    """Orchestrates live data enrichment, asset scoring, and CLI output rendering."""
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        description="Rank portfolio investment targets using live market data."
-    )
-    parser.add_argument(
-        "--targets-file",
-        type=str,
-        default=str(DATA_DIR / "portfolio_targets.json"),
-        help="Path to JSON file containing target wishlist",
-    )
-    parser.add_argument(
-        "--portfolio-file",
-        type=str,
-        default=str(DATA_DIR / "portfolio.json"),
-        help="Path to JSON file containing active holdings",
-    )
+def _format_action(action: RecommendationAction | None) -> Text:
+    """Formats recommendation action with color coding."""
+    if action == RecommendationAction.BUY:
+        return Text("BUY", style="bold green")
+    if action == RecommendationAction.SELL:
+        return Text("SELL", style="bold red")
+    if action == RecommendationAction.HOLD:
+        return Text("HOLD", style="bold yellow")
+    return Text("N/A", style="dim")
 
-    args: argparse.Namespace = parser.parse_args()
 
-    targets_raw: list[dict[str, Any]] = load_json_data(Path(args.targets_file))
-    portfolio_raw: list[dict[str, Any]] = load_json_data(Path(args.portfolio_file))
+def _format_urgency(urgency: UrgencyLevel | None) -> Text:
+    """Formats urgency level with color coding."""
+    if urgency == UrgencyLevel.HIGH:
+        return Text("HIGH", style="bold red")
+    if urgency == UrgencyLevel.MEDIUM:
+        return Text("MED", style="yellow")
+    if urgency == UrgencyLevel.LOW:
+        return Text("LOW", style="green")
+    return Text("N/A", style="dim")
+
+
+@app.command(name="rebalance")
+def recommend_rebalance(
+    targets_file: Annotated[
+        Path,
+        typer.Option(
+            "--targets-file",
+            "-t",
+            help="Path to JSON file containing target wishlist.",
+        ),
+    ] = DATA_DIR
+    / "portfolio_targets.json",
+    portfolio_file: Annotated[
+        Path,
+        typer.Option(
+            "--portfolio-file",
+            "-p",
+            help="Path to JSON file containing active holdings.",
+        ),
+    ] = DATA_DIR
+    / "portfolio.json",
+    skip_ai: Annotated[
+        bool,
+        typer.Option(
+            "--skip-ai",
+            help="Skip Gemini AI analysis and display quantitative scores only.",
+        ),
+    ] = False,
+    notify: Annotated[
+        bool,
+        typer.Option(
+            "--notify",
+            help="Send rebalancing recommendations to Discord webhook.",
+        ),
+    ] = False,
+) -> None:
+    """Ranks targets and provides AI-driven rebalancing recommendations."""
+    targets_raw: list[dict[str, Any]] = load_json_data(targets_file)
+    portfolio_raw: list[dict[str, Any]] = load_json_data(portfolio_file)
+
+    if not targets_raw:
+        console.print(
+            f"[bold red]Error:[/bold red] No targets found in '{targets_file}'."
+        )
+        raise typer.Exit(code=1)
 
     stock_provider: StockProvider = StockProvider()
     etf_provider: ETFProvider = ETFProvider()
 
-    current_alloc_map: dict[str, float]
-    total_val: float
-    current_alloc_map, total_val = calculate_current_allocations(
-        portfolio_raw, stock_provider
-    )
-
-    enriched_assets: list[dict[str, Any]] = []
-    for target in targets_raw:
-        symbol: str = str(
-            target.get("yahoo_ticker") or target.get("symbol") or ""
-        ).strip()
-        alloc_pct: float = current_alloc_map.get(symbol, 0.0)
-        enriched_assets.append(
-            enrich_target_asset(target, alloc_pct, stock_provider, etf_provider)
+    with console.status("[bold cyan]Fetching market data and evaluating portfolio..."):
+        current_alloc_map: dict[str, float]
+        total_val: float
+        current_alloc_map, total_val = calculate_current_allocations(
+            portfolio_raw, stock_provider
         )
+
+        enriched_assets: list[dict[str, Any]] = []
+        for target in targets_raw:
+            symbol: str = str(
+                target.get("yahoo_ticker") or target.get("symbol") or ""
+            ).strip()
+            alloc_pct: float = current_alloc_map.get(symbol, 0.0)
+            try:
+                enriched: dict[str, Any] = enrich_target_asset(
+                    target, alloc_pct, stock_provider, etf_provider
+                )
+                enriched_assets.append(enriched)
+            except Exception as err:
+                logger.error(f"Failed to enrich asset '{symbol}': {err}")
+
+    if not enriched_assets:
+        console.print("[bold red]Error:[/bold red] Could not enrich any target asset.")
+        raise typer.Exit(code=1)
 
     engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
     ranked_scores: list[AssetScore] = engine.rank_assets(enriched_assets)
 
-    price_map: dict[str, float] = {
-        str(asset["symbol"]): float(asset["current_price"]) for asset in enriched_assets
+    gemini_client: GeminiClient | None = None
+    if not skip_ai:
+        try:
+            gemini_client = GeminiClient()
+        except GeminiAuthError as err:
+            console.print(
+                f"[yellow]Warning:[/yellow] Gemini AI disabled ({err}). "
+                "Running in quantitative-only mode."
+            )
+
+    table = Table(
+        title="PORTFOLIO REBALANCING & INVESTMENT DECISION MATRIX",
+        header_style="bold magenta",
+        expand=True,
+    )
+
+    table.add_column("Rank", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Symbol", style="bold white", no_wrap=True)
+    table.add_column("Type", style="dim", no_wrap=True)
+    table.add_column("Price (€)", justify="right")
+    table.add_column("Current %", justify="right")
+    table.add_column("Target %", justify="right")
+    table.add_column("Quant Score", justify="right", style="bold blue")
+
+    if gemini_client:
+        table.add_column("AI Action", justify="center")
+        table.add_column("Urgency", justify="center")
+        table.add_column("Conf.", justify="right")
+        table.add_column("AI Reasoning", style="italic")
+
+    recommendations_map: dict[str, RebalanceRecommendation] = {}
+
+    asset_dict_map: dict[str, dict[str, Any]] = {
+        str(a["symbol"]): a for a in enriched_assets
     }
 
-    print("=" * 72)
-    print("INVESTMENT TARGETS RANKING (LIVE MARKET DATA)")
-    print(f"Total Portfolio Value: {total_val:.2f} EUR")
-    print("=" * 72)
-    print(
-        f"{'Rank':<5} | {'Symbol':<8} | {'Type':<6} | {'Price (€)':<9} | "
-        f"{'Current %':<9} | {'Target %':<8} | {'Score':<7}"
+    with console.status("[bold magenta]Running Gemini AI rebalancing analysis..."):
+        for rank, score in enumerate(ranked_scores, start=1):
+            target_item: dict[str, Any] = asset_dict_map[score.symbol]
+            price: float = float(target_item["current_price"])
+            curr_pct: float = float(target_item["current_allocation_pct"])
+            targ_pct: float = float(target_item["target_allocation_pct"])
+
+            row_data: list[Any] = [
+                str(rank),
+                score.symbol,
+                score.asset_type.value,
+                f"{price:.2f}€",
+                f"{curr_pct:.2f}%",
+                f"{targ_pct:.2f}%",
+                f"{score.total_score:.4f}",
+            ]
+
+            if gemini_client:
+                portfolio_ctx: dict[str, Any] = {
+                    "total_portfolio_value_eur": total_val,
+                    "current_allocation_pct": curr_pct,
+                    "target_allocation_pct": targ_pct,
+                }
+                try:
+                    rec: RebalanceRecommendation = gemini_client.analyze_asset(
+                        asset_data=target_item,
+                        portfolio_context=portfolio_ctx,
+                    )
+                    recommendations_map[score.symbol] = rec
+
+                    conf_str: str = f"{rec.confidence_score * 100:.0f}%"
+                    row_data.extend(
+                        [
+                            _format_action(rec.action),
+                            _format_urgency(rec.urgency_level),
+                            conf_str,
+                            rec.reasoning,
+                        ]
+                    )
+                except (GeminiAPIError, Exception) as err:
+                    logger.error(
+                        f"Gemini AI analysis failed for '{score.symbol}': {err}"
+                    )
+                    row_data.extend(
+                        [
+                            Text("ERROR", style="bold red"),
+                            Text("N/A", style="dim"),
+                            "N/A",
+                            "AI analysis failed",
+                        ]
+                    )
+
+            table.add_row(*row_data)
+
+    header_panel = Panel(
+        Text.from_markup(
+            f"[bold white]Total Portfolio Value:[/bold white] "
+            f"[green]{total_val:,.2f} EUR[/green]\n"
+            f"[bold white]Target Assets Evaluated:[/bold white] "
+            f"[cyan]{len(ranked_scores)}[/cyan]"
+        ),
+        title="[bold yellow]Portfolio Summary[/bold yellow]",
+        border_style="blue",
     )
-    print("-" * 72)
 
-    for rank, score in enumerate(ranked_scores, start=1):
-        price: float = price_map[score.symbol]
-        target_item: dict[str, Any] = next(
-            a for a in enriched_assets if a["symbol"] == score.symbol
-        )
-        curr_pct: float = float(target_item["current_allocation_pct"])
-        targ_pct: float = float(target_item["target_allocation_pct"])
+    console.print(header_panel)
+    console.print(table)
 
-        print(
-            f"{rank:<5} | {score.symbol:<8} | {score.asset_type.value:<6} | "
-            f"{price:>8.2f}€ | {curr_pct:>8.2f}% | {targ_pct:>7.2f}% | "
-            f"{score.total_score:>7.4f}"
-        )
-
-    print("-" * 72)
+    # Dispatches Discord notification if explicitly requested via CLI flag
+    if notify:
+        send_discord_notification(ranked_scores, recommendations_map, total_val)
 
 
 if __name__ == "__main__":
-    run_decision_cli()
+    app()

@@ -36,7 +36,6 @@ jobs:
 
   security:
     name: Security Audits
-    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -56,7 +55,6 @@ jobs:
 
   test:
     name: Unit Tests & Coverage
-    needs: security
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
