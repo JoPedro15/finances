@@ -1,8 +1,8 @@
 """Unit tests for src/infra/ai/client.py.
 
 Covers GeminiClient operations, input validation, prompt building,
-API error mapping, retries, async execution, response parsing, and
-telemetry logging.
+batch prompting, API error mapping, retries, async execution,
+response parsing, and telemetry logging.
 """
 
 from __future__ import annotations
@@ -26,7 +26,11 @@ from src.core.models import (
     RecommendationAction,
     UrgencyLevel,
 )
-from src.infra.ai.client import GeminiClient
+from src.infra.ai.client import (
+    AssetRecommendationItem,
+    BatchRebalanceRecommendations,
+    GeminiClient,
+)
 
 
 @pytest.fixture
@@ -162,7 +166,54 @@ def test_clean_json_text_variations() -> None:
 
 
 # ==============================================================================
-# Synchronous Successful Generation & Response Parsing Tests
+# Batch Prompting Tests
+# ==============================================================================
+
+
+@patch("src.infra.ai.client.genai.Client")
+def test_analyze_portfolio_batch_empty_inputs_raise_value_error(
+    mock_genai_client: MagicMock,
+    valid_asset_data: dict[str, Any],
+    valid_portfolio_context: dict[str, Any],
+) -> None:
+    """Validates analyze_portfolio_batch rejects empty input parameters."""
+    client = GeminiClient(api_key="fake_key")
+
+    with pytest.raises(ValueError, match="assets_data payload list cannot be empty"):
+        client.analyze_portfolio_batch([], valid_portfolio_context)
+
+    with pytest.raises(ValueError, match="portfolio_context payload cannot be empty"):
+        client.analyze_portfolio_batch([valid_asset_data], {})
+
+
+@patch("src.infra.ai.client.genai.Client")
+def test_analyze_portfolio_batch_success(
+    mock_genai_client: MagicMock,
+    valid_asset_data: dict[str, Any],
+    valid_portfolio_context: dict[str, Any],
+    valid_recommendation_dict: dict[str, Any],
+) -> None:
+    """Validates analyze_portfolio_batch successfully parses batch response."""
+    rec = RebalanceRecommendation.model_validate(valid_recommendation_dict)
+    item = AssetRecommendationItem(symbol="AAPL", recommendation=rec)
+    batch_container = BatchRebalanceRecommendations(items=[item])
+
+    mock_response = MagicMock()
+    mock_response.parsed = batch_container
+
+    mock_client_instance = MagicMock()
+    mock_client_instance.models.generate_content.return_value = mock_response
+    mock_genai_client.return_value = mock_client_instance
+
+    client = GeminiClient(api_key="fake_key")
+    result = client.analyze_portfolio_batch([valid_asset_data], valid_portfolio_context)
+
+    assert "AAPL" in result
+    assert result["AAPL"].action == RecommendationAction.BUY
+
+
+# ==============================================================================
+# Synchronous Generation & Response Parsing Tests
 # ==============================================================================
 
 
@@ -266,7 +317,7 @@ def test_analyze_asset_ticker_resolution_and_custom_options(
 
 
 # ==============================================================================
-# Retry Mechanism & Error Handling Tests (Sync & Async)
+# Retry Mechanism & Error Handling Tests
 # ==============================================================================
 
 

@@ -35,7 +35,7 @@ runner: CliRunner = CliRunner()
 
 
 def test_load_json_data_missing_file(tmp_path: Path) -> None:
-    """Validates load_json_data returns an empty list when file does not exist."""
+    """Validates load_json_data returns empty list when file is missing."""
     missing_file: Path = tmp_path / "missing.json"
     assert load_json_data(missing_file) == []
 
@@ -66,21 +66,21 @@ def test_load_json_data_dict_format(tmp_path: Path) -> None:
 
 
 def test_load_json_data_dict_invalid_assets(tmp_path: Path) -> None:
-    """Validates load_json_data returns empty list when assets key is not list."""
+    """Validates load_json_data returns empty list when assets key invalid."""
     file_path: Path = tmp_path / "invalid_assets.json"
     file_path.write_text('{"assets": "not_a_list"}', encoding="utf-8")
     assert load_json_data(file_path) == []
 
 
 def test_load_json_data_invalid_structure(tmp_path: Path) -> None:
-    """Validates load_json_data returns empty list for unexpected JSON roots."""
+    """Validates load_json_data returns empty list for unexpected roots."""
     file_path: Path = tmp_path / "invalid_root.json"
     file_path.write_text('"just a string"', encoding="utf-8")
     assert load_json_data(file_path) == []
 
 
 def test_calculate_current_allocations_success() -> None:
-    """Validates calculate_current_allocations computes portfolio % allocations."""
+    """Validates calculate_current_allocations computes portfolio %."""
     mock_stock_provider: MagicMock = MagicMock()
     mock_stock_provider.get_price.side_effect = [
         Quotation(price=100.0, currency="EUR"),
@@ -106,7 +106,7 @@ def test_calculate_current_allocations_success() -> None:
 
 
 def test_calculate_current_allocations_zero_price_skipped() -> None:
-    """Validates calculate_current_allocations skips positions with 0 price."""
+    """Validates calculate_current_allocations skips 0 price positions."""
     mock_stock_provider: MagicMock = MagicMock()
     mock_stock_provider.get_price.side_effect = [
         Quotation(price=0.0, currency="EUR"),
@@ -130,7 +130,7 @@ def test_calculate_current_allocations_zero_price_skipped() -> None:
 
 
 def test_calculate_current_allocations_zero_total_value() -> None:
-    """Validates calculate_current_allocations returns empty map when value is 0."""
+    """Validates calculate_current_allocations returns empty map on 0 value."""
     mock_stock_provider: MagicMock = MagicMock()
     mock_stock_provider.get_price.return_value = None
 
@@ -147,7 +147,7 @@ def test_calculate_current_allocations_zero_total_value() -> None:
 
 
 def test_enrich_target_asset_stock_success() -> None:
-    """Validates enrich_target_asset enriches stock wishlist items with market data."""
+    """Validates enrich_target_asset enriches stock wishlist items."""
     mock_stock_provider: MagicMock = MagicMock()
     mock_etf_provider: MagicMock = MagicMock()
 
@@ -187,7 +187,7 @@ def test_enrich_target_asset_stock_success() -> None:
 
 
 def test_enrich_target_asset_peak_price_zero_fallback() -> None:
-    """Validates peak_price defaults to a floor value when prices are zero."""
+    """Validates peak_price defaults to floor value when prices are zero."""
     mock_stock_provider: MagicMock = MagicMock()
     mock_etf_provider: MagicMock = MagicMock()
 
@@ -232,9 +232,7 @@ def test_enrich_target_asset_etf_with_direct_ter() -> None:
 
 
 def test_enrich_target_asset_etf_with_ter_fallback() -> None:
-    """Validates enrich_target_asset falls back to target dict TER when details
-    TER is None.
-    """
+    """Validates enrich_target_asset falls back to target dict TER."""
     mock_stock_provider: MagicMock = MagicMock()
     mock_etf_provider: MagicMock = MagicMock()
 
@@ -265,9 +263,7 @@ def test_enrich_target_asset_etf_with_ter_fallback() -> None:
 
 
 def test_enrich_target_asset_missing_symbol_or_type_raises_error() -> None:
-    """Validates enrich_target_asset raises ValueError when mandatory keys are
-    missing.
-    """
+    """Validates enrich_target_asset raises ValueError on missing keys."""
     mock_stock_provider: MagicMock = MagicMock()
     mock_etf_provider: MagicMock = MagicMock()
 
@@ -281,7 +277,7 @@ def test_enrich_target_asset_missing_symbol_or_type_raises_error() -> None:
 
 
 def test_format_action_and_urgency_helpers() -> None:
-    """Validates color-coded text formatting helpers for actions and urgencies."""
+    """Validates color-coded text formatting helpers."""
     assert _format_action(RecommendationAction.BUY).plain == "BUY"
     assert _format_action(RecommendationAction.SELL).plain == "SELL"
     assert _format_action(RecommendationAction.HOLD).plain == "HOLD"
@@ -324,7 +320,7 @@ def test_recommend_rebalance_full_ai_success(
     mock_gemini_cls: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """Validates CLI rebalance command execution with successful AI analysis."""
+    """Validates CLI rebalance command execution with batch AI analysis."""
     targets_file: Path = tmp_path / "targets.json"
     portfolio_file: Path = tmp_path / "portfolio.json"
 
@@ -352,15 +348,17 @@ def test_recommend_rebalance_full_ai_success(
     mock_stock_cls.return_value = mock_stock_inst
 
     mock_gemini_inst: MagicMock = MagicMock()
-    mock_gemini_inst.analyze_asset.return_value = RebalanceRecommendation(
-        action=RecommendationAction.BUY,
-        urgency_level=UrgencyLevel.HIGH,
-        confidence_score=0.9,
-        target_allocation_pct=50.0,
-        risk_score=3,
-        valuation_score=8,
-        reasoning="Strong growth potential and undervaluation.",
-    )
+    mock_gemini_inst.analyze_portfolio_batch.return_value = {
+        "AAPL": RebalanceRecommendation(
+            action=RecommendationAction.BUY,
+            urgency_level=UrgencyLevel.HIGH,
+            confidence_score=0.9,
+            target_allocation_pct=50.0,
+            risk_score=3,
+            valuation_score=8,
+            reasoning="Strong growth potential and undervaluation.",
+        )
+    }
     mock_gemini_cls.return_value = mock_gemini_inst
 
     result: Any = runner.invoke(
@@ -425,7 +423,7 @@ def test_recommend_rebalance_without_notify_skips_discord(
     mock_send_discord: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """Validates missing --notify flag refrains from calling Discord notification."""
+    """Validates missing --notify flag refrains from sending notification."""
     targets_file: Path = tmp_path / "targets.json"
     portfolio_file: Path = tmp_path / "portfolio.json"
 
@@ -496,12 +494,12 @@ def test_recommend_rebalance_gemini_auth_error_fallback(
 
 @patch("src.cli.recommend.GeminiClient")
 @patch("src.cli.recommend.StockProvider")
-def test_recommend_rebalance_gemini_api_error_per_asset(
+def test_recommend_rebalance_gemini_batch_api_error(
     mock_stock_cls: MagicMock,
     mock_gemini_cls: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """Validates error row handling when Gemini API fails for an asset."""
+    """Validates fallback to quant-only mode when Gemini batch analysis fails."""
     targets_file: Path = tmp_path / "targets.json"
     portfolio_file: Path = tmp_path / "portfolio.json"
 
@@ -517,7 +515,9 @@ def test_recommend_rebalance_gemini_api_error_per_asset(
     mock_stock_cls.return_value = mock_stock_inst
 
     mock_gemini_inst: MagicMock = MagicMock()
-    mock_gemini_inst.analyze_asset.side_effect = GeminiAPIError("Quota exceeded")
+    mock_gemini_inst.analyze_portfolio_batch.side_effect = GeminiAPIError(
+        "Quota exceeded"
+    )
     mock_gemini_cls.return_value = mock_gemini_inst
 
     result: Any = runner.invoke(
@@ -531,8 +531,47 @@ def test_recommend_rebalance_gemini_api_error_per_asset(
     )
 
     assert result.exit_code == 0
-    assert "ERROR" in result.output
-    assert "AI analysis failed" in result.output
+    assert "Gemini AI analysis unavailable" in result.output
+    assert "AAPL" in result.output
+
+
+@patch("src.cli.recommend.StockProvider")
+def test_recommend_rebalance_verbose_flag_renders_subscores(
+    mock_stock_cls: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Validates -v/--verbose flag renders score factor breakdown columns."""
+    targets_file: Path = tmp_path / "targets.json"
+    portfolio_file: Path = tmp_path / "portfolio.json"
+
+    targets_file.write_text(
+        '[{"symbol": "MSFT", "type": "STOCK", "target_allocation_pct": 100.0}]',
+        encoding="utf-8",
+    )
+    portfolio_file.write_text("[]", encoding="utf-8")
+
+    mock_stock_inst: MagicMock = MagicMock()
+    mock_stock_inst.get_price.return_value = Quotation(price=300.0, currency="EUR")
+    mock_stock_inst.get_details.return_value = None
+    mock_stock_cls.return_value = mock_stock_inst
+
+    result: Any = runner.invoke(
+        app,
+        [
+            "--targets-file",
+            str(targets_file),
+            "--portfolio-file",
+            str(portfolio_file),
+            "--skip-ai",
+            "-v",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Dip" in result.output
+    assert "Cost" in result.output
+    assert "Gap" in result.output
+    assert "MSFT" in result.output
 
 
 @patch("src.cli.recommend.StockProvider")
@@ -574,7 +613,10 @@ def test_recommend_rebalance_skip_ai(
 
 def test_main_module_execution() -> None:
     """Validates module execution flow when invoked as __main__ script."""
-    with patch.object(sys, "argv", ["recommend", "--help"]), patch.dict(sys.modules):
+    with (
+        patch.object(sys, "argv", ["recommend", "--help"]),
+        patch.dict(sys.modules),
+    ):
         sys.modules.pop("src.cli.recommend", None)
         with pytest.raises(SystemExit) as exc_info:
             runpy.run_module("src.cli.recommend", run_name="__main__")
