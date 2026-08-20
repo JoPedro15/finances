@@ -61,7 +61,7 @@ def calculate_portfolio_exposure(
     for isin, asset in asset_map.items():
         if not asset.isin or len(asset.isin) != 12:
             continue
-        if asset.asset_type != "etf":
+        if str(asset.asset_type).upper() != "ETF":
             continue
 
         asset_value_eur: float = snapshot_map.get(isin, 0.0)

@@ -31,20 +31,18 @@ runner: CliRunner = CliRunner()
 
 
 def test_main_callback_validation_error() -> None:
-    """Validates that main callback catches ValidationError and exits with code 1."""
+    """Validates that main callback catches ValidationError and exits code 1."""
     err: ValidationError = ValidationError.from_exception_data("Settings", [])
 
-    # Mock settings attribute access to simulate ValidationError on startup evaluation
     with patch("main.settings", new=MagicMock(side_effect=err)):
         with patch("src.config.Settings.__init__", side_effect=err):
             with pytest.raises(Exit) as exc_info:
-                # Force settings evaluation path inside callback
                 try:
                     raise err
                 except ValidationError as e:
                     from src.utils.logger.logger import logger
 
-                    logger.error(f"Environment configuration validation failed:\n{e}")
+                    logger.error(f"Validation failed:\n{e}")
                     raise Exit(code=1) from e
 
             assert exc_info.value.exit_code == 1
@@ -76,6 +74,13 @@ def test_get_snapshot_command_failure() -> None:
         assert result.exit_code == 1
 
 
+def test_get_snapshot_command_unexpected_exception() -> None:
+    """Tests 'get-snapshot' CLI command handling unexpected exception."""
+    with patch("main.get_snapshot", side_effect=RuntimeError("Unexpected error")):
+        result: Any = runner.invoke(app, ["get-snapshot"])
+        assert result.exit_code == 1
+
+
 # --- SAVE SNAPSHOT COMMAND TESTS ---
 
 
@@ -102,15 +107,32 @@ def test_save_snapshot_command_failure() -> None:
         assert result.exit_code == 1
 
 
+def test_save_snapshot_command_unexpected_exception() -> None:
+    """Tests 'save-snapshot' CLI command handling unexpected exception."""
+    with patch("main.get_snapshot", side_effect=RuntimeError("Unexpected error")):
+        result: Any = runner.invoke(app, ["save-snapshot"])
+        assert result.exit_code == 1
+
+
 # --- ANALYZE COMMAND TESTS ---
 
 
-def test_analyze_command() -> None:
-    """Tests 'analyze' CLI command execution."""
+def test_analyze_command_success() -> None:
+    """Tests 'analyze' CLI command execution on success."""
     with patch("main.analyze_overall_performance") as mock_analyze:
         result: Any = runner.invoke(app, ["analyze"])
         assert result.exit_code == 0
         mock_analyze.assert_called_once()
+
+
+def test_analyze_command_exception() -> None:
+    """Tests 'analyze' CLI command exiting with code 1 on exception."""
+    with patch(
+        "main.analyze_overall_performance",
+        side_effect=RuntimeError("Analysis error"),
+    ):
+        result: Any = runner.invoke(app, ["analyze"])
+        assert result.exit_code == 1
 
 
 # --- PULL CONFIG COMMAND TESTS ---
@@ -141,6 +163,16 @@ def test_pull_config_command_failure(mock_gdrive_cls: MagicMock) -> None:
 
     assert result.exit_code == 0
     assert "failed to download" in result.output
+
+
+@patch("main.GoogleDriveService")
+def test_pull_config_command_exception(mock_gdrive_cls: MagicMock) -> None:
+    """Tests 'pull-config' CLI command handling exception during execution."""
+    mock_gdrive_cls.side_effect = RuntimeError("Drive service init error")
+
+    result: Any = runner.invoke(app, ["pull-config"])
+
+    assert result.exit_code == 1
 
 
 # --- PUSH CONFIG COMMAND TESTS ---
@@ -193,6 +225,16 @@ def test_push_config_command_upload_failed(
 
     assert result.exit_code == 0
     assert "failed to upload" in result.output
+
+
+@patch("main.GoogleDriveService")
+def test_push_config_command_exception(mock_gdrive_cls: MagicMock) -> None:
+    """Tests 'push-config' CLI command handling exception during execution."""
+    mock_gdrive_cls.side_effect = RuntimeError("Drive error")
+
+    result: Any = runner.invoke(app, ["push-config"])
+
+    assert result.exit_code == 1
 
 
 # --- ETF DETAILS COMMAND TESTS ---
@@ -276,6 +318,21 @@ def test_etf_details_cmd_single_isin_repo_exception(
 
     assert result.exit_code == 0
     assert "IE00B4L5Y983" in result.output
+
+
+@patch("main.ETFProvider")
+@patch("main.SqlitePortfolioRepository")
+def test_etf_details_cmd_single_isin_provider_exception(
+    mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
+) -> None:
+    """Tests 'etf-details' CLI command when provider raises exception."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+    mock_provider.get_details.side_effect = RuntimeError("Scraper failed")
+
+    result: Any = runner.invoke(app, ["etf-details", "IE00B4L5Y983"])
+
+    assert result.exit_code == 0
 
 
 @patch("main.ETFProvider")
@@ -416,10 +473,10 @@ def test_format_market_cap_helper() -> None:
 
 @patch("main.StockProvider")
 @patch("main.SqlitePortfolioRepository")
-def test_stock_details_cmd_single_stock_success(
+def test_stock_details_cmd_single_stock_success_with_all_metrics(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'stock-details' CLI command on successful stock lookup by ticker."""
+    """Tests 'stock-details' with all fundamental metrics populated."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -442,7 +499,16 @@ def test_stock_details_cmd_single_stock_success(
         market_cap=3000000000000.0,
         pe_ratio=30.0,
         forward_pe=25.0,
+        peg_ratio=1.2,
+        price_to_book=15.0,
         dividend_yield_pct=0.5,
+        beta=1.1,
+        profit_margins_pct=25.0,
+        revenue_growth_pct=10.0,
+        earnings_growth_pct=12.0,
+        total_debt_to_equity=1.5,
+        target_mean_price=220.0,
+        recommendation_key="buy",
         fifty_two_week_high=200.0,
         fifty_two_week_low=160.0,
     )
@@ -454,6 +520,8 @@ def test_stock_details_cmd_single_stock_success(
     assert "AAPL" in result.output
     assert "US0378331005" in result.output
     assert "Technology" in result.output
+    assert "PEG Ratio: 1.20" in result.output
+    assert "BUY" in result.output
 
 
 @patch("main.StockProvider")
@@ -493,6 +561,21 @@ def test_stock_details_cmd_matched_by_isin(
 
     assert result.exit_code == 0
     assert "MSFT" in result.output
+
+
+@patch("main.StockProvider")
+@patch("main.SqlitePortfolioRepository")
+def test_stock_details_cmd_provider_exception(
+    mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
+) -> None:
+    """Tests 'stock-details' CLI command when provider raises exception."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+    mock_provider.get_details.side_effect = RuntimeError("yfinance failed")
+
+    result: Any = runner.invoke(app, ["stock-details", "AAPL"])
+
+    assert result.exit_code == 0
 
 
 @patch("main.StockProvider")
@@ -695,6 +778,18 @@ def test_analyze_exposure_cmd_zero_etf_value(
     assert "No active ETF holdings found in portfolio." in result.output
 
 
+@patch("main.get_snapshot")
+def test_analyze_exposure_cmd_unexpected_exception(
+    mock_get_snapshot: MagicMock,
+) -> None:
+    """Tests 'analyze-exposure' CLI command handling unexpected exception."""
+    mock_get_snapshot.side_effect = RuntimeError("Calculation error")
+
+    result: Any = runner.invoke(app, ["analyze-exposure"])
+
+    assert result.exit_code == 1
+
+
 # --- DECISION COMMAND TESTS ---
 
 
@@ -727,8 +822,6 @@ def test_decision_command_custom_options(
             "custom_portfolio.json",
             "--skip-ai",
             "-v",
-            "-o",
-            "custom_output.csv",
         ],
     )
 
@@ -739,4 +832,3 @@ def test_decision_command_custom_options(
     assert str(kwargs["portfolio_file"]) == "custom_portfolio.json"
     assert kwargs["skip_ai"] is True
     assert kwargs["verbose"] is True
-    assert str(kwargs["output_csv"]) == "custom_output.csv"

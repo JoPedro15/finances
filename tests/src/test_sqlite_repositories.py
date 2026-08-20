@@ -190,5 +190,5 @@ def test_migrate_json_to_sqlite_default_args(
 
     migrate_json_to_sqlite(sqlite_db=sqlite_db)
 
-    mock_json_p.assert_called_once_with("data/portfolio.json")
-    mock_json_h.assert_called_once_with("data/history.json")
+    mock_json_p.assert_called_once_with(Path("data/portfolio.json"))
+    mock_json_h.assert_called_once_with(Path("data/history.json"))

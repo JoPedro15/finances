@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     gdrive_snapshot_folder_id: str | None = Field(
         default=None, alias="GDRIVE_SNAPSHOT_FOLDER_ID"
     )
+    gdrive_reports_folder_id: str | None = Field(
+        default=None, alias="GDRIVE_REPORTS_FOLDER_ID"
+    )
 
     # Cache Settings
     etf_cache_ttl_days: int = Field(default=30, alias="ETF_CACHE_TTL_DAYS")
@@ -99,6 +102,7 @@ CREDS_PATH_GDRIVE: Path = settings.gdrive_client_secret_file
 TOKEN_PATH_GDRIVE: Path = settings.gdrive_token_file
 GDRIVE_CONFIG_FOLDER_ID: str | None = settings.gdrive_config_folder_id
 GDRIVE_SNAPSHOT_FOLDER_ID: str | None = settings.gdrive_snapshot_folder_id
+GDRIVE_REPORTS_FOLDER_ID: str | None = settings.gdrive_reports_folder_id
 
 ETF_CACHE_FILE: Path = DATA_DIR / "etf_cache.json"
 DEFAULT_ETF_CACHE_TTL_DAYS: int = settings.etf_cache_ttl_days

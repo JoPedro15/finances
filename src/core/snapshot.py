@@ -26,7 +26,8 @@ from src.utils.logger.logger import logger
 
 def get_provider_for_asset(asset: Asset) -> AssetDataProvider:
     """Selects the appropriate data provider based on asset type."""
-    if getattr(asset, "asset_type", "stock") == "etf":
+    asset_type: str = str(getattr(asset, "asset_type", "STOCK")).upper()
+    if asset_type == "ETF":
         return ETFProvider()
     return StockProvider()
 
