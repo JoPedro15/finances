@@ -695,38 +695,40 @@ def test_analyze_exposure_cmd_zero_etf_value(
     assert "No active ETF holdings found in portfolio." in result.output
 
 
-# --- RECOMMEND REBALANCE COMMAND TESTS ---
+# --- DECISION COMMAND TESTS ---
 
 
 @patch("main.recommend_rebalance")
-def test_recommend_rebalance_command_defaults(
+def test_decision_command_defaults(
     mock_recommend: MagicMock,
 ) -> None:
-    """Tests 'recommend-rebalance' CLI command execution with defaults."""
-    result: Any = runner.invoke(app, ["recommend-rebalance"])
+    """Tests 'decision' CLI command execution with default parameters."""
+    result: Any = runner.invoke(app, ["decision"])
 
     assert result.exit_code == 0
     mock_recommend.assert_called_once()
     _, kwargs = mock_recommend.call_args
     assert kwargs["skip_ai"] is False
-    assert kwargs["notify"] is False
+    assert kwargs["verbose"] is False
 
 
 @patch("main.recommend_rebalance")
-def test_recommend_rebalance_command_custom_options(
+def test_decision_command_custom_options(
     mock_recommend: MagicMock,
 ) -> None:
-    """Tests 'recommend-rebalance' CLI command with custom parameters."""
+    """Tests 'decision' CLI command with custom options."""
     result: Any = runner.invoke(
         app,
         [
-            "recommend-rebalance",
+            "decision",
             "--targets-file",
             "custom_targets.json",
             "--portfolio-file",
             "custom_portfolio.json",
             "--skip-ai",
-            "--notify",
+            "-v",
+            "-o",
+            "custom_output.csv",
         ],
     )
 
@@ -736,4 +738,5 @@ def test_recommend_rebalance_command_custom_options(
     assert str(kwargs["targets_file"]) == "custom_targets.json"
     assert str(kwargs["portfolio_file"]) == "custom_portfolio.json"
     assert kwargs["skip_ai"] is True
-    assert kwargs["notify"] is True
+    assert kwargs["verbose"] is True
+    assert str(kwargs["output_csv"]) == "custom_output.csv"

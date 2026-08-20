@@ -1,4 +1,4 @@
-"""CLI module for evaluating investment targets and AI portfolio rebalancing."""
+"""CLI module for evaluating investment targets and decision ranking."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from src.config import DATA_DIR
+from src.config import DATA_DIR, settings
 from src.core.decision.base import AssetScore
 from src.core.decision.engine import PortfolioDecisionEngine
 from src.core.exceptions import (
@@ -32,15 +32,11 @@ from src.core.models import (
 )
 from src.core.providers import ETFProvider, StockProvider
 from src.infra.ai.client import GeminiClient
-from src.infra.notifications.discord import send_discord_notification
-from src.utils.graphics.allocation import generate_allocation_chart
 from src.utils.logger.logger import logger
 
-DEFAULT_OUTPUT_CSV: Path = Path("output") / "recommend_output.csv"
+DEFAULT_OUTPUT_CSV: Path = Path("output") / "decision_output.csv"
 
-app: typer.Typer = typer.Typer(
-    help="Investment decision engine and AI rebalancing CLI commands."
-)
+app: typer.Typer = typer.Typer(help="Investment decision engine CLI commands.")
 console: Console = Console()
 
 
@@ -284,46 +280,82 @@ def _display_rebalance_results(
     has_ai: bool,
     verbose: bool = False,
 ) -> None:
-    """Renders compact decision matrix and AI insight panels using Rich."""
-    console.print()
-    summary_panel: Panel = Panel(
-        Text.from_markup(
-            f"[bold white]Total Portfolio Value:[/bold white] "
-            f"[green]{total_val:,.2f} EUR[/green]\n"
-            f"[bold white]Target Assets Evaluated:[/bold white] "
-            f"[cyan]{len(ranked_scores)}[/cyan]"
-        ),
-        title="[bold yellow]Portfolio Summary[/bold yellow]",
-        border_style="blue",
-        expand=False,
-    )
-    console.print(summary_panel)
+    """Renders decision strategy coefficients, matrix, and expanded action cards."""
     console.print()
 
+    # Strategy weights
+    stock_weights: str = (
+        f"Dip: [cyan]{settings.stock_weight_dip:.2f}[/cyan] | "
+        f"Fwd P/E: [cyan]{settings.stock_weight_forward_pe:.2f}[/cyan] | "
+        f"52w Range: [cyan]{settings.stock_weight_52w_range:.2f}[/cyan] | "
+        f"Gap: [cyan]{settings.stock_weight_allocation:.2f}[/cyan]"
+    )
+    etf_weights: str = (
+        f"Dip: [cyan]{settings.etf_weight_dip:.2f}[/cyan] | "
+        f"TER/Cost: [cyan]{settings.etf_weight_ter:.2f}[/cyan] | "
+        f"Gap: [cyan]{settings.etf_weight_allocation:.2f}[/cyan]"
+    )
+
+    summary_text: str = (
+        f"[bold white]Total Portfolio Value:[/bold white] "
+        f"[green]{total_val:,.2f} EUR[/green]  │  "
+        f"[bold white]Target Assets Evaluated:[/bold white] "
+        f"[cyan]{len(ranked_scores)}[/cyan]\n\n"
+        f"[bold yellow]Active Decision Strategy Weights:[/bold yellow]\n"
+        f"  • [bold]Stocks Formula:[/bold] {stock_weights}\n"
+        f"  • [bold]ETFs Formula:[/bold]   {etf_weights}"
+    )
+
+    summary_panel: Panel = Panel(
+        summary_text,
+        title="[bold yellow]Portfolio & Decision Strategy Summary[/bold yellow]",
+        border_style="blue",
+        expand=True,
+    )
+    console.print(summary_panel, soft_wrap=True)
+    console.print()
+
+    # Decision Matrix Table
     table: Table = Table(
         title="PORTFOLIO REBALANCING & INVESTMENT DECISION MATRIX",
         header_style="bold magenta",
         show_header=True,
+        pad_edge=True,
+        expand=False,
     )
 
-    table.add_column("Rank", justify="center", style="cyan", no_wrap=True, width=6)
-    table.add_column("Symbol", style="bold white", no_wrap=True, width=10)
-    table.add_column("Type", style="dim", no_wrap=True, width=8)
-    table.add_column("Price (€)", justify="right", width=10)
-    table.add_column("Cur %", justify="right", width=8)
-    table.add_column("Tar %", justify="right", width=8)
+    table.add_column("Rank", justify="center", style="cyan", no_wrap=True, min_width=4)
+    table.add_column(
+        "Symbol",
+        justify="center",
+        style="bold white",
+        no_wrap=True,
+        min_width=10,
+    )
+    table.add_column("Type", justify="center", style="dim", no_wrap=True, min_width=6)
+    table.add_column("Price (€)", justify="right", no_wrap=True, min_width=9)
+    table.add_column("Current %", justify="right", no_wrap=True, min_width=9)
+    table.add_column("Target %", justify="right", no_wrap=True, min_width=8)
 
     if verbose:
-        table.add_column("Dip Sc", justify="right", style="dim", no_wrap=True, width=8)
-        table.add_column("Cost Sc", justify="right", style="dim", no_wrap=True, width=8)
-        table.add_column("Gap Sc", justify="right", style="dim", no_wrap=True, width=8)
+        table.add_column(
+            "Dip Sc", justify="right", style="dim", no_wrap=True, min_width=6
+        )
+        table.add_column(
+            "Cost Sc", justify="right", style="dim", no_wrap=True, min_width=7
+        )
+        table.add_column(
+            "Gap Sc", justify="right", style="dim", no_wrap=True, min_width=6
+        )
 
-    table.add_column("Quant Score", justify="right", style="bold blue", width=12)
+    table.add_column(
+        "Score", justify="right", style="bold blue", no_wrap=True, min_width=5
+    )
 
     if has_ai:
-        table.add_column("AI Action", justify="center", width=10)
-        table.add_column("Urgency", justify="center", width=8)
-        table.add_column("Conf.", justify="right", width=8)
+        table.add_column("AI Action", justify="center", no_wrap=True, min_width=9)
+        table.add_column("Urgency", justify="center", no_wrap=True, min_width=7)
+        table.add_column("Conf.", justify="right", no_wrap=True, min_width=6)
 
     for rank, score in enumerate(ranked_scores, start=1):
         target_item: dict[str, Any] = asset_dict_map[score.symbol]
@@ -349,7 +381,7 @@ def _display_rebalance_results(
                 ]
             )
 
-        row_data.append(f"{score.total_score:.4f}")
+        row_data.append(f"{score.total_score:.3f}")
 
         if has_ai:
             rec: RebalanceRecommendation | None = recommendations_map.get(score.symbol)
@@ -373,9 +405,10 @@ def _display_rebalance_results(
 
         table.add_row(*row_data)
 
-    console.print(table)
+    console.print(table, soft_wrap=True)
     console.print()
 
+    # Actionable Advisory Cards
     score_map: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
     if has_ai and recommendations_map:
         active_recs: list[tuple[str, RebalanceRecommendation]] = [
@@ -389,28 +422,82 @@ def _display_rebalance_results(
                 "[bold yellow]💡 Actionable AI Advisory Insights[/bold yellow]"
             )
             for symbol, rec in active_recs:
+                target_item = asset_dict_map[symbol]
                 act_text: Text = _format_action(rec.action)
                 urg_text: Text = _format_urgency(rec.urgency_level)
                 confidence_val_str: str = f"{rec.confidence_score * 100:.0f}%"
 
-                score_info: AssetScore | None = score_map.get(symbol)
-                breakdown_str: str = ""
-                if score_info:
-                    breakdown_str = (
-                        f"\n[bold dim]Score Factors:[/bold dim] "
-                        f"[dim]Dip: {score_info.dip_score:.2f} | "
-                        f"Cost: {score_info.cost_score:.2f} | "
-                        f"Gap: {score_info.allocation_score:.2f} "
-                        f"→ Total: {score_info.total_score:.4f}[/dim]"
+                curr_price: float = float(target_item.get("current_price", 0.0))
+                peak_price: float = float(target_item.get("peak_price", 0.0))
+                low_52w: float | None = target_item.get("low_52w")
+
+                curr_alloc: float = float(
+                    target_item.get("current_allocation_pct", 0.0)
+                )
+                targ_alloc: float = float(target_item.get("target_allocation_pct", 0.0))
+
+                delta_pct: float = targ_alloc - curr_alloc
+                delta_str: str = (
+                    f"+{delta_pct:.1f}%" if delta_pct >= 0 else f"{delta_pct:.1f}%"
+                )
+
+                val_lines: str = ""
+                if target_item.get("asset_type") == "ETF":
+                    ter_val = target_item.get("ter")
+                    ter_str = f"{ter_val:.2f}%" if ter_val is not None else "N/A"
+                    val_lines = (
+                        f"• [bold]Valuation & Cost Metrics:[/bold]\n"
+                        f"  - Total Expense Ratio (TER): [cyan]{ter_str}[/cyan]"
+                    )
+                else:
+                    tr_pe = target_item.get("trailing_pe")
+                    fw_pe = target_item.get("forward_pe")
+                    tr_str = f"{tr_pe:.1f}" if tr_pe else "N/A"
+                    fw_str = f"{fw_pe:.1f}" if fw_pe else "N/A"
+                    low_str = f"{low_52w:,.2f} EUR" if low_52w else "N/A"
+                    peak_str = f"{peak_price:,.2f} EUR" if peak_price else "N/A"
+                    val_lines = (
+                        f"• [bold]Valuation & Market Data:[/bold]\n"
+                        f"  - Trailing P/E: [cyan]{tr_str}[/cyan]\n"
+                        f"  - Forward P/E: [cyan]{fw_str}[/cyan]\n"
+                        f"  - 52w Range (Low / High): "
+                        f"[cyan]{low_str}[/cyan] / [cyan]{peak_str}[/cyan]"
                     )
 
+                score_info: AssetScore | None = score_map.get(symbol)
+                factor_lines: str = ""
+                if score_info:
+                    cost_sc_str: str = f"{score_info.cost_score:.2f}"
+                    tot_sc_str: str = f"{score_info.total_score:.3f}"
+                    factor_lines = (
+                        f"• [bold]Factor Scores:[/bold]\n"
+                        f"  - Dip Score: "
+                        f"[cyan]{score_info.dip_score:.2f}[/cyan]\n"
+                        f"  - Valuation/Cost Score: "
+                        f"[cyan]{cost_sc_str}[/cyan]\n"
+                        f"  - Gap Score: "
+                        f"[cyan]{score_info.allocation_score:.2f}[/cyan]\n"
+                        f"  - Quant Total: "
+                        f"[bold blue]{tot_sc_str}[/bold blue]"
+                    )
+
+                divider: str = "─" * 67
                 panel_content: str = (
-                    f"[bold]Action:[/bold] {act_text.markup} | "
-                    f"[bold]Urgency:[/bold] {urg_text.markup} | "
-                    f"[bold]Confidence:[/bold] {confidence_val_str}"
-                    f"{breakdown_str}\n"
+                    f"[bold]Action:[/bold] {act_text.markup}  │  "
+                    f"[bold]Urgency:[/bold] {urg_text.markup}  │  "
+                    f"[bold]Confidence:[/bold] {confidence_val_str}\n"
+                    f"{divider}\n"
+                    f"• [bold]Price:[/bold] {curr_price:,.2f} EUR "
+                    f"(52w Peak: {peak_price:,.2f} EUR)\n"
+                    f"• [bold]Allocation Gap:[/bold] Current {curr_alloc:.1f}% "
+                    f"vs Target {targ_alloc:.1f}% "
+                    f"(Δ Target: [yellow]{delta_str}[/yellow])\n"
+                    f"{val_lines}\n"
+                    f"{factor_lines}\n"
+                    f"{divider}\n"
                     f"[italic]{rec.reasoning}[/italic]"
                 )
+
                 border_style: str = (
                     "green" if rec.action == RecommendationAction.BUY else "red"
                 )
@@ -449,13 +536,6 @@ def recommend_rebalance(
         typer.Option(
             "--skip-ai",
             help="Skip Gemini AI analysis and display quantitative scores only.",
-        ),
-    ] = False,
-    notify: Annotated[
-        bool,
-        typer.Option(
-            "--notify",
-            help="Send rebalancing recommendations to Discord webhook.",
         ),
     ] = False,
     verbose: Annotated[
@@ -563,28 +643,6 @@ def recommend_rebalance(
         recommendations_map=recommendations_map,
         output_path=output_csv,
     )
-
-    if notify:
-        symbols_list: list[str] = [str(a["symbol"]) for a in enriched_assets]
-        current_alloc_list: list[float] = [
-            float(a["current_allocation_pct"]) for a in enriched_assets
-        ]
-        target_alloc_list: list[float] = [
-            float(a["target_allocation_pct"]) for a in enriched_assets
-        ]
-
-        chart_path: Path | None = generate_allocation_chart(
-            symbols=symbols_list,
-            current_allocations=current_alloc_list,
-            target_allocations=target_alloc_list,
-        )
-
-        send_discord_notification(
-            ranked_assets=ranked_scores,
-            recommendations_map=recommendations_map,
-            total_portfolio_value=total_val,
-            image_path=chart_path,
-        )
 
 
 if __name__ == "__main__":

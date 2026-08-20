@@ -21,24 +21,23 @@ By integrating live market data with multi-currency conversion, concurrent API f
 
 The repository follows a clean, modular design, strictly separating portfolio datasets, domain processing logic, decision engines, persistence layers, remote backups, and CLI execution interfaces.
 
-| Layer | Path | Description |
-| :--- | :--- | :--- |
-| `Data Storage` | `data/` | SQLite database (`finances.db`), portfolio holdings (`portfolio.json`), target wishlist (`portfolio_targets.json`), watchlist configuration (`watchlist.json`), and ETF metadata cache (`etf_cache.json`). |
-| `Outputs` | `output/` | Exported analytical decision matrices and CSV reports (`recommend_output.csv`). |
-| `Core Domain` | `src/core/` | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, data provider abstractions (`providers.py`), and repository protocols. |
-| `Decision Engine` | `src/core/decision/` | Strategy pattern scoring engine (`engine.py`) calculating composite asset priority scores (`dip_score`, `cost_score`, `allocation_score`). |
-| `AI Infrastructure` | `src/infra/ai/` | Google Gemini API client (`client.py`) executing batch structured JSON portfolio rebalancing analysis with Pydantic validation. |
-| `Database Infrastructure` | `src/infra/database/` | SQLite connection management (`connection.py`), foreign key enforcement, transactional contexts, and schema initialization DDL (`schema.py`). |
-| `Google Drive Integration` | `src/infra/gdrive/` | Remote synchronization service (`service.py`) and OAuth2 authentication handler (`auth.py`) for automated database backups and bidirectional config file sync. |
-| `JustETF Integration` | `src/infra/justetf/` | Scraper client extracting ETF composition, sector allocation, country exposure, and TER directly from JustETF profile pages. |
-| `Notifications` | `src/infra/notifications/` | Webhook dispatchers (`discord.py`) sending rebalancing recommendations and decision matrices to Discord channels. |
-| `Logging System` | `src/utils/logger/` | Standardized internal logger enforcing clean output formatting across operations. |
-| `Data Migration` | `src/migrate_json_to_sqlite.py` | Idempotent migration utility transferring legacy JSON datasets into the SQLite database engine. |
-| `Secrets & Credentials` | `secrets/` | Isolated local directory storing sensitive OAuth2 client secrets (`credentials.json`) and active tokens (`token.json`). |
-| `Automation` | `.github/workflows/` | CI Quality Pipeline (`ci.yml`). |
-| `Rebalancing CLI` | `src/cli/recommend.py` | Typer-powered CLI command orchestrating market data enrichment, quantitative scoring, Gemini AI rebalancing, and CSV exports. |
-| `Main CLI Entrypoint` | `main.py` | Primary CLI application orchestrating system tracking commands and options. |
-| `Tooling` | `root` | Modern project definitions (`pyproject.toml`), environment template (`.env.example`), and quality gates (`Makefile`). |
+| Layer | Path                            | Description                                                                                                                                                                                                     |
+| :--- |:--------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Data Storage` | `data/`                         | SQLite database (`finances.db`), portfolio holdings (`portfolio.json`), target wishlist (`portfolio_targets.json`), watchlist configuration (`watchlist.json`), and ETF metadata cache (`etf_cache.json`).      |
+| `Outputs` | `output/`                       | Exported analytical decision matrices and CSV reports (`decision_output.csv`).                                                                                                                                  |
+| `Core Domain` | `src/core/`                     | Financial quotation retrieval, multi-currency conversion, snapshot management, performance analysis, price dip detection, domain models, data provider abstractions (`providers.py`), and repository protocols. |
+| `Decision Engine` | `src/core/decision/`            | Strategy pattern scoring engine (`engine.py`) calculating composite asset priority scores (`dip_score`, `cost_score`, `allocation_score`).                                                                      |
+| `AI Infrastructure` | `src/infra/ai/`                 | Google Gemini API client (`client.py`) executing batch structured JSON portfolio rebalancing analysis with Pydantic validation.                                                                                 |
+| `Database Infrastructure` | `src/infra/database/`           | SQLite connection management (`connection.py`), foreign key enforcement, transactional contexts, and schema initialization DDL (`schema.py`).                                                                   |
+| `Google Drive Integration` | `src/infra/gdrive/`             | Remote synchronization service (`service.py`) and OAuth2 authentication handler (`auth.py`) for automated database backups and bidirectional config file sync.                                                  |
+| `JustETF Integration` | `src/infra/justetf/`            | Scraper client extracting ETF composition, sector allocation, country exposure, and TER directly from JustETF profile pages.                                                                                    |
+| `Logging System` | `src/utils/logger/`             | Standardized internal logger enforcing clean output formatting across operations.                                                                                                                               |
+| `Data Migration` | `src/migrate_json_to_sqlite.py` | Idempotent migration utility transferring legacy JSON datasets into the SQLite database engine.                                                                                                                 |
+| `Secrets & Credentials` | `secrets/`                      | Isolated local directory storing sensitive OAuth2 client secrets (`credentials.json`) and active tokens (`token.json`).                                                                                         |
+| `Automation` | `.github/workflows/`            | CI Quality Pipeline (`ci.yml`).                                                                                                                                                                                 |
+| `Rebalancing CLI` | `src/cli/decision.py`           | Typer-powered CLI command orchestrating market data enrichment, quantitative scoring, Gemini AI analysis, and CSV exports.                                                                                   |
+| `Main CLI Entrypoint` | `main.py`                       | Primary CLI application orchestrating system tracking commands and options.                                                                                                                                     |
+| `Tooling` | `root`                          | Modern project definitions (`pyproject.toml`), environment template (`.env.example`), and quality gates (`Makefile`).                                                                                           |
 
 ---
 
@@ -87,11 +86,8 @@ Provides non-blocking remote synchronization and backup capabilities:
 - **Automated Database Backups**: Automatically backs up the relational database (`finances.db`) to Google Drive upon executing `save-snapshot`.
 - **Bidirectional Config Sync**: Downloads and uploads JSON configuration files (`portfolio.json`, `watchlist.json`) between local storage and Google Drive.
 
-### Discord Notifications (`src/infra/notifications/`)
-- **`send_discord_notification`**: Formats and dispatches rebalancing recommendation matrices and actionable AI advisory alerts directly to Discord webhooks.
-
 ### CSV Export Engine
-- **`export_to_csv`**: Serializes decision matrices (including quantitative sub-scores, target allocations, and AI recommendations) into structured CSV files (`output/recommend_output.csv`).
+- **`export_to_csv`**: Serializes decision matrices (including quantitative sub-scores, target allocations, and AI recommendations) into structured CSV files (`output/decision_output.csv`).
 
 ### Domain Exceptions (`src/core/exceptions.py`)
 Custom error hierarchy eliminating generic exception handling:
@@ -121,22 +117,19 @@ Computes overall portfolio health and asset metrics:
 ### Rebalancing & Investment Recommendation CLI (`cli/recommend.py`)
 
 ```bash
-# Run full rebalancing pipeline (Quantitative Scoring + Gemini AI Analysis)
-make recommend
+# Run full decision pipeline (Quantitative Scoring + Gemini AI Analysis)
+make decision
 # or via python module:
-PYTHONPATH=src python3 -m cli.recommend
+PYTHONPATH=src python3 -m cli.decision
 
 # Display detailed factor breakdown columns (Dip Sc, Cost Sc, Gap Sc)
-PYTHONPATH=src python3 -m cli.recommend -v
+make decision FLAGS="-v"
 
 # Run in quantitative-only mode (bypassing AI analysis)
-PYTHONPATH=src python3 -m cli.recommend --skip-ai
+make decision FLAGS="--skip-ai"
 
-# Export decision matrix to CSV (Defaults to output/recommend_output.csv)
-PYTHONPATH=src python3 -m cli.recommend -o output/recommend_output.csv
-
-# Dispatch rebalancing recommendations to Discord webhook
-PYTHONPATH=src python3 -m cli.recommend --notify
+# Export decision matrix to custom CSV path
+make decision FLAGS="-o output/decision_output.csv"
 ```
 
 ### Portfolio Management & Snapshot CLI (`main.py`)
