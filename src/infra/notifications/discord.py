@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 import requests
 
+from src.config import settings
 from src.core.models import (
     RebalanceRecommendation,
     RecommendationAction,
@@ -31,7 +31,7 @@ def send_discord_notification(
     """Sends formatted rebalance recommendations, AI insights,
     and optional allocation charts to a Discord webhook.
     """
-    webhook_url: str = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+    webhook_url: str = settings.discord_webhook_url.strip()
     if not webhook_url:
         logger.warning("DISCORD_WEBHOOK_URL is not set. Skipping Discord notification.")
         return False
@@ -87,7 +87,7 @@ def send_discord_notification(
         )
 
     # Check if running in test mode to inject disclaimer
-    is_test_mode: bool = os.getenv("DISCORD_TEST_MODE", "").lower() == "true"
+    is_test_mode: bool = settings.discord_test_mode
     test_prefix: str = (
         "🧪 **[TEST MESSAGE - AUTOMATED TEST]**\n" if is_test_mode else ""
     )

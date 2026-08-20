@@ -1,17 +1,20 @@
 """Unit tests for src/infra/notifications/discord.py.
 
 Covers Discord webhook notification dispatching, embed color determination,
-field formatting, reasoning truncation, test mode headers, and error handling.
+field formatting, reasoning truncation, test mode headers, image attachments,
+and error handling.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
+from src.config import settings
 from src.core.models import (
     RebalanceRecommendation,
     RecommendationAction,
@@ -51,7 +54,7 @@ def valid_recommendation() -> RebalanceRecommendation:
 
 def test_send_discord_notification_missing_webhook_returns_false() -> None:
     """Validates execution stops when webhook URL is missing."""
-    with patch.dict("os.environ", {}, clear=True):
+    with patch.object(settings, "discord_webhook_url", ""):
         result: bool = send_discord_notification([], {}, 10000.0)
         assert result is False
 
@@ -67,10 +70,12 @@ def test_send_discord_notification_success_green_embed(
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
 
-    env_vars: dict[str, str] = {
-        "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/fake"
-    }
-    with patch.dict("os.environ", env_vars):
+    with (
+        patch.object(
+            settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+        ),
+        patch.object(settings, "discord_test_mode", False),
+    ):
         result: bool = send_discord_notification(
             ranked_assets=[mock_asset_score],
             recommendations_map={"AAPL": valid_recommendation},
@@ -104,10 +109,9 @@ def test_send_discord_notification_sell_action_red_embed(
         valuation_score=3,
     )
 
-    env_vars: dict[str, str] = {
-        "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/fake"
-    }
-    with patch.dict("os.environ", env_vars):
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
         result: bool = send_discord_notification(
             ranked_assets=[mock_asset_score],
             recommendations_map={"AAPL": sell_rec},
@@ -130,10 +134,9 @@ def test_send_discord_notification_default_blue_embed_and_none_rec(
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
 
-    env_vars: dict[str, str] = {
-        "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/fake"
-    }
-    with patch.dict("os.environ", env_vars):
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
         result: bool = send_discord_notification(
             ranked_assets=[mock_asset_score],
             recommendations_map={},
@@ -170,10 +173,9 @@ def test_send_discord_notification_truncates_long_reasoning(
         valuation_score=5,
     )
 
-    env_vars: dict[str, str] = {
-        "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/fake"
-    }
-    with patch.dict("os.environ", env_vars):
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
         send_discord_notification(
             ranked_assets=[mock_asset_score],
             recommendations_map={"AAPL": long_rec},
@@ -191,16 +193,17 @@ def test_send_discord_notification_test_mode_prefix(
     mock_post: MagicMock,
     mock_asset_score: MagicMock,
 ) -> None:
-    """Validates test mode header inclusion when DISCORD_TEST_MODE is true."""
+    """Validates test mode header inclusion when discord_test_mode is True."""
     mock_response: MagicMock = MagicMock()
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
 
-    env_vars: dict[str, str] = {
-        "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/fake",
-        "DISCORD_TEST_MODE": "true",
-    }
-    with patch.dict("os.environ", env_vars):
+    with (
+        patch.object(
+            settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+        ),
+        patch.object(settings, "discord_test_mode", True),
+    ):
         send_discord_notification(
             ranked_assets=[mock_asset_score],
             recommendations_map={},
@@ -213,6 +216,38 @@ def test_send_discord_notification_test_mode_prefix(
 
 
 @patch("src.infra.notifications.discord.requests.post")
+def test_send_discord_notification_with_image_attachment(
+    mock_post: MagicMock,
+    mock_asset_score: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Validates sending image attachments via multipart form payload."""
+    mock_response: MagicMock = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_post.return_value = mock_response
+
+    chart_img: Path = tmp_path / "allocation_chart.png"
+    chart_img.write_bytes(b"fake_image_bytes")
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_discord_notification(
+            ranked_assets=[mock_asset_score],
+            recommendations_map={},
+            total_portfolio_value=1000.0,
+            image_path=chart_img,
+        )
+
+        assert result is True
+        mock_post.assert_called_once()
+        _, kwargs = mock_post.call_args
+        assert "files" in kwargs
+        assert "data" in kwargs
+        assert "payload_json" in kwargs["data"]
+
+
+@patch("src.infra.notifications.discord.requests.post")
 def test_send_discord_notification_request_failure_returns_false(
     mock_post: MagicMock,
     mock_asset_score: MagicMock,
@@ -220,10 +255,9 @@ def test_send_discord_notification_request_failure_returns_false(
     """Validates request exception handling returns False."""
     mock_post.side_effect = requests.RequestException("Network Error")
 
-    env_vars: dict[str, str] = {
-        "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/fake"
-    }
-    with patch.dict("os.environ", env_vars):
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
         result: bool = send_discord_notification(
             ranked_assets=[mock_asset_score],
             recommendations_map={},
