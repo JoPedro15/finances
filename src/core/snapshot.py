@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.config import settings
 from src.core.currency_exchange import get_exchange_rate
 from src.core.exceptions import StorageError
 from src.core.models import Asset, AssetSnapshot, PortfolioSnapshot, Quotation
@@ -139,17 +140,15 @@ def display_snapshot(snapshot_data: PortfolioSnapshot | dict[str, Any]) -> None:
     logger.info(f"Total Portfolio Value: {snapshot.total_value_eur:.2f} EUR")
 
     for asset in snapshot.assets_snapshot:
-        logger.print(f"  - {asset.name}: {asset.value_eur:.2f} EUR")
+        logger.info(f"  - {asset.name}: {asset.value_eur:.2f} EUR")
 
 
 def trigger_gdrive_backup(file_path: Path, folder_id: str | None = None) -> bool:
     """Triggers non-blocking backup of a persistence file to Google Drive."""
     try:
-        import os
-
         from src.infra.gdrive.service import GoogleDriveService
 
-        target_folder: str | None = folder_id or os.getenv("GDRIVE_SNAPSHOT_FOLDER_ID")
+        target_folder: str | None = folder_id or settings.gdrive_snapshot_folder_id
         service: GoogleDriveService = GoogleDriveService(folder_id=target_folder)
         success: bool = service.backup_file(file_path)
         if success:

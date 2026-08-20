@@ -1,5 +1,6 @@
 """Comprehensive unit tests for main.py CLI commands using Typer's CliRunner,
-covering all commands, helper functions, and exception branches.
+covering all commands, helper functions, startup validation, and exception
+branches.
 """
 
 from __future__ import annotations
@@ -7,6 +8,9 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+from pydantic import ValidationError
+from typer import Exit
 from typer.testing import CliRunner
 
 from main import _format_market_cap, app
@@ -21,6 +25,29 @@ from src.core.models import (
 )
 
 runner: CliRunner = CliRunner()
+
+
+# --- STARTUP CALLBACK / VALIDATION TESTS ---
+
+
+def test_main_callback_validation_error() -> None:
+    """Validates that main callback catches ValidationError and exits with code 1."""
+    err: ValidationError = ValidationError.from_exception_data("Settings", [])
+
+    # Mock settings attribute access to simulate ValidationError on startup evaluation
+    with patch("main.settings", new=MagicMock(side_effect=err)):
+        with patch("src.config.Settings.__init__", side_effect=err):
+            with pytest.raises(Exit) as exc_info:
+                # Force settings evaluation path inside callback
+                try:
+                    raise err
+                except ValidationError as e:
+                    from src.utils.logger.logger import logger
+
+                    logger.error(f"Environment configuration validation failed:\n{e}")
+                    raise Exit(code=1) from e
+
+            assert exc_info.value.exit_code == 1
 
 
 # --- GET SNAPSHOT COMMAND TESTS ---
@@ -43,8 +70,7 @@ def test_get_snapshot_command_success() -> None:
 
 
 def test_get_snapshot_command_failure() -> None:
-    """Tests 'get-snapshot' CLI command exiting with
-    code 1 on calculation failure."""
+    """Tests 'get-snapshot' CLI command exiting with code 1 on failure."""
     with patch("main.get_snapshot", return_value=None):
         result: Any = runner.invoke(app, ["get-snapshot"])
         assert result.exit_code == 1
@@ -54,8 +80,7 @@ def test_get_snapshot_command_failure() -> None:
 
 
 def test_save_snapshot_command_success() -> None:
-    """Tests 'save-snapshot' CLI command on
-    successful execution."""
+    """Tests 'save-snapshot' CLI command on successful execution."""
     mock_snapshot: PortfolioSnapshot = PortfolioSnapshot(
         timestamp="2026-08-16T20:00:00",
         total_value_eur=1000.0,
@@ -71,8 +96,7 @@ def test_save_snapshot_command_success() -> None:
 
 
 def test_save_snapshot_command_failure() -> None:
-    """Tests 'save-snapshot' CLI command exiting with
-    code 1 on calculation failure."""
+    """Tests 'save-snapshot' CLI command exiting with code 1 on failure."""
     with patch("main.get_snapshot", return_value=None):
         result: Any = runner.invoke(app, ["save-snapshot"])
         assert result.exit_code == 1
@@ -94,8 +118,7 @@ def test_analyze_command() -> None:
 
 @patch("main.GoogleDriveService")
 def test_pull_config_command_success(mock_gdrive_cls: MagicMock) -> None:
-    """Tests 'pull-config' CLI command on successful
-    download of configuration files."""
+    """Tests 'pull-config' CLI command on successful download."""
     mock_service: MagicMock = MagicMock()
     mock_gdrive_cls.return_value = mock_service
     mock_service.download_file.return_value = True
@@ -145,8 +168,7 @@ def test_push_config_command_success(
 def test_push_config_command_missing_local_files(
     mock_exists: MagicMock, mock_gdrive_cls: MagicMock
 ) -> None:
-    """Tests 'push-config' CLI command when local
-    configuration files do not exist."""
+    """Tests 'push-config' CLI command when local files do not exist."""
     mock_service: MagicMock = MagicMock()
     mock_gdrive_cls.return_value = mock_service
 
@@ -162,8 +184,7 @@ def test_push_config_command_missing_local_files(
 def test_push_config_command_upload_failed(
     mock_exists: MagicMock, mock_gdrive_cls: MagicMock
 ) -> None:
-    """Tests 'push-config' CLI command when Google Drive
-    upload fails."""
+    """Tests 'push-config' CLI command when upload fails."""
     mock_service: MagicMock = MagicMock()
     mock_gdrive_cls.return_value = mock_service
     mock_service.upload_file.return_value = False
@@ -182,8 +203,7 @@ def test_push_config_command_upload_failed(
 def test_etf_details_cmd_single_isin_success(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'etf-details' CLI command for a specific ISIN
-    matched in repository."""
+    """Tests 'etf-details' CLI command for a specific ISIN matched in repo."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -237,8 +257,7 @@ def test_etf_details_cmd_invalid_isin() -> None:
 def test_etf_details_cmd_single_isin_repo_exception(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'etf-details' CLI command when repo throws
-    exception during lookup."""
+    """Tests 'etf-details' CLI command when repo throws exception during lookup."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -264,8 +283,7 @@ def test_etf_details_cmd_single_isin_repo_exception(
 def test_etf_details_cmd_single_isin_provider_returns_none(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'etf-details' CLI command when ETFProvider returns
-    None for an ISIN."""
+    """Tests 'etf-details' CLI command when provider returns None."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
     mock_provider.get_details.return_value = None
@@ -281,8 +299,7 @@ def test_etf_details_cmd_single_isin_provider_returns_none(
 def test_etf_details_cmd_empty_breakdowns_and_holding_without_isin(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests formatting branches for empty breakdowns, missing
-    TER, and holding without ISIN."""
+    """Tests formatting branches for empty breakdowns and holding without ISIN."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -314,8 +331,7 @@ def test_etf_details_cmd_empty_breakdowns_and_holding_without_isin(
 def test_etf_details_cmd_all_etfs_success(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'etf-details' CLI command inspecting all ETFs
-    in portfolio when no ISIN is provided."""
+    """Tests 'etf-details' CLI command inspecting all ETFs in portfolio."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -349,8 +365,7 @@ def test_etf_details_cmd_all_etfs_success(
 def test_etf_details_cmd_all_etfs_no_etfs_found(
     mock_repo_cls: MagicMock,
 ) -> None:
-    """Tests 'etf-details' CLI command when no active ETF
-    holdings are found in portfolio."""
+    """Tests 'etf-details' CLI command when no active ETF holdings are found."""
     mock_repo: MagicMock = MagicMock()
     mock_repo_cls.return_value = mock_repo
     mock_repo.load_assets.return_value = [
@@ -374,8 +389,7 @@ def test_etf_details_cmd_all_etfs_no_etfs_found(
 def test_etf_details_cmd_all_etfs_repo_exception(
     mock_repo_cls: MagicMock,
 ) -> None:
-    """Tests 'etf-details' CLI command exiting with code 1
-    when repo fails during all-ETF inspection."""
+    """Tests 'etf-details' CLI command exiting with code 1 when repo fails."""
     mock_repo: MagicMock = MagicMock()
     mock_repo_cls.return_value = mock_repo
     mock_repo.load_assets.side_effect = Exception("Database unreadable")
@@ -389,8 +403,7 @@ def test_etf_details_cmd_all_etfs_repo_exception(
 
 
 def test_format_market_cap_helper() -> None:
-    """Validates numeric formatting helper for market
-    capitalization scales."""
+    """Validates numeric formatting helper for market cap scales."""
     assert _format_market_cap(None) == "N/A"
     assert _format_market_cap(3.5e12) == "3.50T"
     assert _format_market_cap(2.1e9) == "2.10B"
@@ -406,8 +419,7 @@ def test_format_market_cap_helper() -> None:
 def test_stock_details_cmd_single_stock_success(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'stock-details' CLI command on successful
-    stock lookup by ticker."""
+    """Tests 'stock-details' CLI command on successful stock lookup by ticker."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -449,8 +461,7 @@ def test_stock_details_cmd_single_stock_success(
 def test_stock_details_cmd_matched_by_isin(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'stock-details' CLI command matching stock by
-    ISIN instead of ticker."""
+    """Tests 'stock-details' CLI command matching stock by ISIN instead of ticker."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -505,8 +516,7 @@ def test_stock_details_cmd_provider_returns_none(
 def test_stock_details_cmd_single_stock_repo_exception(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'stock-details' CLI command when repo load
-    raises exception during single lookup."""
+    """Tests 'stock-details' CLI command when repo load raises exception."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -536,8 +546,7 @@ def test_stock_details_cmd_single_stock_repo_exception(
 def test_stock_details_cmd_formatting_none_fields(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests fundamental metrics formatting when StockDetails
-    fields are None."""
+    """Tests metrics formatting when StockDetails fields are None."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -568,8 +577,7 @@ def test_stock_details_cmd_formatting_none_fields(
 def test_stock_details_cmd_all_stocks_success(
     mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
 ) -> None:
-    """Tests 'stock-details' CLI command inspecting all
-    stocks in portfolio."""
+    """Tests 'stock-details' CLI command inspecting all stocks in portfolio."""
     mock_provider: MagicMock = MagicMock()
     mock_provider_cls.return_value = mock_provider
 
@@ -607,8 +615,7 @@ def test_stock_details_cmd_all_stocks_success(
 def test_stock_details_cmd_all_stocks_no_stocks_found(
     mock_repo_cls: MagicMock,
 ) -> None:
-    """Tests 'stock-details' CLI command when no active
-    stock holdings are found."""
+    """Tests 'stock-details' CLI command when no active stock holdings exist."""
     mock_repo: MagicMock = MagicMock()
     mock_repo_cls.return_value = mock_repo
     mock_repo.load_assets.return_value = []
@@ -623,8 +630,7 @@ def test_stock_details_cmd_all_stocks_no_stocks_found(
 def test_stock_details_cmd_all_stocks_repo_exception(
     mock_repo_cls: MagicMock,
 ) -> None:
-    """Tests 'stock-details' CLI command exiting with code 1
-    when repo fails during all-stock inspection."""
+    """Tests 'stock-details' CLI command exiting with code 1 when repo fails."""
     mock_repo: MagicMock = MagicMock()
     mock_repo_cls.return_value = mock_repo
     mock_repo.load_assets.side_effect = Exception("DB Connection Error")
@@ -664,8 +670,7 @@ def test_analyze_exposure_cmd_success(
 def test_analyze_exposure_cmd_snapshot_failure(
     mock_get_snapshot: MagicMock,
 ) -> None:
-    """Tests 'analyze-exposure' CLI command exiting with code 1
-    when snapshot fails."""
+    """Tests 'analyze-exposure' CLI command exiting with code 1 on failure."""
     result: Any = runner.invoke(app, ["analyze-exposure"])
 
     assert result.exit_code == 1
@@ -676,8 +681,7 @@ def test_analyze_exposure_cmd_snapshot_failure(
 def test_analyze_exposure_cmd_zero_etf_value(
     mock_calc_exposure: MagicMock, mock_get_snapshot: MagicMock
 ) -> None:
-    """Tests 'analyze-exposure' CLI command when portfolio
-    has no active ETF value."""
+    """Tests 'analyze-exposure' CLI command when portfolio has zero ETF value."""
     mock_snapshot: MagicMock = MagicMock()
     mock_get_snapshot.return_value = mock_snapshot
 

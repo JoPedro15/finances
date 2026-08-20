@@ -5,7 +5,6 @@ Authentication module for Google Drive API integration.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +12,8 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
+
+from src.config import settings
 
 SCOPES: list[str] = ["https://www.googleapis.com/auth/drive.file"]
 
@@ -38,32 +39,28 @@ def get_google_service_credentials(
     token_path: str | Path | None = None,
     headless: bool = False,
 ) -> Any:
-    """Loads Google Drive OAuth2 or Service Account credentials.json
-    securely from environment variables or files."""
-    sa_file: str | None = os.getenv("GDRIVE_SERVICE_ACCOUNT_FILE")
-    if sa_file and Path(sa_file).exists():
+    """Loads Google Drive OAuth2 or Service Account credentials securely from env,
+    settings, or files.
+    """
+    sa_env: str | None = settings.gdrive_service_account_file
+    if sa_env and Path(sa_env).exists():
         return ServiceAccountCredentials.from_service_account_file(
-            sa_file, scopes=SCOPES
+            sa_env, scopes=SCOPES
         )  # type: ignore[no-untyped-call]
 
-    token_target: str | Path = (
-        token_path or os.getenv("GDRIVE_TOKEN_FILE") or "token.json"
+    token_target: Path = Path(token_path) if token_path else settings.gdrive_token_file
+    creds_target: Path = (
+        Path(credentials_path)
+        if credentials_path
+        else settings.gdrive_client_secret_file
     )
-    creds_target: str | Path = (
-        credentials_path
-        or os.getenv("GDRIVE_CLIENT_SECRET_FILE")
-        or "credentials.json.json"
-    )
-
-    target_token_path: Path = Path(token_target)
-    target_creds_path: Path = Path(creds_target)
 
     creds: Credentials | None = None
 
-    if target_token_path.exists():
+    if token_target.exists():
         try:
             creds = Credentials.from_authorized_user_file(
-                str(target_token_path), SCOPES
+                str(token_target), SCOPES
             )  # type: ignore[no-untyped-call]
         except Exception:
             creds = None
@@ -80,15 +77,15 @@ def get_google_service_credentials(
     if headless:
         raise PermissionError("Authentication required but headless mode is on.")
 
-    if not target_creds_path.exists():
-        raise FileNotFoundError(f"Missing client secrets at {target_creds_path}")
+    if not creds_target.exists():
+        raise FileNotFoundError(f"Missing client secrets at {creds_target}")
 
     flow: InstalledAppFlow = InstalledAppFlow.from_client_secrets_file(
-        str(target_creds_path), SCOPES
+        str(creds_target), SCOPES
     )
     creds = flow.run_local_server(port=0)
-    target_token_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(target_token_path, "w", encoding="utf-8") as token_file:
+    token_target.parent.mkdir(parents=True, exist_ok=True)
+    with open(token_target, "w", encoding="utf-8") as token_file:
         token_file.write(creds.to_json())
 
     return creds
