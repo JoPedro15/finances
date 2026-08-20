@@ -605,7 +605,7 @@ def test_extract_raw_text_safe_blocked_candidate(
     mock_genai_client.return_value = mock_client_instance
 
     client = GeminiClient(api_key="fake_key")
-    err_msg: str = "Generation blocked or incomplete"
+    err_msg: str = "Generation blocked"
     with pytest.raises(GeminiParsingError, match=err_msg):
         client.analyze_asset(valid_asset_data, valid_portfolio_context)
 
@@ -627,7 +627,7 @@ def test_extract_raw_text_safe_empty_body(
     mock_genai_client.return_value = mock_client_instance
 
     client = GeminiClient(api_key="fake_key")
-    err_msg: str = "Empty or inaccessible response body"
+    err_msg: str = "Empty response body"
     with pytest.raises(GeminiParsingError, match=err_msg):
         client.analyze_asset(valid_asset_data, valid_portfolio_context)
 

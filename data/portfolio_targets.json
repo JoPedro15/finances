@@ -33,40 +33,35 @@
       "isin": "IE00B4L5Y983",
       "yahoo_ticker": "EUNL.DE",
       "asset_type": "ETF",
-      "target_allocation_pct": 10.0,
-      "ter": 0.20
+      "target_allocation_pct": 10.0
     },
     {
       "name": "Core S&P 500 USD (Acc)",
       "isin": "IE00B5BMR087",
       "yahoo_ticker": "SXR8.DE",
       "asset_type": "ETF",
-      "target_allocation_pct": 10.0,
-      "ter": 0.07
+      "target_allocation_pct": 10.0
     },
     {
       "name": "MSCI World Momentum USD (Acc)",
       "isin": "IE00BL25JP72",
       "yahoo_ticker": "XDEM.DE",
       "asset_type": "ETF",
-      "target_allocation_pct": 10.0,
-      "ter": 0.25
+      "target_allocation_pct": 10.0
     },
     {
       "name": "Xtrackers S&P 500 2x Leveraged Daily",
       "isin": "LU0411078552",
       "yahoo_ticker": "DBPG.DE",
       "asset_type": "ETF",
-      "target_allocation_pct": 10.0,
-      "ter": 0.60
+      "target_allocation_pct": 10.0
     },
     {
       "name": "iShares Digital Security UCITS ETF USD (Acc)",
       "isin": "IE00BG0J4C88",
       "yahoo_ticker": "L0CK.DE",
       "asset_type": "ETF",
-      "target_allocation_pct": 10.0,
-      "ter": 0.40
+      "target_allocation_pct": 10.0
     }
   ]
 }

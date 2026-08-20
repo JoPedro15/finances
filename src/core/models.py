@@ -40,22 +40,25 @@ class Asset:
     yahoo_ticker: str
     quantity: float
     average_buy_price: float
-    asset_type: str = "stock"
+    asset_type: str = "STOCK"
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Asset:
+        raw_type: str = str(
+            data.get("asset_type") or data.get("type") or "STOCK"
+        ).upper()
         return cls(
             name=str(data.get("name", "")),
             isin=str(data.get("isin", "")),
-            yahoo_ticker=str(data.get("yahoo_ticker", "")),
+            yahoo_ticker=str(data.get("yahoo_ticker") or data.get("symbol", "")),
             quantity=float(data.get("quantity", 0.0)),
             average_buy_price=float(
                 data.get("averageBuyPrice", data.get("average_buy_price", 0.0))
             ),
-            asset_type=str(data.get("type", "stock")),
+            asset_type=raw_type,
         )
 
     @property
@@ -240,6 +243,15 @@ class StockDetails:
     fifty_two_week_low: float | None = None
     sector: str | None = None
     industry: str | None = None
+    price_to_book: float | None = None
+    peg_ratio: float | None = None
+    beta: float | None = None
+    profit_margins_pct: float | None = None
+    revenue_growth_pct: float | None = None
+    earnings_growth_pct: float | None = None
+    total_debt_to_equity: float | None = None
+    target_mean_price: float | None = None
+    recommendation_key: str | None = None
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -263,6 +275,15 @@ class StockDetails:
             fifty_two_week_low=_get_float("fifty_two_week_low"),
             sector=_get_str("sector"),
             industry=_get_str("industry"),
+            price_to_book=_get_float("price_to_book"),
+            peg_ratio=_get_float("peg_ratio"),
+            beta=_get_float("beta"),
+            profit_margins_pct=_get_float("profit_margins_pct"),
+            revenue_growth_pct=_get_float("revenue_growth_pct"),
+            earnings_growth_pct=_get_float("earnings_growth_pct"),
+            total_debt_to_equity=_get_float("total_debt_to_equity"),
+            target_mean_price=_get_float("target_mean_price"),
+            recommendation_key=_get_str("recommendation_key"),
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -96,6 +96,15 @@ class StockProvider:
                 except (ValueError, TypeError):
                     return None
 
+            def _parse_pct(key: str) -> float | None:
+                val: Any = info.get(key)
+                if val is None:
+                    return None
+                try:
+                    return round(float(val) * 100.0, 4)
+                except (ValueError, TypeError):
+                    return None
+
             def _parse_str(key: str) -> str | None:
                 val: Any = info.get(key)
                 return str(val) if val is not None else None
@@ -130,6 +139,15 @@ class StockProvider:
                 fifty_two_week_low=_parse_float("fiftyTwoWeekLow"),
                 sector=_parse_str("sector"),
                 industry=_parse_str("industry"),
+                price_to_book=_parse_float("priceToBook"),
+                peg_ratio=_parse_float("pegRatio"),
+                beta=_parse_float("beta"),
+                profit_margins_pct=_parse_pct("profitMargins"),
+                revenue_growth_pct=_parse_pct("revenueGrowth"),
+                earnings_growth_pct=_parse_pct("earningsGrowth"),
+                total_debt_to_equity=_parse_float("debtToEquity"),
+                target_mean_price=_parse_float("targetMeanPrice"),
+                recommendation_key=_parse_str("recommendationKey"),
             )
         except Exception as e:
             err_details: str = f"{type(e).__name__} - {e}"

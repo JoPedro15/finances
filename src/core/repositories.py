@@ -1,5 +1,4 @@
-"""
-Repository protocols and storage implementations (JSON, SQLite, and Parquet) for
+"""Repository protocols and storage implementations (JSON, SQLite, and Parquet) for
 portfolio, history, and ETF cache data.
 """
 
@@ -376,7 +375,7 @@ class JsonETFCacheRepository:
                 data: dict[str, Any] = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(
-                f"Corrupted or unreadable ETF cache file at '{self.file_path}': {e}"
+                f"Corrupted or unreadable ETF cache file at " f"'{self.file_path}': {e}"
             )
             return None
 
@@ -400,7 +399,8 @@ class JsonETFCacheRepository:
 
             if age_days > self.ttl_days:
                 logger.info(
-                    f"Cache entry for ISIN {isin} expired ({age_days:.1f} days old)."
+                    f"Cache entry for ISIN {isin} expired "
+                    f"({age_days:.1f} days old)."
                 )
                 return None
 
@@ -433,3 +433,130 @@ class JsonETFCacheRepository:
             raise StorageWriteError(
                 f"Failed to write ETF cache to '{self.file_path}': {e}"
             ) from e
+
+
+class SqliteDecisionRepository:
+    """SQLite database-backed implementation for persisting and querying
+
+    decision reports.
+    """
+
+    def __init__(self, db_path: str | Path = DEFAULT_DB_PATH) -> None:
+        self.db_path: Path = Path(db_path)
+
+    def save_decision_report(
+        self,
+        timestamp: str,
+        total_value_eur: float,
+        has_ai: bool,
+        ranked_scores: list[Any],
+        asset_dict_map: dict[str, dict[str, Any]],
+        recommendations_map: dict[str, Any],
+    ) -> None:
+        """Saves a complete decision evaluation run and its asset metrics
+
+        into SQLite.
+        """
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    """
+                    INSERT INTO decisions (timestamp, total_value_eur, has_ai)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(timestamp) DO NOTHING;
+                    """,
+                    (timestamp, total_value_eur, 1 if has_ai else 0),
+                )
+
+                cursor.execute(
+                    "SELECT id FROM decisions WHERE timestamp = ?", (timestamp,)
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return
+                decision_id: int = int(row["id"])
+
+                for rank, score in enumerate(ranked_scores, start=1):
+                    symbol: str = str(score.symbol)
+                    target_item: dict[str, Any] = asset_dict_map.get(symbol, {})
+                    rec = recommendations_map.get(symbol)
+
+                    cursor.execute(
+                        """
+                        INSERT INTO decision_asset_metrics (
+                            decision_id, symbol, asset_type, rank, price_eur,
+                            current_allocation_pct, target_allocation_pct,
+                            dip_score, cost_score, gap_score, quant_score,
+                            ai_action, ai_urgency, ai_confidence_pct,
+                            forward_pe, trailing_pe, peg_ratio, price_to_book,
+                            dividend_yield_pct, ter
+                        )
+                        VALUES (
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                        )
+                        """,
+                        (
+                            decision_id,
+                            symbol,
+                            str(score.asset_type.value).upper(),
+                            rank,
+                            float(target_item.get("current_price", 0.0)),
+                            float(target_item.get("current_allocation_pct", 0.0)),
+                            float(target_item.get("target_allocation_pct", 0.0)),
+                            float(score.dip_score),
+                            float(score.cost_score),
+                            float(score.allocation_score),
+                            float(score.total_score),
+                            (str(rec.action.value) if rec and rec.action else None),
+                            (
+                                str(rec.urgency_level.value)
+                                if rec and rec.urgency_level
+                                else None
+                            ),
+                            (float(rec.confidence_score * 100.0) if rec else None),
+                            target_item.get("forward_pe"),
+                            target_item.get("trailing_pe"),
+                            target_item.get("peg_ratio"),
+                            target_item.get("price_to_book"),
+                            target_item.get("dividend_yield_pct"),
+                            target_item.get("ter"),
+                        ),
+                    )
+        except Exception as e:
+            raise StorageWriteError(
+                f"Failed to save decision report to SQLite: {e}"
+            ) from e
+
+    def load_asset_history(self, symbol: str, limit: int = 5) -> list[dict[str, Any]]:
+        """Loads historical decision metrics for a specific asset to enable
+
+        trend analysis.
+        """
+        if not self.db_path.exists():
+            return []
+
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT d.timestamp, dam.rank, dam.price_eur, dam.quant_score,
+                           dam.forward_pe, dam.dividend_yield_pct, dam.ai_action
+                    FROM decision_asset_metrics dam
+                    JOIN decisions d ON dam.decision_id = d.id
+                    WHERE dam.symbol = ?
+                    ORDER BY d.timestamp DESC
+                    LIMIT ?
+                    """,
+                    (symbol, limit),
+                )
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.warning(f"Failed to load asset history for '{symbol}': {e}")
+            return []
