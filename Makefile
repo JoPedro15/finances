@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details analyze-exposure migrate recommend
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details analyze-exposure migrate decision
 
 # ==============================================================================
 # 📖 Help
@@ -32,7 +32,14 @@ help:
 	@echo "  make etf-details ISIN= - Inspects composition and details for an ETF ISIN."
 	@echo "  make stock-details TICKER= - Inspects fundamental metrics for a stock ticker or ISIN."
 	@echo "  make analyze-exposure - Analyzes portfolio sector and country exposure."
-	@echo "  make recommend        - Ranks investment targets using live market data."
+	@echo "  make decision [FLAGS=...] - Ranks investment targets using live market data."
+	@echo "       Available Flags:"
+	@echo "         -t, --targets-file PATH : Path to targets wishlist JSON (default: data/portfolio_targets.json)"
+	@echo "         -p, --portfolio-file PATH: Path to active holdings JSON (default: data/portfolio.json)"
+	@echo "         --skip-ai               : Run quantitative scoring matrix only (bypasses Gemini AI)"
+	@echo "         --notify                : Dispatch rebalancing report and chart to Discord webhook"
+	@echo "         -v, --verbose           : Display granular factor score breakdowns in table"
+	@echo "         -o, --output-csv PATH   : CSV export destination path (default: output/decision_output.csv)"
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality
@@ -111,5 +118,12 @@ stock-details:
 analyze-exposure:
 	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
 
-recommend:
-	PYTHONPATH=src $(PYTHON) -m cli.recommend -v --skip-ai -o --output-csv
+# Orchestrates portfolio decision ranking and AI rebalancing evaluation.
+# Accepts optional CLI flags via FLAGS variable (e.g., make decision FLAGS="--skip-ai -v"):
+#   -t, --targets-file PATH : Path to wishlist targets JSON file (default: data/portfolio_targets.json)
+#   -p, --portfolio-file PATH: Path to active holdings JSON file (default: data/portfolio.json)
+#   --skip-ai               : Run quantitative scoring matrix only (bypasses Gemini AI analysis)
+#   -v, --verbose           : Display granular factor score breakdowns (Dip Sc, Cost Sc, Gap Sc)
+#   -o, --output-csv PATH   : CSV export destination path (default: output/decision_output.csv)
+decision:
+	PYTHONPATH=src $(PYTHON) -m cli.decision --skip-ai

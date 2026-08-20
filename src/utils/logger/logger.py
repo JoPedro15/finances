@@ -63,7 +63,7 @@ class Logger:
 
     def subsection(self, message: str) -> None:
         """Bold informational message to distinguish sub-tasks within a section."""
-        print(f"[{self._get_timestamp()}] {self._BOLD}INFO: {message}{self._ENDC}")
+        print(f"[{self._get_timestamp()}] {self._BOLD}{message}{self._ENDC}")
 
     def print(self, message: str, color: str | None = None) -> None:
         """
