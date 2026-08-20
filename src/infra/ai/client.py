@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import time
 from typing import Any
@@ -14,6 +13,7 @@ from google.genai import types
 from google.genai.errors import APIError
 from pydantic import BaseModel, Field, ValidationError
 
+from src.config import settings
 from src.core.exceptions import (
     GeminiAPIError,
     GeminiAuthError,
@@ -23,7 +23,6 @@ from src.core.exceptions import (
 from src.core.models import RebalanceRecommendation
 from src.utils.logger.logger import logger
 
-DEFAULT_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 MAX_RETRIES: int = 3
 INITIAL_RETRY_DELAY: float = 1.0
 
@@ -70,15 +69,15 @@ class GeminiClient:
     def __init__(
         self,
         api_key: str | None = None,
-        model_name: str = DEFAULT_MODEL,
+        model_name: str | None = None,
     ) -> None:
         """Initializes GeminiClient with API authentication and config."""
-        resolved_key: str | None = api_key or os.getenv("GEMINI_API_KEY")
+        resolved_key: str = api_key or settings.gemini_api_key
         if not resolved_key:
             logger.error("Gemini API key is missing from environment.")
             raise GeminiAuthError("Missing GEMINI_API_KEY environment variable.")
 
-        self.model_name: str = model_name
+        self.model_name: str = model_name or settings.gemini_model
         try:
             self._client: genai.Client = genai.Client(api_key=resolved_key)
         except Exception as err:
@@ -336,8 +335,8 @@ class GeminiClient:
 
                 if is_retryable and attempt < MAX_RETRIES:
                     logger.warning(
-                        f"Transient API error for '{ticker}' (Attempt {attempt}/"
-                        f"{MAX_RETRIES}). Retrying in {delay:.1f}s..."
+                        f"Transient API error for '{ticker}' (Attempt "
+                        f"{attempt}/{MAX_RETRIES}). Retrying in {delay:.1f}s..."
                     )
                     time.sleep(delay)
                     delay *= 2.0

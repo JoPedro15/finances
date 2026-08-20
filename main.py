@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import ValidationError
 
 from src.cli.recommend import recommend_rebalance
-from src.config import DATA_DIR
+from src.config import DATA_DIR, settings
 from src.core.analysis import (
     PortfolioExposure,
     analyze_overall_performance,
@@ -33,6 +34,16 @@ app: typer.Typer = typer.Typer(
     "investment decision ranking.",
     add_completion=False,
 )
+
+
+@app.callback()
+def main_callback() -> None:
+    """Validates global application environment settings on startup."""
+    try:
+        _ = settings
+    except ValidationError as err:
+        logger.error(f"Environment configuration validation failed:\n{err}")
+        raise typer.Exit(code=1) from err
 
 
 @app.command(name="get-snapshot")

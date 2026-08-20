@@ -1,39 +1,116 @@
-"""Global configuration module loading environment
-variables and setting strategy parameters."""
+"""Global configuration module loading environment variables via
+Pydantic Settings and defining strategy parameters.
+"""
 
-import os
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
-
+# Base Paths
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
 DATA_DIR: Path = BASE_DIR / "data"
+PLOTS_DIR: Path = DATA_DIR / "plots"
 
-# Google Drive Paths & Identifiers
-CREDS_PATH_GDRIVE: Path = Path(
-    os.getenv("GDRIVE_CLIENT_SECRET_FILE", str(DATA_DIR / "credentials.json"))
-)
-TOKEN_PATH_GDRIVE: Path = Path(
-    os.getenv("GDRIVE_TOKEN_FILE", str(DATA_DIR / "token.json"))
-)
-GDRIVE_CONFIG_FOLDER_ID: str | None = os.getenv("GDRIVE_CONFIG_FOLDER_ID")
-GDRIVE_SNAPSHOT_FOLDER_ID: str | None = os.getenv("GDRIVE_SNAPSHOT_FOLDER_ID")
 
-# Cache Settings
+class Settings(BaseSettings):
+    """Centralized environment configuration settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # Gemini AI
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
+
+    # Discord Notifications
+    discord_webhook_url: str = Field(default="", alias="DISCORD_WEBHOOK_URL")
+    discord_test_mode: bool = Field(default=False, alias="DISCORD_TEST_MODE")
+
+    # Google Drive Integration
+    gdrive_service_account_file: str | None = Field(
+        default=None, alias="GDRIVE_SERVICE_ACCOUNT_FILE"
+    )
+    gdrive_client_secret_file: Path = Field(
+        default=DATA_DIR / "credentials.json",
+        alias="GDRIVE_CLIENT_SECRET_FILE",
+    )
+    gdrive_token_file: Path = Field(
+        default=DATA_DIR / "token.json", alias="GDRIVE_TOKEN_FILE"
+    )
+    gdrive_config_folder_id: str | None = Field(
+        default=None, alias="GDRIVE_CONFIG_FOLDER_ID"
+    )
+    gdrive_snapshot_folder_id: str | None = Field(
+        default=None, alias="GDRIVE_SNAPSHOT_FOLDER_ID"
+    )
+
+    # Cache Settings
+    etf_cache_ttl_days: int = Field(default=30, alias="ETF_CACHE_TTL_DAYS")
+
+    # Dip Detector Settings
+    min_drop_pct: float = Field(default=5.0, alias="MIN_DROP_PCT")
+    max_drop_pct: float = Field(default=10.0, alias="MAX_DROP_PCT")
+    lookback_days: int = Field(default=30, alias="LOOKBACK_DAYS")
+
+    # Stock Strategy Settings
+    stock_dip_min_pct: float = Field(default=5.0, alias="STOCK_DIP_MIN_PCT")
+    stock_dip_max_pct: float = Field(default=20.0, alias="STOCK_DIP_MAX_PCT")
+    stock_weight_dip: float = Field(default=0.30, alias="STOCK_WEIGHT_DIP")
+    stock_weight_forward_pe: float = Field(
+        default=0.30, alias="STOCK_WEIGHT_FORWARD_PE"
+    )
+    stock_weight_52w_range: float = Field(default=0.15, alias="STOCK_WEIGHT_52W_RANGE")
+    stock_weight_allocation: float = Field(
+        default=0.25, alias="STOCK_WEIGHT_ALLOCATION"
+    )
+    stock_alloc_gap_max_pct: float = Field(
+        default=10.0, alias="STOCK_ALLOC_GAP_MAX_PCT"
+    )
+
+    # ETF Strategy Settings
+    etf_weight_dip: float = Field(default=0.40, alias="ETF_WEIGHT_DIP")
+    etf_weight_ter: float = Field(default=0.20, alias="ETF_WEIGHT_TER")
+    etf_weight_allocation: float = Field(default=0.40, alias="ETF_WEIGHT_ALLOCATION")
+    etf_dip_min_pct: float = Field(default=5.0, alias="ETF_DIP_MIN_PCT")
+    etf_dip_max_pct: float = Field(default=10.0, alias="ETF_DIP_MAX_PCT")
+    etf_ter_low_pct: float = Field(default=0.10, alias="ETF_TER_LOW_PCT")
+    etf_ter_high_pct: float = Field(default=0.50, alias="ETF_TER_HIGH_PCT")
+    etf_alloc_gap_max_pct: float = Field(default=10.0, alias="ETF_ALLOC_GAP_MAX_PCT")
+
+    # SMTP / Email Settings
+    smtp_server: str = Field(default="", alias="SMTP_SERVER")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_username: str = Field(default="", alias="SMTP_USERNAME")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    alert_email_recipient: str = Field(default="", alias="ALERT_EMAIL_RECIPIENT")
+
+
+settings: Settings = Settings()
+
+# Backwards Compatibility Aliases
+CREDS_PATH_GDRIVE: Path = settings.gdrive_client_secret_file
+TOKEN_PATH_GDRIVE: Path = settings.gdrive_token_file
+GDRIVE_CONFIG_FOLDER_ID: str | None = settings.gdrive_config_folder_id
+GDRIVE_SNAPSHOT_FOLDER_ID: str | None = settings.gdrive_snapshot_folder_id
+
 ETF_CACHE_FILE: Path = DATA_DIR / "etf_cache.json"
-DEFAULT_ETF_CACHE_TTL_DAYS: int = int(os.getenv("ETF_CACHE_TTL_DAYS", "30"))
+DEFAULT_ETF_CACHE_TTL_DAYS: int = settings.etf_cache_ttl_days
 
 
 @dataclass(frozen=True)
 class DipDetectorConfig:
     """Configuration parameters for generic dip detection scans."""
 
-    min_drop_pct: float = float(os.getenv("MIN_DROP_PCT", "5.0"))
-    max_drop_pct: float = float(os.getenv("MAX_DROP_PCT", "10.0"))
-    lookback_days: int = int(os.getenv("LOOKBACK_DAYS", "30"))
+    min_drop_pct: float = settings.min_drop_pct
+    max_drop_pct: float = settings.max_drop_pct
+    lookback_days: int = settings.lookback_days
 
 
 DEFAULT_DIP_CONFIG: DipDetectorConfig = DipDetectorConfig()
@@ -43,13 +120,13 @@ DEFAULT_DIP_CONFIG: DipDetectorConfig = DipDetectorConfig()
 class StockStrategyConfig:
     """Configuration parameters for individual stock scoring strategy."""
 
-    dip_min_pct: float = float(os.getenv("STOCK_DIP_MIN_PCT", "5.0"))
-    dip_max_pct: float = float(os.getenv("STOCK_DIP_MAX_PCT", "20.0"))
-    weight_dip: float = float(os.getenv("STOCK_WEIGHT_DIP", "0.30"))
-    weight_forward_pe: float = float(os.getenv("STOCK_WEIGHT_FORWARD_PE", "0.30"))
-    weight_52w_range: float = float(os.getenv("STOCK_WEIGHT_52W_RANGE", "0.15"))
-    weight_allocation: float = float(os.getenv("STOCK_WEIGHT_ALLOCATION", "0.25"))
-    alloc_gap_max_pct: float = float(os.getenv("STOCK_ALLOC_GAP_MAX_PCT", "10.0"))
+    dip_min_pct: float = settings.stock_dip_min_pct
+    dip_max_pct: float = settings.stock_dip_max_pct
+    weight_dip: float = settings.stock_weight_dip
+    weight_forward_pe: float = settings.stock_weight_forward_pe
+    weight_52w_range: float = settings.stock_weight_52w_range
+    weight_allocation: float = settings.stock_weight_allocation
+    alloc_gap_max_pct: float = settings.stock_alloc_gap_max_pct
 
     def __post_init__(self) -> None:
         """Validates that stock scoring criteria weights sum to 1.0."""
@@ -73,17 +150,17 @@ DEFAULT_STOCK_CONFIG: StockStrategyConfig = StockStrategyConfig()
 class EtfStrategyConfig:
     """Configuration parameters for ETF scoring strategy."""
 
-    weight_dip: float = float(os.getenv("ETF_WEIGHT_DIP", "0.40"))
-    weight_ter: float = float(os.getenv("ETF_WEIGHT_TER", "0.20"))
-    weight_allocation: float = float(os.getenv("ETF_WEIGHT_ALLOCATION", "0.40"))
+    weight_dip: float = settings.etf_weight_dip
+    weight_ter: float = settings.etf_weight_ter
+    weight_allocation: float = settings.etf_weight_allocation
 
-    dip_min_pct: float = float(os.getenv("ETF_DIP_MIN_PCT", "5.0"))
-    dip_max_pct: float = float(os.getenv("ETF_DIP_MAX_PCT", "10.0"))
+    dip_min_pct: float = settings.etf_dip_min_pct
+    dip_max_pct: float = settings.etf_dip_max_pct
 
-    ter_low_pct: float = float(os.getenv("ETF_TER_LOW_PCT", "0.10"))
-    ter_high_pct: float = float(os.getenv("ETF_TER_HIGH_PCT", "0.50"))
+    ter_low_pct: float = settings.etf_ter_low_pct
+    ter_high_pct: float = settings.etf_ter_high_pct
 
-    alloc_gap_max_pct: float = float(os.getenv("ETF_ALLOC_GAP_MAX_PCT", "10.0"))
+    alloc_gap_max_pct: float = settings.etf_alloc_gap_max_pct
 
     def __post_init__(self) -> None:
         """Validates that ETF scoring criteria weights sum to 1.0."""

@@ -11,29 +11,37 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.infra.gdrive.auth import (
+    SCOPES,
     get_google_service_credentials,
     load_credentials_safe,
 )
 
 
-@patch("src.infra.gdrive.auth.ServiceAccountCredentials")
+@patch("src.infra.gdrive.auth.ServiceAccountCredentials.from_service_account_file")
 def test_get_credentials_service_account_env(
-    mock_sa_cls: MagicMock, tmp_path: Path
+    mock_sa_from_file: MagicMock,
+    tmp_path: Path,
 ) -> None:
     """Validates loading credentials via GDRIVE_SERVICE_ACCOUNT_FILE environment
-    variable.
+    setting.
     """
     sa_file: Path = tmp_path / "sa.json"
     sa_file.write_text('{"type": "service_account"}', encoding="utf-8")
 
     mock_sa_creds: MagicMock = MagicMock()
-    mock_sa_cls.from_service_account_file.return_value = mock_sa_creds
+    mock_sa_from_file.return_value = mock_sa_creds
 
-    with patch.dict("os.environ", {"GDRIVE_SERVICE_ACCOUNT_FILE": str(sa_file)}):
-        creds: Any = get_google_service_credentials()
+    with patch(
+        "src.infra.gdrive.auth.settings.gdrive_service_account_file", str(sa_file)
+    ):
+        creds: Any = get_google_service_credentials(
+            credentials_path=tmp_path / "non_existent_creds.json",
+            token_path=tmp_path / "non_existent_token.json",
+            headless=True,
+        )
 
     assert creds == mock_sa_creds
-    mock_sa_cls.from_service_account_file.assert_called_once()
+    mock_sa_from_file.assert_called_once_with(str(sa_file), scopes=SCOPES)
 
 
 @patch("src.infra.gdrive.auth.Credentials")
@@ -193,7 +201,6 @@ def test_load_credentials_safe_missing_or_empty(tmp_path: Path) -> None:
     assert load_credentials_safe(tmp_path / "missing.json") == {
         "status": "empty_or_missing"
     }
-
     empty_file: Path = tmp_path / "empty.json"
     empty_file.touch()
     assert load_credentials_safe(empty_file) == {"status": "empty_or_missing"}

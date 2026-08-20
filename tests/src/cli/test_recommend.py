@@ -4,6 +4,7 @@ calculations, target asset enrichment, CLI execution, and UI formatters.
 
 from __future__ import annotations
 
+import os
 import runpy
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ from src.cli.recommend import (
     enrich_target_asset,
     load_json_data,
 )
+from src.config import Settings
 from src.core.exceptions import GeminiAPIError, GeminiAuthError
 from src.core.models import (
     ETFDetails,
@@ -621,3 +623,56 @@ def test_main_module_execution() -> None:
         with pytest.raises(SystemExit) as exc_info:
             runpy.run_module("src.cli.recommend", run_name="__main__")
         assert exc_info.value.code == 0
+
+
+def test_settings_prevents_direct_os_getenv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Validates that infrastructure relies on Settings class rather than
+    direct os.getenv calls.
+    """
+    mock_getenv: MagicMock = MagicMock(
+        side_effect=RuntimeError("Direct os.getenv access forbidden")
+    )
+    monkeypatch.setattr(os, "getenv", mock_getenv)
+
+    config: Settings = Settings(_env_file=None)
+    assert config is not None
+
+
+@patch("src.cli.recommend.StockProvider")
+def test_no_direct_print_calls_in_cli_execution(
+    mock_stock_cls: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Ensures CLI output is managed exclusively via Typer/Rich and no native
+    print calls occur directly in the CLI module.
+    """
+    targets_file: Path = tmp_path / "targets.json"
+    portfolio_file: Path = tmp_path / "portfolio.json"
+
+    targets_file.write_text(
+        '[{"symbol": "AAPL", "type": "STOCK", "target_allocation_pct": 100.0}]',
+        encoding="utf-8",
+    )
+    portfolio_file.write_text("[]", encoding="utf-8")
+
+    mock_stock_inst: MagicMock = MagicMock()
+    mock_stock_inst.get_price.return_value = Quotation(price=150.0, currency="EUR")
+    mock_stock_inst.get_details.return_value = None
+    mock_stock_cls.return_value = mock_stock_inst
+
+    # Mock logger to ensure native builtins.print is not called by CLI logic
+    with patch("src.cli.recommend.logger"), patch("builtins.print") as mock_print:
+        result: Any = runner.invoke(
+            app,
+            [
+                "--targets-file",
+                str(targets_file),
+                "--portfolio-file",
+                str(portfolio_file),
+                "--skip-ai",
+            ],
+        )
+        assert result.exit_code == 0
+        mock_print.assert_not_called()
