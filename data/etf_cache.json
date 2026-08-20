@@ -1,119 +1,6 @@
 {
-  "LU0411078552": {
-    "cached_at": "2026-08-18T19:15:22.017327+00:00",
-    "details": {
-      "holdings": [],
-      "sector_breakdown": [],
-      "country_breakdown": [],
-      "ter_pct": 0.6
-    }
-  },
-  "IE00B5BMR087": {
-    "cached_at": "2026-08-18T19:29:50.752724+00:00",
-    "details": {
-      "holdings": [
-        {
-          "name": "NVIDIA Corp.",
-          "isin": "US67066G1040",
-          "ticker": null,
-          "weight_pct": 7.51
-        },
-        {
-          "name": "Apple",
-          "isin": "US0378331005",
-          "ticker": null,
-          "weight_pct": 6.58
-        },
-        {
-          "name": "Microsoft Corp",
-          "isin": "US5949181045",
-          "ticker": null,
-          "weight_pct": 4.29
-        },
-        {
-          "name": "Amazon.com, Inc.",
-          "isin": "US0231351067",
-          "ticker": null,
-          "weight_pct": 3.61
-        },
-        {
-          "name": "Alphabet, Inc. A",
-          "isin": "US02079K3059",
-          "ticker": null,
-          "weight_pct": 3.25
-        },
-        {
-          "name": "Broadcom Inc.",
-          "isin": "US11135F1012",
-          "ticker": null,
-          "weight_pct": 2.77
-        },
-        {
-          "name": "Alphabet, Inc. C",
-          "isin": "US02079K1079",
-          "ticker": null,
-          "weight_pct": 2.59
-        },
-        {
-          "name": "Micron Technology",
-          "isin": "US5951121038",
-          "ticker": null,
-          "weight_pct": 2.02
-        },
-        {
-          "name": "Meta Platforms",
-          "isin": "US30303M1027",
-          "ticker": null,
-          "weight_pct": 1.92
-        },
-        {
-          "name": "Tesla",
-          "isin": "US88160R1014",
-          "ticker": null,
-          "weight_pct": 1.83
-        }
-      ],
-      "sector_breakdown": [
-        {
-          "sector_name": "Technology",
-          "weight_pct": 45.78
-        },
-        {
-          "sector_name": "Finance",
-          "weight_pct": 13.15
-        },
-        {
-          "sector_name": "Consumer Non-Cyclicals",
-          "weight_pct": 8.77
-        },
-        {
-          "sector_name": "Healthcare",
-          "weight_pct": 8.67
-        },
-        {
-          "sector_name": "Other",
-          "weight_pct": 23.63
-        }
-      ],
-      "country_breakdown": [
-        {
-          "country_name": "United States",
-          "weight_pct": 97.46
-        },
-        {
-          "country_name": "Ireland",
-          "weight_pct": 1.13
-        },
-        {
-          "country_name": "Other",
-          "weight_pct": 1.41
-        }
-      ],
-      "ter_pct": 0.07
-    }
-  },
   "IE00B4L5Y983": {
-    "cached_at": "2026-08-18T19:29:50.957045+00:00",
+    "cached_at": "2026-08-20T18:58:59.979037+00:00",
     "details": {
       "holdings": [
         {
@@ -224,8 +111,112 @@
       "ter_pct": 0.2
     }
   },
+  "IE00B5BMR087": {
+    "cached_at": "2026-08-20T18:59:00.689722+00:00",
+    "details": {
+      "holdings": [
+        {
+          "name": "NVIDIA Corp.",
+          "isin": "US67066G1040",
+          "ticker": null,
+          "weight_pct": 7.51
+        },
+        {
+          "name": "Apple",
+          "isin": "US0378331005",
+          "ticker": null,
+          "weight_pct": 6.58
+        },
+        {
+          "name": "Microsoft Corp",
+          "isin": "US5949181045",
+          "ticker": null,
+          "weight_pct": 4.29
+        },
+        {
+          "name": "Amazon.com, Inc.",
+          "isin": "US0231351067",
+          "ticker": null,
+          "weight_pct": 3.61
+        },
+        {
+          "name": "Alphabet, Inc. A",
+          "isin": "US02079K3059",
+          "ticker": null,
+          "weight_pct": 3.25
+        },
+        {
+          "name": "Broadcom Inc.",
+          "isin": "US11135F1012",
+          "ticker": null,
+          "weight_pct": 2.77
+        },
+        {
+          "name": "Alphabet, Inc. C",
+          "isin": "US02079K1079",
+          "ticker": null,
+          "weight_pct": 2.59
+        },
+        {
+          "name": "Micron Technology",
+          "isin": "US5951121038",
+          "ticker": null,
+          "weight_pct": 2.02
+        },
+        {
+          "name": "Meta Platforms",
+          "isin": "US30303M1027",
+          "ticker": null,
+          "weight_pct": 1.92
+        },
+        {
+          "name": "Tesla",
+          "isin": "US88160R1014",
+          "ticker": null,
+          "weight_pct": 1.83
+        }
+      ],
+      "sector_breakdown": [
+        {
+          "sector_name": "Technology",
+          "weight_pct": 45.78
+        },
+        {
+          "sector_name": "Finance",
+          "weight_pct": 13.15
+        },
+        {
+          "sector_name": "Consumer Non-Cyclicals",
+          "weight_pct": 8.77
+        },
+        {
+          "sector_name": "Healthcare",
+          "weight_pct": 8.67
+        },
+        {
+          "sector_name": "Other",
+          "weight_pct": 23.63
+        }
+      ],
+      "country_breakdown": [
+        {
+          "country_name": "United States",
+          "weight_pct": 97.46
+        },
+        {
+          "country_name": "Ireland",
+          "weight_pct": 1.13
+        },
+        {
+          "country_name": "Other",
+          "weight_pct": 1.41
+        }
+      ],
+      "ter_pct": 0.07
+    }
+  },
   "IE00BL25JP72": {
-    "cached_at": "2026-08-18T19:29:51.534348+00:00",
+    "cached_at": "2026-08-20T18:59:01.356219+00:00",
     "details": {
       "holdings": [
         {
@@ -336,8 +327,17 @@
       "ter_pct": 0.25
     }
   },
+  "LU0411078552": {
+    "cached_at": "2026-08-20T18:59:02.158629+00:00",
+    "details": {
+      "holdings": [],
+      "sector_breakdown": [],
+      "country_breakdown": [],
+      "ter_pct": 0.6
+    }
+  },
   "IE00BG0J4C88": {
-    "cached_at": "2026-08-18T20:17:57.852957+00:00",
+    "cached_at": "2026-08-20T18:59:03.056206+00:00",
     "details": {
       "holdings": [
         {

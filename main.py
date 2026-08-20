@@ -49,74 +49,100 @@ def main_callback() -> None:
 @app.command(name="get-snapshot")
 def get_snapshot_cmd() -> None:
     """Calculates and displays the current portfolio valuation."""
-    snapshot_data: PortfolioSnapshot | None = get_snapshot()
-    if not snapshot_data:
-        logger.error("Failed to calculate portfolio snapshot.")
-        raise typer.Exit(code=1)
+    try:
+        snapshot_data: PortfolioSnapshot | None = get_snapshot()
+        if not snapshot_data:
+            logger.error("Failed to calculate portfolio snapshot.")
+            raise typer.Exit(code=1)
 
-    display_snapshot(snapshot_data)
+        display_snapshot(snapshot_data)
+    except typer.Exit:
+        raise
+    except Exception as err:
+        logger.error(f"Unexpected error calculating snapshot: {err}")
+        raise typer.Exit(code=1) from err
 
 
 @app.command(name="save-snapshot")
 def save_snapshot_cmd() -> None:
     """Calculates current portfolio valuation and saves it to history."""
-    snapshot_data: PortfolioSnapshot | None = get_snapshot()
-    if not snapshot_data:
-        logger.error("Failed to calculate portfolio snapshot.")
-        raise typer.Exit(code=1)
+    try:
+        snapshot_data: PortfolioSnapshot | None = get_snapshot()
+        if not snapshot_data:
+            logger.error("Failed to calculate portfolio snapshot.")
+            raise typer.Exit(code=1)
 
-    save_snapshot(snapshot_data)
+        save_snapshot(snapshot_data)
+    except typer.Exit:
+        raise
+    except Exception as err:
+        logger.error(f"Unexpected error saving snapshot: {err}")
+        raise typer.Exit(code=1) from err
 
 
 @app.command(name="analyze")
 def analyze_cmd() -> None:
     """Analyzes historical performance and ROI for all portfolio assets."""
-    analyze_overall_performance()
+    try:
+        analyze_overall_performance()
+    except Exception as err:
+        logger.error(f"Failed to analyze portfolio performance: {err}")
+        raise typer.Exit(code=1) from err
 
 
 @app.command(name="pull-config")
 def pull_config_cmd() -> None:
     """Pulls configuration files from Google Drive to local data directory."""
     logger.section("Pulling Configuration from Google Drive")
-    service: GoogleDriveService = GoogleDriveService()
+    try:
+        service: GoogleDriveService = GoogleDriveService()
 
-    portfolio_ok: bool = service.download_file(
-        "portfolio.json", DATA_DIR / "portfolio.json"
-    )
-    targets_ok: bool = service.download_file(
-        "portfolio_targets.json", DATA_DIR / "portfolio_targets.json"
-    )
+        portfolio_ok: bool = service.download_file(
+            "portfolio.json", DATA_DIR / "portfolio.json"
+        )
+        targets_ok: bool = service.download_file(
+            "portfolio_targets.json", DATA_DIR / "portfolio_targets.json"
+        )
 
-    if portfolio_ok and targets_ok:
-        logger.success("Successfully pulled configuration files from Google Drive.")
-    else:
-        logger.warning("One or more configuration files failed to download from Drive.")
+        if portfolio_ok and targets_ok:
+            logger.success("Successfully pulled configuration files from Google Drive.")
+        else:
+            logger.warning(
+                "One or more configuration files failed to download from Drive."
+            )
+    except Exception as err:
+        logger.error(f"Google Drive pull failed: {err}")
+        raise typer.Exit(code=1) from err
 
 
 @app.command(name="push-config")
 def push_config_cmd() -> None:
     """Pushes local configuration files to Google Drive."""
     logger.section("Pushing Configuration to Google Drive")
-    service: GoogleDriveService = GoogleDriveService()
+    try:
+        service: GoogleDriveService = GoogleDriveService()
 
-    portfolio_file: Path = DATA_DIR / "portfolio.json"
-    targets_file: Path = DATA_DIR / "portfolio_targets.json"
+        portfolio_file: Path = DATA_DIR / "portfolio.json"
+        targets_file: Path = DATA_DIR / "portfolio_targets.json"
 
-    portfolio_ok: bool = (
-        bool(service.upload_file(portfolio_file, overwrite=True))
-        if portfolio_file.exists()
-        else False
-    )
-    targets_ok: bool = (
-        bool(service.upload_file(targets_file, overwrite=True))
-        if targets_file.exists()
-        else False
-    )
+        portfolio_ok: bool = (
+            bool(service.upload_file(portfolio_file, overwrite=True))
+            if portfolio_file.exists()
+            else False
+        )
+        targets_ok: bool = (
+            bool(service.upload_file(targets_file, overwrite=True))
+            if targets_file.exists()
+            else False
+        )
 
-    if portfolio_ok and targets_ok:
-        logger.success("Successfully pushed configuration files to Google Drive.")
-    else:
-        logger.warning("One or more configuration files failed to upload to Drive.")
+        if portfolio_ok and targets_ok:
+            logger.success("Successfully pushed configuration files to Google Drive.")
+        else:
+            logger.warning("One or more configuration files failed to upload to Drive.")
+    except Exception as err:
+        logger.error(f"Google Drive push failed: {err}")
+        raise typer.Exit(code=1) from err
 
 
 def _display_single_etf_details(isin: str, name: str, provider: ETFProvider) -> None:
@@ -131,9 +157,14 @@ def _display_single_etf_details(isin: str, name: str, provider: ETFProvider) -> 
         yahoo_ticker="",
         quantity=0,
         average_buy_price=0.0,
+        asset_type="ETF",
     )
 
-    details: ETFDetails | None = provider.get_details(dummy_asset)
+    try:
+        details: ETFDetails | None = provider.get_details(dummy_asset)
+    except Exception as err:
+        logger.error(f"Failed to fetch details for ETF ISIN {isin}: {err}")
+        return
 
     if details is None:
         logger.error(f"Failed to fetch details for ETF ISIN {isin}.")
@@ -208,7 +239,9 @@ def etf_details_cmd(
         raise typer.Exit(code=1) from e
 
     etf_assets: list[Asset] = [
-        a for a in assets if a.asset_type == "etf" and a.isin and len(a.isin) == 12
+        a
+        for a in assets
+        if str(a.asset_type).upper() == "ETF" and a.isin and len(a.isin) == 12
     ]
     if not etf_assets:
         logger.warning("No active ETF holdings found in portfolio.")
@@ -250,10 +283,14 @@ def _display_single_stock_details(
         yahoo_ticker=identifier,
         quantity=0,
         average_buy_price=0.0,
-        asset_type="stock",
+        asset_type="STOCK",
     )
 
-    details: StockDetails | None = provider.get_details(dummy_asset)
+    try:
+        details: StockDetails | None = provider.get_details(dummy_asset)
+    except Exception as err:
+        logger.error(f"Error retrieving stock details for '{identifier}': {err}")
+        return
 
     if details is None:
         logger.error(f"Failed to fetch details for stock '{identifier}'.")
@@ -264,10 +301,45 @@ def _display_single_stock_details(
     fwd_pe_str: str = (
         f"{details.forward_pe:.2f}" if details.forward_pe is not None else "N/A"
     )
+    peg_str: str = (
+        f"{details.peg_ratio:.2f}" if details.peg_ratio is not None else "N/A"
+    )
+    pb_str: str = (
+        f"{details.price_to_book:.2f}" if details.price_to_book is not None else "N/A"
+    )
     div_str: str = (
         f"{details.dividend_yield_pct:.2f}%"
         if details.dividend_yield_pct is not None
         else "N/A"
+    )
+    beta_str: str = f"{details.beta:.2f}" if details.beta is not None else "N/A"
+    margin_str: str = (
+        f"{details.profit_margins_pct:.2f}%"
+        if details.profit_margins_pct is not None
+        else "N/A"
+    )
+    rev_growth_str: str = (
+        f"{details.revenue_growth_pct:.2f}%"
+        if details.revenue_growth_pct is not None
+        else "N/A"
+    )
+    earn_growth_str: str = (
+        f"{details.earnings_growth_pct:.2f}%"
+        if details.earnings_growth_pct is not None
+        else "N/A"
+    )
+    debt_eq_str: str = (
+        f"{details.total_debt_to_equity:.2f}"
+        if details.total_debt_to_equity is not None
+        else "N/A"
+    )
+    target_price_str: str = (
+        f"{details.target_mean_price:.2f} EUR"
+        if details.target_mean_price is not None
+        else "N/A"
+    )
+    rec_key_str: str = (
+        details.recommendation_key.upper() if details.recommendation_key else "N/A"
     )
     high_str: str = (
         f"{details.fifty_two_week_high:.2f}"
@@ -284,7 +356,13 @@ def _display_single_stock_details(
     logger.info(f"Industry: {details.industry or 'N/A'}")
     logger.info(f"Market Cap: {mcap_str}")
     logger.info(f"P/E Ratio: {pe_str} (Forward P/E: {fwd_pe_str})")
-    logger.info(f"Dividend Yield: {div_str}")
+    logger.info(f"PEG Ratio: {peg_str} | Price to Book: {pb_str}")
+    logger.info(f"Dividend Yield: {div_str} | Beta: {beta_str}")
+    logger.info(f"Profit Margins: {margin_str} | Debt/Equity: {debt_eq_str}")
+    logger.info(
+        f"Revenue Growth: {rev_growth_str} | Earnings Growth: {earn_growth_str}"
+    )
+    logger.info(f"Analyst Consensus: {rec_key_str} (Target Price: {target_price_str})")
     logger.info(f"52-Week Range: {low_str} - {high_str}")
 
 
@@ -316,7 +394,7 @@ def stock_details_cmd(
             (
                 a
                 for a in assets_lookup
-                if a.asset_type == "stock"
+                if str(a.asset_type).upper() == "STOCK"
                 and (
                     a.yahoo_ticker.upper() == clean_input
                     or (a.isin and a.isin.upper() == clean_input)
@@ -341,7 +419,9 @@ def stock_details_cmd(
         logger.error(f"Failed to load portfolio assets: {e}")
         raise typer.Exit(code=1) from e
 
-    stock_assets: list[Asset] = [a for a in assets if a.asset_type == "stock"]
+    stock_assets: list[Asset] = [
+        a for a in assets if str(a.asset_type).upper() == "STOCK"
+    ]
     if not stock_assets:
         logger.warning("No active stock holdings found in portfolio.")
         return
@@ -360,26 +440,36 @@ def analyze_exposure_cmd() -> None:
     """Analyzes consolidated portfolio sector and country exposure."""
     logger.section("Analyzing Consolidated Portfolio Exposure")
 
-    snapshot: PortfolioSnapshot | None = get_snapshot()
-    if not snapshot:
-        logger.error("Failed to calculate portfolio snapshot for exposure analysis.")
-        raise typer.Exit(code=1)
+    try:
+        snapshot: PortfolioSnapshot | None = get_snapshot()
+        if not snapshot:
+            logger.error(
+                "Failed to calculate portfolio snapshot for exposure analysis."
+            )
+            raise typer.Exit(code=1)
 
-    exposure: PortfolioExposure = calculate_portfolio_exposure(snapshot)
+        exposure: PortfolioExposure = calculate_portfolio_exposure(snapshot)
 
-    if exposure.total_etf_value_eur == 0.0:
-        logger.warning("No active ETF holdings found in portfolio.")
-        return
+        if exposure.total_etf_value_eur == 0.0:
+            logger.warning("No active ETF holdings found in portfolio.")
+            return
 
-    logger.info(f"Total ETF Portfolio Value: {exposure.total_etf_value_eur:.2f} EUR")
+        logger.info(
+            f"Total ETF Portfolio Value: {exposure.total_etf_value_eur:.2f} EUR"
+        )
 
-    logger.info("Consolidated Sector Exposure:")
-    for sector, pct in exposure.sector_exposure.items():
-        logger.print(f"  - {sector}: {pct:.2f}%")
+        logger.info("Consolidated Sector Exposure:")
+        for sector, pct in exposure.sector_exposure.items():
+            logger.print(f"  - {sector}: {pct:.2f}%")
 
-    logger.info("Consolidated Country Exposure:")
-    for country, pct in exposure.country_exposure.items():
-        logger.print(f"  - {country}: {pct:.2f}%")
+        logger.info("Consolidated Country Exposure:")
+        for country, pct in exposure.country_exposure.items():
+            logger.print(f"  - {country}: {pct:.2f}%")
+    except typer.Exit:
+        raise
+    except Exception as err:
+        logger.error(f"Failed to analyze exposure: {err}")
+        raise typer.Exit(code=1) from err
 
 
 @app.command(name="decision")
@@ -417,15 +507,6 @@ def decision_cmd(
             help="Display detailed quantitative score factors breakdown.",
         ),
     ] = False,
-    output_csv: Annotated[
-        Path,
-        typer.Option(
-            "--output-csv",
-            "-o",
-            help="Path to export decision matrix as CSV file.",
-        ),
-    ] = Path("output")
-    / "decision_output.csv",
 ) -> None:
     """Ranks targets and provides AI-driven investment decision recommendations."""
     recommend_rebalance(
@@ -433,7 +514,6 @@ def decision_cmd(
         portfolio_file=portfolio_file,
         skip_ai=skip_ai,
         verbose=verbose,
-        output_csv=output_csv,
     )
 
 

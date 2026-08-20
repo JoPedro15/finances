@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -31,10 +33,13 @@ from src.core.models import (
     UrgencyLevel,
 )
 from src.core.providers import ETFProvider, StockProvider
+from src.core.repositories import SqliteDecisionRepository
 from src.infra.ai.client import GeminiClient
+from src.infra.database.connection import DEFAULT_DB_PATH
+from src.infra.gdrive.service import GDriveService
 from src.utils.logger.logger import logger
 
-DEFAULT_OUTPUT_CSV: Path = Path("output") / "decision_output.csv"
+OUTPUT_DIR: Path = Path("output")
 
 app: typer.Typer = typer.Typer(help="Investment decision engine CLI commands.")
 console: Console = Console()
@@ -78,13 +83,19 @@ def calculate_current_allocations(
         if not symbol or quantity <= 0.0:
             continue
 
+        asset_type_val: str = str(
+            item.get("asset_type") or item.get("type") or "STOCK"
+        ).upper()
+
         dummy_asset: Asset = Asset(
             name=symbol,
             isin=str(item.get("isin", "")),
             yahoo_ticker=symbol,
             quantity=quantity,
-            average_buy_price=float(item.get("averageBuyPrice", 0.0)),
-            asset_type=str(item.get("asset_type", "stock")).lower(),
+            average_buy_price=float(
+                item.get("averageBuyPrice", item.get("average_buy_price", 0.0))
+            ),
+            asset_type=asset_type_val,
         )
 
         quote: Quotation | None = stock_provider.get_price(dummy_asset)
@@ -118,20 +129,21 @@ def enrich_target_asset(
     stock_provider: StockProvider,
     etf_provider: ETFProvider,
 ) -> dict[str, Any]:
-    """Enriches wishlist asset with real-time market data and metrics."""
+    """Enriches wishlist asset with real-time market data, TER, and breakdowns."""
     symbol: str = str(target.get("yahoo_ticker") or target.get("symbol") or "").strip()
-    asset_type: str = str(target.get("type") or target.get("asset_type") or "").upper()
+    asset_type: str = str(target.get("asset_type") or target.get("type") or "").upper()
+    isin: str = str(target.get("isin", ""))
 
     if not symbol or not asset_type:
         raise ValueError(f"Missing symbol or type for target asset: {target}")
 
     dummy_asset: Asset = Asset(
         name=symbol,
-        isin=str(target.get("isin", "")),
+        isin=isin,
         yahoo_ticker=symbol,
         quantity=0.0,
         average_buy_price=0.0,
-        asset_type=asset_type.lower(),
+        asset_type=asset_type,
     )
 
     quote: Quotation | None = stock_provider.get_price(dummy_asset)
@@ -153,27 +165,65 @@ def enrich_target_asset(
     low_52w: float | None = stock_details.fifty_two_week_low if stock_details else None
 
     ter: float | None = None
+    sector_breakdown: list[dict[str, Any]] = []
+    country_breakdown: list[dict[str, Any]] = []
+    top_holdings: list[dict[str, Any]] = []
+
     if asset_type == "ETF":
         etf_details: ETFDetails | None = etf_provider.get_details(dummy_asset)
-        ter = etf_details.ter_pct if etf_details else None
-        if ter is None and target.get("ter") is not None:
-            ter = float(target["ter"])
+        if etf_details:
+            ter = etf_details.ter_pct
+            sector_breakdown = [s.to_dict() for s in etf_details.sector_breakdown]
+            country_breakdown = [c.to_dict() for c in etf_details.country_breakdown]
+            top_holdings = [h.to_dict() for h in etf_details.holdings]
 
-    trailing_pe: float | None = stock_details.pe_ratio if stock_details else None
-    forward_pe: float | None = stock_details.forward_pe if stock_details else None
+    target_alloc_pct: float = float(target.get("target_allocation_pct", 0.0))
+    alloc_gap_pct: float = round(target_alloc_pct - current_alloc_pct, 2)
 
     return {
         "symbol": symbol,
+        "isin": isin,
         "asset_type": asset_type,
         "current_price": current_price,
         "peak_price": peak_price,
-        "target_allocation_pct": float(target.get("target_allocation_pct", 0.0)),
-        "current_allocation_pct": current_alloc_pct,
-        "ter": ter,
-        "trailing_pe": trailing_pe,
-        "forward_pe": forward_pe,
         "low_52w": low_52w,
         "high_52w": peak_price,
+        "target_allocation_pct": target_alloc_pct,
+        "current_allocation_pct": current_alloc_pct,
+        "allocation_gap_pct": alloc_gap_pct,
+        "sector": stock_details.sector if stock_details else None,
+        "industry": stock_details.industry if stock_details else None,
+        "market_cap": stock_details.market_cap if stock_details else None,
+        "trailing_pe": stock_details.pe_ratio if stock_details else None,
+        "forward_pe": stock_details.forward_pe if stock_details else None,
+        "peg_ratio": stock_details.peg_ratio if stock_details else None,
+        "price_to_book": stock_details.price_to_book if stock_details else None,
+        "dividend_yield_pct": (
+            stock_details.dividend_yield_pct if stock_details else None
+        ),
+        "beta": stock_details.beta if stock_details else None,
+        "profit_margins_pct": (
+            stock_details.profit_margins_pct if stock_details else None
+        ),
+        "revenue_growth_pct": (
+            stock_details.revenue_growth_pct if stock_details else None
+        ),
+        "earnings_growth_pct": (
+            stock_details.earnings_growth_pct if stock_details else None
+        ),
+        "total_debt_to_equity": (
+            stock_details.total_debt_to_equity if stock_details else None
+        ),
+        "target_mean_price": (
+            stock_details.target_mean_price if stock_details else None
+        ),
+        "recommendation_key": (
+            stock_details.recommendation_key if stock_details else None
+        ),
+        "ter": ter,
+        "sector_breakdown": sector_breakdown,
+        "country_breakdown": country_breakdown,
+        "top_holdings": top_holdings,
     }
 
 
@@ -199,20 +249,28 @@ def _format_urgency(urgency: UrgencyLevel | None) -> Text:
     return Text("N/A", style="dim")
 
 
-def export_to_csv(
+def export_outputs(
     ranked_scores: list[AssetScore],
     asset_dict_map: dict[str, dict[str, Any]],
     recommendations_map: dict[str, RebalanceRecommendation],
-    output_path: Path,
+    total_val: float,
+    has_ai: bool,
+    output_dir: Path = OUTPUT_DIR,
 ) -> None:
-    """Exports the rebalancing decision matrix to a structured CSV file."""
-    target_path: Path = (
-        DEFAULT_OUTPUT_CSV
-        if str(output_path).startswith("-") or not output_path
-        else output_path
-    )
+    """Exports both CSV matrix and Markdown report with static filenames
 
-    fieldnames: list[str] = [
+    and uploads them to Google Drive.
+    """
+    formatted_date_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_path: Path = output_dir / "decision_output.csv"
+    md_path: Path = output_dir / "decision_report.md"
+
+    # Restante da função permanece igual...
+
+    # 1. Export CSV
+    csv_fieldnames: list[str] = [
         "rank",
         "symbol",
         "asset_type",
@@ -229,10 +287,9 @@ def export_to_csv(
     ]
 
     try:
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(target_path, mode="w", newline="", encoding="utf-8") as csv_file:
+        with open(csv_path, mode="w", newline="", encoding="utf-8") as csv_file:
             writer: csv.DictWriter[str] = csv.DictWriter(
-                csv_file, fieldnames=fieldnames
+                csv_file, fieldnames=csv_fieldnames
             )
             writer.writeheader()
 
@@ -267,9 +324,224 @@ def export_to_csv(
                 }
                 writer.writerow(row)
 
-        logger.info(f"Successfully exported decision matrix to '{target_path}'.")
+        logger.info(f"Successfully exported decision matrix CSV to '{csv_path}'.")
     except Exception as err:
-        logger.error(f"Failed to export CSV to '{target_path}': {err}")
+        logger.error(f"Failed to export CSV to '{csv_path}': {err}")
+
+    # 2. Export Markdown Report
+    score_map: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
+    stock_weights_str: str = (
+        f"Dip: `{settings.stock_weight_dip:.2f}` | "
+        f"Forward P/E: `{settings.stock_weight_forward_pe:.2f}` | "
+        f"52w Range: `{settings.stock_weight_52w_range:.2f}` | "
+        f"Gap: `{settings.stock_weight_allocation:.2f}`"
+    )
+    etf_weights_str: str = (
+        f"Dip: `{settings.etf_weight_dip:.2f}` | "
+        f"TER/Cost: `{settings.etf_weight_ter:.2f}` | "
+        f"Gap: `{settings.etf_weight_allocation:.2f}`"
+    )
+
+    md_lines: list[str] = [
+        "# Portfolio Rebalancing & Investment Decision Report",
+        f"*Generated on: {formatted_date_str}*\n",
+        "## Portfolio & Decision Strategy Summary\n",
+        f"- **Total Portfolio Value:** {total_val:,.2f} EUR",
+        f"- **Target Assets Evaluated:** {len(ranked_scores)}\n",
+        "### Active Decision Strategy Weights",
+        f"- **Stocks Formula:** {stock_weights_str}",
+        f"- **ETFs Formula:** {etf_weights_str}\n",
+        "---",
+        "\n## Portfolio Rebalancing & Investment Decision Matrix\n",
+        (
+            "| Rank | Symbol | Type | Price (€) | Current % | "
+            "Target % | Score | AI Action | Urgency | Conf. |"
+        ),
+        "| :---: | :---: | :---: | ---: | ---: | ---: | ---: | :---: | :---: | ---: |",
+    ]
+
+    for rank, score in enumerate(ranked_scores, start=1):
+        target_item = asset_dict_map[score.symbol]
+        price = float(target_item["current_price"])
+        curr_pct = float(target_item["current_allocation_pct"])
+        targ_pct = float(target_item["target_allocation_pct"])
+        rec = recommendations_map.get(score.symbol)
+
+        action_str = rec.action.value if rec and rec.action else "N/A"
+        urgency_str = rec.urgency_level.value if rec and rec.urgency_level else "N/A"
+        conf_str = f"{rec.confidence_score * 100:.0f}%" if rec else "N/A"
+
+        md_lines.append(
+            f"| {rank} | {score.symbol} | {score.asset_type.value.upper()} | "
+            f"{price:,.2f} | {curr_pct:.1f}% | {targ_pct:.1f}% | "
+            f"{score.total_score:.3f} | {action_str} | {urgency_str} | {conf_str} |"
+        )
+
+    active_recs: list[tuple[str, RebalanceRecommendation]] = [
+        (sym, r)
+        for sym, r in recommendations_map.items()
+        if r.action in (RecommendationAction.BUY, RecommendationAction.SELL)
+    ]
+
+    if has_ai and active_recs:
+        md_lines.extend(["\n---", "\n## Actionable Advisory Insights\n"])
+
+        for symbol, rec in active_recs:
+            target_item = asset_dict_map[symbol]
+            curr_price = float(target_item.get("current_price", 0.0))
+            peak_price = float(target_item.get("peak_price", 0.0))
+            low_52w = target_item.get("low_52w")
+
+            curr_alloc = float(target_item.get("current_allocation_pct", 0.0))
+            targ_alloc = float(target_item.get("target_allocation_pct", 0.0))
+            delta_pct = targ_alloc - curr_alloc
+            delta_str = f"+{delta_pct:.1f}%" if delta_pct >= 0 else f"{delta_pct:.1f}%"
+
+            conf_pct_str = f"{rec.confidence_score * 100:.0f}%"
+            action_val = rec.action.value if rec.action else "N/A"
+            urgency_val = (
+                rec.urgency_level.value if rec and rec.urgency_level else "N/A"
+            )
+
+            md_lines.extend(
+                [
+                    f"### 🔹 {symbol}",
+                    f"- **Action:** {action_val}",
+                    f"- **Urgency:** {urgency_val}",
+                    f"- **Confidence:** {conf_pct_str}",
+                    f"- **Price:** {curr_price:,.2f} EUR "
+                    f"(52w Peak: {peak_price:,.2f} EUR)",
+                    f"- **Allocation Gap:** Current {curr_alloc:.1f}% vs "
+                    f"Target {targ_alloc:.1f}% (Δ Target: {delta_str})\n",
+                ]
+            )
+
+            if target_item.get("asset_type") == "ETF":
+                ter_val = target_item.get("ter")
+                ter_str = f"{ter_val:.2f}%" if ter_val is not None else "N/A"
+
+                holdings_list = target_item.get("top_holdings", [])
+                holdings_str = (
+                    ", ".join(
+                        [
+                            f"{h.get('name', '')} "
+                            f"({float(h.get('weight_pct', 0.0)):.1f}%)"
+                            for h in holdings_list[:5]
+                        ]
+                    )
+                    if holdings_list
+                    else "N/A"
+                )
+
+                sectors_list = target_item.get("sector_breakdown", [])
+                sectors_str = (
+                    ", ".join(
+                        [
+                            f"{s.get('sector_name') or s.get('name', '')} "
+                            f"({s.get('weight_pct', 0):.1f}%)"
+                            for s in sectors_list[:4]
+                        ]
+                    )
+                    if sectors_list
+                    else "N/A"
+                )
+
+                countries_list = target_item.get("country_breakdown", [])
+                countries_str = (
+                    ", ".join(
+                        [
+                            f"{c.get('country_name') or c.get('name', '')} "
+                            f"({c.get('weight_pct', 0):.1f}%)"
+                            for c in countries_list[:4]
+                        ]
+                    )
+                    if countries_list
+                    else "N/A"
+                )
+
+                md_lines.extend(
+                    [
+                        "#### Valuation & ETF Metrics",
+                        f"- **Total Expense Ratio (TER):** {ter_str}",
+                        f"- **Top Holdings:** {holdings_str}",
+                        f"- **Sector Breakdown:** {sectors_str}",
+                        f"- **Country Breakdown:** {countries_str}\n",
+                    ]
+                )
+            else:
+                tr_pe = target_item.get("trailing_pe")
+                fw_pe = target_item.get("forward_pe")
+                peg = target_item.get("peg_ratio")
+                pb = target_item.get("price_to_book")
+                div_yield = target_item.get("dividend_yield_pct")
+                beta = target_item.get("beta")
+                margin = target_item.get("profit_margins_pct")
+                rev_growth = target_item.get("revenue_growth_pct")
+                earn_growth = target_item.get("earnings_growth_pct")
+                debt_eq = target_item.get("total_debt_to_equity")
+
+                tr_str = f"{tr_pe:.1f}" if tr_pe else "N/A"
+                fw_str = f"{fw_pe:.1f}" if fw_pe else "N/A"
+                peg_str = f"{peg:.2f}" if peg else "N/A"
+                pb_str = f"{pb:.2f}" if pb else "N/A"
+                div_str = f"{div_yield:.2f}%" if div_yield else "N/A"
+                beta_str = f"{beta:.2f}" if beta else "N/A"
+                margin_str = f"{margin:.1f}%" if margin else "N/A"
+                rev_str = f"{rev_growth:.1f}%" if rev_growth else "N/A"
+                earn_str = f"{earn_growth:.1f}%" if earn_growth else "N/A"
+                debt_str = f"{debt_eq:.1f}" if debt_eq else "N/A"
+
+                low_str = f"{low_52w:,.2f} EUR" if low_52w else "N/A"
+                peak_str = f"{peak_price:,.2f} EUR" if peak_price else "N/A"
+
+                md_lines.extend(
+                    [
+                        "#### Valuation & Fundamental Metrics",
+                        f"- **Trailing P/E:** {tr_str} | **Forward P/E:** {fw_str} | "
+                        f"**PEG Ratio:** {peg_str} | **Price/Book:** {pb_str}",
+                        f"- **Div Yield:** {div_str} | **Beta:** {beta_str} | "
+                        f"**Profit Margin:** {margin_str}",
+                        f"- **Rev Growth:** {rev_str} | **Earn Growth:** {earn_str} | "
+                        f"**Debt/Equity:** {debt_str}",
+                        f"- **52w Range (Low / High):** {low_str} / {peak_str}\n",
+                    ]
+                )
+
+            score_info = score_map.get(symbol)
+            if score_info:
+                md_lines.extend(
+                    [
+                        "#### Factor Scores",
+                        f"- **Dip Score:** {score_info.dip_score:.2f}",
+                        f"- **Valuation/Cost Score:** {score_info.cost_score:.2f}",
+                        f"- **Gap Score:** {score_info.allocation_score:.2f}",
+                        f"- **Quant Total:** **{score_info.total_score:.3f}**\n",
+                    ]
+                )
+
+            md_lines.extend([f"> *{rec.reasoning}*\n", "---\n"])
+
+    try:
+        with open(md_path, mode="w", encoding="utf-8") as md_file:
+            md_file.write("\n".join(md_lines))
+        logger.info(f"Successfully exported decision report Markdown to '{md_path}'.")
+    except Exception as err:
+        logger.error(f"Failed to export Markdown report to '{md_path}': {err}")
+
+    # 3. Automatic Google Drive Backup for Reports Folder
+    if settings.gdrive_reports_folder_id and "pytest" not in sys.modules:
+        try:
+            drive_service: GDriveService = GDriveService(
+                folder_id=settings.gdrive_reports_folder_id
+            )
+            drive_service.upload_file(csv_path, overwrite=True)
+            drive_service.upload_file(md_path, overwrite=True)
+            logger.info(
+                "Successfully backed up decision reports to "
+                "Google Drive reports folder."
+            )
+        except Exception as err:
+            logger.warning(f"Failed to back up decision reports to Google Drive: {err}")
 
 
 def _display_rebalance_results(
@@ -418,9 +690,7 @@ def _display_rebalance_results(
         ]
 
         if active_recs:
-            console.print(
-                "[bold yellow]💡 Actionable AI Advisory Insights[/bold yellow]"
-            )
+            console.print("[bold yellow]Actionable AI Advisory Insights[/bold yellow]")
             for symbol, rec in active_recs:
                 target_item = asset_dict_map[symbol]
                 act_text: Text = _format_action(rec.action)
@@ -445,23 +715,90 @@ def _display_rebalance_results(
                 if target_item.get("asset_type") == "ETF":
                     ter_val = target_item.get("ter")
                     ter_str = f"{ter_val:.2f}%" if ter_val is not None else "N/A"
+
+                    holdings_list = target_item.get("top_holdings", [])
+                    holdings_str = (
+                        ", ".join(
+                            [
+                                f"{h.get('name', '')} ({h.get('weight_pct', 0):.1f}%)"
+                                for h in holdings_list[:5]
+                            ]
+                        )
+                        if holdings_list
+                        else "N/A"
+                    )
+
+                    sectors_list = target_item.get("sector_breakdown", [])
+                    sectors_str = (
+                        ", ".join(
+                            [
+                                f"{s.get('sector_name') or s.get('name', '')} "
+                                f"({float(s.get('weight_pct', 0.0)):.1f}%)"
+                                for s in sectors_list[:4]
+                            ]
+                        )
+                        if sectors_list
+                        else "N/A"
+                    )
+
+                    countries_list = target_item.get("country_breakdown", [])
+                    countries_str = (
+                        ", ".join(
+                            [
+                                f"{c.get('country_name') or c.get('name', '')} "
+                                f"({float(c.get('weight_pct', 0.0)):.1f}%)"
+                                for c in countries_list[:4]
+                            ]
+                        )
+                        if countries_list
+                        else "N/A"
+                    )
+
                     val_lines = (
-                        f"• [bold]Valuation & Cost Metrics:[/bold]\n"
-                        f"  - Total Expense Ratio (TER): [cyan]{ter_str}[/cyan]"
+                        f"• [bold]Valuation & ETF Metrics:[/bold]\n"
+                        f"  - Total Expense Ratio (TER): [cyan]{ter_str}[/cyan]\n"
+                        f"  - Top Holdings: [cyan]{holdings_str}[/cyan]\n"
+                        f"  - Sector Breakdown: [cyan]{sectors_str}[/cyan]\n"
+                        f"  - Country Breakdown: [cyan]{countries_str}[/cyan]"
                     )
                 else:
                     tr_pe = target_item.get("trailing_pe")
                     fw_pe = target_item.get("forward_pe")
+                    peg = target_item.get("peg_ratio")
+                    pb = target_item.get("price_to_book")
+                    div_yield = target_item.get("dividend_yield_pct")
+                    beta = target_item.get("beta")
+                    margin = target_item.get("profit_margins_pct")
+                    rev_growth = target_item.get("revenue_growth_pct")
+                    earn_growth = target_item.get("earnings_growth_pct")
+                    debt_eq = target_item.get("total_debt_to_equity")
+
                     tr_str = f"{tr_pe:.1f}" if tr_pe else "N/A"
                     fw_str = f"{fw_pe:.1f}" if fw_pe else "N/A"
+                    peg_str = f"{peg:.2f}" if peg else "N/A"
+                    pb_str = f"{pb:.2f}" if pb else "N/A"
+                    div_str = f"{div_yield:.2f}%" if div_yield else "N/A"
+                    beta_str = f"{beta:.2f}" if beta else "N/A"
+                    margin_str = f"{margin:.1f}%" if margin else "N/A"
+                    rev_str = f"{rev_growth:.1f}%" if rev_growth else "N/A"
+                    earn_str = f"{earn_growth:.1f}%" if earn_growth else "N/A"
+                    debt_str = f"{debt_eq:.1f}" if debt_eq else "N/A"
+
                     low_str = f"{low_52w:,.2f} EUR" if low_52w else "N/A"
                     peak_str = f"{peak_price:,.2f} EUR" if peak_price else "N/A"
                     val_lines = (
-                        f"• [bold]Valuation & Market Data:[/bold]\n"
-                        f"  - Trailing P/E: [cyan]{tr_str}[/cyan]\n"
-                        f"  - Forward P/E: [cyan]{fw_str}[/cyan]\n"
-                        f"  - 52w Range (Low / High): "
-                        f"[cyan]{low_str}[/cyan] / [cyan]{peak_str}[/cyan]"
+                        f"• [bold]Valuation & Fundamental Metrics:[/bold]\n"
+                        f"  - Trailing P/E: [cyan]{tr_str}[/cyan] | "
+                        f"Forward P/E: [cyan]{fw_str}[/cyan] | "
+                        f"PEG: [cyan]{peg_str}[/cyan] | P/B: [cyan]{pb_str}[/cyan]\n"
+                        f"  - Div Yield: [cyan]{div_str}[/cyan] | "
+                        f"Beta: [cyan]{beta_str}[/cyan] | "
+                        f"Profit Margin: [cyan]{margin_str}[/cyan]\n"
+                        f"  - Rev Growth: [cyan]{rev_str}[/cyan] | "
+                        f"Earn Growth: [cyan]{earn_str}[/cyan] | "
+                        f"Debt/Equity: [cyan]{debt_str}[/cyan]\n"
+                        f"  - 52w Range (Low / High): [cyan]{low_str}[/cyan] / "
+                        f"[cyan]{peak_str}[/cyan]"
                     )
 
                 score_info: AssetScore | None = score_map.get(symbol)
@@ -546,14 +883,6 @@ def recommend_rebalance(
             help="Display detailed quantitative score factors breakdown.",
         ),
     ] = False,
-    output_csv: Annotated[
-        Path,
-        typer.Option(
-            "--output-csv",
-            "-o",
-            help="Path to export decision matrix as CSV file.",
-        ),
-    ] = DEFAULT_OUTPUT_CSV,
 ) -> None:
     """Ranks targets and provides AI-driven rebalancing recommendations."""
     targets_raw: list[dict[str, Any]] = load_json_data(targets_file)
@@ -565,6 +894,7 @@ def recommend_rebalance(
 
     stock_provider: StockProvider = StockProvider()
     etf_provider: ETFProvider = ETFProvider()
+    decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(DEFAULT_DB_PATH)
 
     with console.status("[bold cyan]Fetching market data and evaluating portfolio..."):
         current_alloc_map: dict[str, float]
@@ -583,6 +913,11 @@ def recommend_rebalance(
                 enriched: dict[str, Any] = enrich_target_asset(
                     target, alloc_pct, stock_provider, etf_provider
                 )
+                historical_trend: list[dict[str, Any]] = (
+                    decision_repo.load_asset_history(symbol, limit=3)
+                )
+                enriched["historical_trend"] = historical_trend
+
                 enriched_assets.append(enriched)
             except Exception as err:
                 logger.error(f"Failed to enrich asset '{symbol}': {err}")
@@ -628,21 +963,39 @@ def recommend_rebalance(
                 )
                 gemini_client = None
 
+    has_ai_active: bool = gemini_client is not None
+
     _display_rebalance_results(
         ranked_scores=ranked_scores,
         asset_dict_map=asset_dict_map,
         recommendations_map=recommendations_map,
         total_val=total_val,
-        has_ai=gemini_client is not None,
+        has_ai=has_ai_active,
         verbose=verbose,
     )
 
-    export_to_csv(
-        ranked_scores=ranked_scores,
-        asset_dict_map=asset_dict_map,
-        recommendations_map=recommendations_map,
-        output_path=output_csv,
-    )
+    if "pytest" not in sys.modules:
+        export_outputs(
+            ranked_scores=ranked_scores,
+            asset_dict_map=asset_dict_map,
+            recommendations_map=recommendations_map,
+            total_val=total_val,
+            has_ai=has_ai_active,
+        )
+
+    try:
+        timestamp_key: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        decision_repo.save_decision_report(
+            timestamp=timestamp_key,
+            total_value_eur=total_val,
+            has_ai=has_ai_active,
+            ranked_scores=ranked_scores,
+            asset_dict_map=asset_dict_map,
+            recommendations_map=recommendations_map,
+        )
+        logger.info("Successfully persisted decision report into SQLite database.")
+    except Exception as err:
+        logger.error(f"Failed to save decision report to database: {err}")
 
 
 if __name__ == "__main__":

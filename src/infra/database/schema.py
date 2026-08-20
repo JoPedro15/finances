@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS assets (
     yahoo_ticker TEXT NOT NULL,
     quantity REAL NOT NULL,
     average_buy_price REAL NOT NULL,
-    asset_type TEXT NOT NULL CHECK (asset_type IN ('stock', 'etf')),
+    asset_type TEXT NOT NULL CHECK (UPPER(asset_type) IN ('STOCK', 'ETF')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
@@ -57,6 +57,42 @@ CREATE TABLE IF NOT EXISTS stock_fundamental_history (
 );
 """
 
+CREATE_DECISIONS_TABLE_SQL: str = """
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL UNIQUE,
+    total_value_eur REAL NOT NULL,
+    has_ai INTEGER NOT NULL
+);
+"""
+
+CREATE_DECISION_ASSET_METRICS_TABLE_SQL: str = """
+CREATE TABLE IF NOT EXISTS decision_asset_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    decision_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    asset_type TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    price_eur REAL NOT NULL,
+    current_allocation_pct REAL NOT NULL,
+    target_allocation_pct REAL NOT NULL,
+    dip_score REAL NOT NULL,
+    cost_score REAL NOT NULL,
+    gap_score REAL NOT NULL,
+    quant_score REAL NOT NULL,
+    ai_action TEXT,
+    ai_urgency TEXT,
+    ai_confidence_pct REAL,
+    forward_pe REAL,
+    trailing_pe REAL,
+    peg_ratio REAL,
+    price_to_book REAL,
+    dividend_yield_pct REAL,
+    ter REAL,
+    FOREIGN KEY (decision_id) REFERENCES decisions (id) ON DELETE CASCADE
+);
+"""
+
 
 def initialize_database(conn: sqlite3.Connection) -> None:
     """Executes DDL statements to create all required database tables."""
@@ -65,4 +101,6 @@ def initialize_database(conn: sqlite3.Connection) -> None:
     cursor.execute(CREATE_SNAPSHOTS_TABLE_SQL)
     cursor.execute(CREATE_ASSET_SNAPSHOTS_TABLE_SQL)
     cursor.execute(CREATE_STOCK_FUNDAMENTALS_TABLE_SQL)
+    cursor.execute(CREATE_DECISIONS_TABLE_SQL)
+    cursor.execute(CREATE_DECISION_ASSET_METRICS_TABLE_SQL)
     conn.commit()

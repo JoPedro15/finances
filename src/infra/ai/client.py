@@ -1,4 +1,6 @@
-"""Gemini AI API client implementation for batch investment analysis."""
+"""
+Gemini AI API client implementation for batch investment analysis.
+"""
 
 from __future__ import annotations
 
@@ -28,19 +30,27 @@ INITIAL_RETRY_DELAY: float = 1.0
 
 SYSTEM_INSTRUCTION: str = (
     "You are an expert Quantitative Portfolio Manager and Asset Rebalancing "
-    "Analyst. Your task is to analyze individual assets in the context of "
-    "a user's portfolio and provide deterministic, data-driven rebalancing "
-    "recommendations. You must strictly adhere to the requested JSON "
-    "schema without adding conversational text, preamble, or markdown "
-    "formatting."
+    "Analyst. Analyze the provided target asset using real-time market metrics, "
+    "historical trend data, valuation ratios (Trailing P/E, Forward P/E, P/B, PEG), "
+    "fundamental health (margins, growth, debt-to-equity, dividend yield, beta), "
+    "allocation gap, and structural details (TER efficiency, sector/geographic "
+    "breakdowns, and top holdings concentration). Explicitly weigh sectoral and "
+    "geographic allocations, expense ratios, and valuation trends to provide "
+    "a deterministic, data-driven rebalancing recommendation adhering strictly "
+    "to the schema without preamble or markdown."
 )
 
 SYSTEM_INSTRUCTION_BATCH: str = (
     "You are an expert Quantitative Portfolio Manager and Asset Rebalancing "
     "Analyst. Your task is to analyze all provided target assets in the "
-    "portfolio context and provide deterministic, data-driven rebalancing "
-    "recommendations. Return a structured list containing an item for each "
-    "asset symbol adhering strictly to the schema."
+    "portfolio context using real-time market metrics, historical trend data, "
+    "valuation ratios (Trailing/Forward P/E), fundamentals, growth indicators, "
+    "debt levels, and structural breakdowns (sectoral concentration, geographic "
+    "distribution, top holdings). Evaluate each asset based on valuation, "
+    "fundamental health, portfolio allocation gap, and ETF efficiency "
+    "(TER ratios, sector/country concentration overlaps, and historical trajectory). "
+    "Return a structured list containing an item for each asset symbol "
+    "adhering strictly to the schema."
 )
 
 
@@ -72,7 +82,12 @@ class GeminiClient:
         model_name: str | None = None,
     ) -> None:
         """Initializes GeminiClient with API authentication and config."""
-        resolved_key: str = api_key or settings.gemini_api_key
+        raw_key: Any = settings.gemini_api_key
+        resolved_key: str = api_key or (
+            raw_key.get_secret_value()
+            if hasattr(raw_key, "get_secret_value")
+            else str(raw_key)
+        )
         if not resolved_key:
             logger.error("Gemini API key is missing from environment.")
             raise GeminiAuthError("Missing GEMINI_API_KEY environment variable.")
@@ -130,14 +145,12 @@ class GeminiClient:
             candidate: Any = candidates[0]
             finish_reason: Any = getattr(candidate, "finish_reason", None)
             if finish_reason and str(finish_reason) != "STOP":
-                logger.error(
-                    f"Gemini generation stopped abruptly. Reason: {finish_reason}"
-                )
+                logger.error(f"Gemini generation stopped. Reason: {finish_reason}")
                 raise GeminiParsingError(
-                    f"Generation blocked or incomplete (reason: {finish_reason})."
+                    f"Generation blocked (reason: {finish_reason})."
                 )
 
-        raise GeminiParsingError("Empty or inaccessible response body from Gemini API.")
+        raise GeminiParsingError("Empty response body from Gemini API.")
 
     def _log_telemetry(self, ticker: str, start_time: float, response: Any) -> None:
         """Logs execution latency and API token usage metrics."""

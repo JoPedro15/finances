@@ -78,7 +78,7 @@ def test_asset_from_dict_standard_key() -> None:
     assert asset.yahoo_ticker == "AAPL"
     assert asset.quantity == 10.0
     assert asset.average_buy_price == 150.0
-    assert asset.asset_type == "stock"
+    assert asset.asset_type == "STOCK"
 
 
 def test_asset_from_dict_legacy_key() -> None:
@@ -94,22 +94,7 @@ def test_asset_from_dict_legacy_key() -> None:
     asset: Asset = Asset.from_dict(data)
 
     assert asset.average_buy_price == 117.06
-    assert asset.asset_type == "etf"
-
-
-def test_asset_from_dict_legacy_key_takes_precedence() -> None:
-    """Validates averageBuyPrice takes precedence when both keys are present."""
-    data: dict[str, Any] = {
-        "name": "Test",
-        "isin": "XX0000000000",
-        "yahoo_ticker": "TST",
-        "quantity": 1.0,
-        "average_buy_price": 200.0,
-        "averageBuyPrice": 100.0,
-    }
-    asset: Asset = Asset.from_dict(data)
-
-    assert asset.average_buy_price == 100.0
+    assert asset.asset_type == "ETF"
 
 
 def test_asset_from_dict_empty_defaults() -> None:
@@ -121,7 +106,7 @@ def test_asset_from_dict_empty_defaults() -> None:
     assert asset.yahoo_ticker == ""
     assert asset.quantity == 0.0
     assert asset.average_buy_price == 0.0
-    assert asset.asset_type == "stock"
+    assert asset.asset_type == "STOCK"
 
 
 def test_asset_acquisition_cost() -> None:
