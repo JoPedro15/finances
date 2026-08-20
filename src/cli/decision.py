@@ -257,16 +257,17 @@ def export_outputs(
     has_ai: bool,
     output_dir: Path = OUTPUT_DIR,
 ) -> None:
-    """Exports both CSV matrix and Markdown report with timestamps
+    """Exports both CSV matrix and Markdown report with static filenames
 
     and uploads them to Google Drive.
     """
-    timestamp_str: str = datetime.now().strftime("%Y%m%d_%H%M%S")
     formatted_date_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path: Path = output_dir / f"decision_output_{timestamp_str}.csv"
-    md_path: Path = output_dir / f"decision_report_{timestamp_str}.md"
+    csv_path: Path = output_dir / "decision_output.csv"
+    md_path: Path = output_dir / "decision_report.md"
+
+    # Restante da função permanece igual...
 
     # 1. Export CSV
     csv_fieldnames: list[str] = [

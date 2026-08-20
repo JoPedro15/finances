@@ -11,6 +11,7 @@ ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 # ==============================================================================
 # 📖 Help
 # ==============================================================================
+# Displays the list of available CLI make commands and descriptions.
 help:
 	@echo "Available commands:"
 	@echo "  --- Setup, Maintenance & Quality ---"
@@ -44,15 +45,18 @@ help:
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality
 # ==============================================================================
+# Installs the package and its development dependencies in editable mode.
 install:
 	$(PYTHON) -m pip install -e .[dev]
 
+# Automatically formats code with Black and fixes linting/imports with Ruff.
 format:
 	@echo "Formatting code (black)..."
 	$(PYTHON) -m black $(ALL_SOURCES)
 	@echo "Fixing lint issues and sorting imports (ruff)..."
 	$(PYTHON) -m ruff check --fix $(ALL_SOURCES)
 
+# Runs code formatting verification, Ruff linting, and Mypy static type checking.
 lint:
 	@echo "Running formatter check (black)..."
 	$(PYTHON) -m black --check $(ALL_SOURCES)
@@ -61,18 +65,22 @@ lint:
 	@echo "Running static type checker (mypy)..."
 	PYTHONPATH=src $(PYTHON) -m mypy $(SOURCES)
 
+# Executes static security vulnerability analysis (Bandit) and dependency checks (Pip-Audit).
 security-check:
 	@echo "Running SAST security scan (bandit)..."
 	$(PYTHON) -m bandit -r $(SOURCES)
 	@echo "Checking dependencies for vulnerabilities (pip-audit)..."
 	$(PYTHON) -m pip_audit
 
+# Runs unit tests using Pytest with branch coverage reporting.
 test:
 	@echo "Running unit tests with coverage..."
 	PYTHONPATH=src $(PYTHON) -m pytest --cov=src --cov=main --cov-report=term-missing $(TESTS_DIR)
 
+# Orchestrates the full CI quality gate combining linting, security checks, and unit tests.
 quality: lint security-check test
 
+# Cleans temporary Python compilation cache files, test reports, and local caches.
 clean:
 	@echo "Cleaning Python temporary cache files and test reports..."
 	find . -type d -name "__pycache__" -exec rm -rf {} +
@@ -87,38 +95,48 @@ clean:
 # ==============================================================================
 # 📈 Project Utils
 # ==============================================================================
+# Migrates legacy JSON portfolio and history datasets into the central SQLite database.
 migrate:
 	PYTHONPATH=. $(PYTHON) src/migrate_json_to_sqlite.py
 
+# Pushes local configuration files to the remote Google Drive repository.
 push-config:
 	PYTHONPATH=src $(PYTHON) main.py push-config
 
+# Pulls configuration files from the remote Google Drive repository to local storage.
 pull-config:
 	PYTHONPATH=src $(PYTHON) main.py pull-config
 
+# Synchronizes portfolio data by executing JSON to SQLite migration and pushing configs to Google Drive.
 sync-portfolio:
 	PYTHONPATH=. $(PYTHON) src/migrate_json_to_sqlite.py
 	PYTHONPATH=src $(PYTHON) main.py push-config
 
+# Calculates and displays the current real-time valuation of the portfolio.
 get-snapshot:
 	PYTHONPATH=src $(PYTHON) main.py get-snapshot
 
+# Computes portfolio valuation, records a historical snapshot in SQLite, and backs up to Google Drive.
 save-snapshot:
 	PYTHONPATH=src $(PYTHON) main.py save-snapshot
 
+# Analyzes individual asset performance, absolute gains, and global Return on Investment (ROI).
 analyze:
 	PYTHONPATH=src $(PYTHON) main.py analyze
 
+# Inspects detailed composition, TER, holdings, and sector/country breakdowns for an ETF.
 etf-details:
 	PYTHONPATH=src $(PYTHON) main.py etf-details $(ISIN)
 
+# Inspects fundamental financial metrics for a stock ticker or ISIN.
 stock-details:
 	PYTHONPATH=src $(PYTHON) main.py stock-details $(TICKER)
 
+# Analyzes consolidated portfolio sector and country exposure across active ETF holdings.
 analyze-exposure:
 	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
 
-# Orchestrates portfolio decision ranking and AI rebalancing evaluation.
+# Orchestrates portfolio decision ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
 # Accepts optional CLI flags via FLAGS variable (e.g., make decision FLAGS="--skip-ai -v"):
 #   -t, --targets-file PATH : Path to wishlist targets JSON file (default: data/portfolio_targets.json)
 #   -p, --portfolio-file PATH: Path to active holdings JSON file (default: data/portfolio.json)

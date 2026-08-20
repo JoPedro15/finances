@@ -276,13 +276,13 @@ def test_export_outputs_success(tmp_path: Path) -> None:
         output_dir=tmp_path,
     )
 
-    csv_files = list(tmp_path.glob("decision_output_*.csv"))
-    md_files = list(tmp_path.glob("decision_report_*.md"))
+    csv_path: Path = tmp_path / "decision_output.csv"
+    md_path: Path = tmp_path / "decision_report.md"
 
-    assert len(csv_files) == 1
-    assert len(md_files) == 1
+    assert csv_path.exists()
+    assert md_path.exists()
 
-    with open(csv_files[0], encoding="utf-8") as file:
+    with open(csv_path, encoding="utf-8") as file:
         reader = list(csv.DictReader(file))
         assert len(reader) == 1
         assert reader[0]["symbol"] == "AAPL"
