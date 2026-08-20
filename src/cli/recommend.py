@@ -271,14 +271,9 @@ def export_to_csv(
                 }
                 writer.writerow(row)
 
-        logger.success(f"Successfully exported decision matrix to '{target_path}'.")
-        console.print(
-            f"[bold green]✓ Decision matrix exported to CSV:[/bold green] "
-            f"{target_path}"
-        )
+        logger.info(f"Successfully exported decision matrix to '{target_path}'.")
     except Exception as err:
         logger.error(f"Failed to export CSV to '{target_path}': {err}")
-        console.print(f"[bold red]Error exporting CSV:[/bold red] {err}")
 
 
 def _display_rebalance_results(
@@ -485,9 +480,7 @@ def recommend_rebalance(
     portfolio_raw: list[dict[str, Any]] = load_json_data(portfolio_file)
 
     if not targets_raw:
-        console.print(
-            f"[bold red]Error:[/bold red] No targets found in '{targets_file}'."
-        )
+        logger.error(f"No targets found in '{targets_file}'.")
         raise typer.Exit(code=1)
 
     stock_provider: StockProvider = StockProvider()
@@ -515,7 +508,7 @@ def recommend_rebalance(
                 logger.error(f"Failed to enrich asset '{symbol}': {err}")
 
     if not enriched_assets:
-        console.print("[bold red]Error:[/bold red] Could not enrich any target asset.")
+        logger.error("Could not enrich any target asset.")
         raise typer.Exit(code=1)
 
     engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
@@ -526,9 +519,8 @@ def recommend_rebalance(
         try:
             gemini_client = GeminiClient()
         except GeminiAuthError as err:
-            console.print(
-                f"[yellow]Warning:[/yellow] Gemini AI disabled ({err}). "
-                "Running in quantitative-only mode."
+            logger.warning(
+                f"Gemini AI disabled ({err}). Running in quantitative-only mode."
             )
 
     recommendations_map: dict[str, RebalanceRecommendation] = {}
@@ -550,8 +542,8 @@ def recommend_rebalance(
                 )
             except (GeminiAPIError, GeminiQuotaError, Exception) as err:
                 logger.error(f"Gemini AI batch analysis failed: {err}")
-                console.print(
-                    "[yellow]Warning:[/yellow] Gemini AI analysis unavailable. "
+                logger.warning(
+                    "Gemini AI analysis unavailable. "
                     "Displaying quantitative decision matrix only."
                 )
                 gemini_client = None
@@ -572,7 +564,6 @@ def recommend_rebalance(
         output_path=output_csv,
     )
 
-    # Dispatches Discord notification if explicitly requested via CLI flag
     if notify:
         symbols_list: list[str] = [str(a["symbol"]) for a in enriched_assets]
         current_alloc_list: list[float] = [

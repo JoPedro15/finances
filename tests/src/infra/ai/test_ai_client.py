@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from google.genai.errors import APIError
 
+from src.config import settings
 from src.core.exceptions import (
     GeminiAPIError,
     GeminiAuthError,
@@ -76,7 +77,7 @@ def valid_recommendation_dict() -> dict[str, Any]:
 
 def test_init_missing_api_key_raises_auth_error() -> None:
     """Validates initialization fails if API key is missing."""
-    with patch.dict("os.environ", {}, clear=True):
+    with patch.object(settings, "gemini_api_key", ""):
         with pytest.raises(
             GeminiAuthError,
             match="Missing GEMINI_API_KEY environment variable.",
@@ -96,15 +97,13 @@ def test_init_client_instantiation_failure(
 
 
 @patch("src.infra.ai.client.genai.Client")
-def test_init_success_with_default_and_env_model(
+def test_init_success_with_default_and_custom_model(
     mock_genai_client: MagicMock,
 ) -> None:
     """Validates successful initialization using custom model."""
-    env_vars: dict[str, str] = {"GEMINI_MODEL": "gemini-3.6-flash"}
-    with patch.dict("os.environ", env_vars):
-        client = GeminiClient(api_key="fake_key", model_name="custom-model")
-        assert client.model_name == "custom-model"
-        mock_genai_client.assert_called_once_with(api_key="fake_key")
+    client = GeminiClient(api_key="fake_key", model_name="custom-model")
+    assert client.model_name == "custom-model"
+    mock_genai_client.assert_called_once_with(api_key="fake_key")
 
 
 # ==============================================================================
@@ -187,7 +186,7 @@ def test_analyze_portfolio_batch_empty_inputs_raise_value_error(
 
 
 @patch("src.infra.ai.client.genai.Client")
-def test_analyze_portfolio_batch_success(
+def test_analyze_portfolio_batch_success_with_parsed_object(
     mock_genai_client: MagicMock,
     valid_asset_data: dict[str, Any],
     valid_portfolio_context: dict[str, Any],
@@ -210,6 +209,57 @@ def test_analyze_portfolio_batch_success(
 
     assert "AAPL" in result
     assert result["AAPL"].action == RecommendationAction.BUY
+
+
+@patch("src.infra.ai.client.genai.Client")
+def test_analyze_portfolio_batch_success_with_parsed_dict_and_raw_fallback(
+    mock_genai_client: MagicMock,
+    valid_asset_data: dict[str, Any],
+    valid_portfolio_context: dict[str, Any],
+    valid_recommendation_dict: dict[str, Any],
+) -> None:
+    """Validates batch parsing from dict and raw text fallback."""
+    batch_payload = {
+        "items": [
+            {
+                "symbol": "AAPL",
+                "recommendation": valid_recommendation_dict,
+            }
+        ]
+    }
+
+    # Dict branch
+    mock_response_dict = MagicMock(parsed=batch_payload)
+    mock_client_instance = MagicMock()
+    mock_client_instance.models.generate_content.return_value = mock_response_dict
+    mock_genai_client.return_value = mock_client_instance
+
+    client = GeminiClient(api_key="fake_key")
+    res1 = client.analyze_portfolio_batch([valid_asset_data], valid_portfolio_context)
+    assert "AAPL" in res1
+
+    # Raw text fallback branch
+    mock_response_raw = MagicMock(parsed=None, text=json.dumps(batch_payload))
+    mock_client_instance.models.generate_content.return_value = mock_response_raw
+    res2 = client.analyze_portfolio_batch([valid_asset_data], valid_portfolio_context)
+    assert "AAPL" in res2
+
+
+@patch("src.infra.ai.client.genai.Client")
+def test_analyze_portfolio_batch_parsing_failure(
+    mock_genai_client: MagicMock,
+    valid_asset_data: dict[str, Any],
+    valid_portfolio_context: dict[str, Any],
+) -> None:
+    """Validates batch parsing failure raises GeminiParsingError."""
+    mock_response = MagicMock(parsed=None, text="{invalid_json_batch")
+    mock_client_instance = MagicMock()
+    mock_client_instance.models.generate_content.return_value = mock_response
+    mock_genai_client.return_value = mock_client_instance
+
+    client = GeminiClient(api_key="fake_key")
+    with pytest.raises(GeminiParsingError, match="Structured batch validation failed"):
+        client.analyze_portfolio_batch([valid_asset_data], valid_portfolio_context)
 
 
 # ==============================================================================
@@ -304,7 +354,7 @@ def test_analyze_asset_ticker_resolution_and_custom_options(
     client.analyze_asset(
         {"ticker": "MSFT"},
         valid_portfolio_context,
-        model_name="gemini-3.6-flash",
+        model_name="gemini-2.0-flash",
         temperature=0.2,
     )
 

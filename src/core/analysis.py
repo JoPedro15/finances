@@ -36,7 +36,6 @@ def calculate_portfolio_exposure(
     etf_provider: ETFProvider | None = None,
 ) -> PortfolioExposure:
     """Calculates value-weighted sector and country exposure
-
     for portfolio ETFs using Pandas.
     """
     repo: PortfolioRepository = portfolio_repo or SqlitePortfolioRepository(
@@ -136,7 +135,6 @@ def analyze_overall_performance(
     history_repo: HistoryRepository | None = None,
 ) -> None:
     """Analyzes performance of individual assets and
-
     the overall portfolio using vectorised DataFrames.
     """
     logger.section("Portfolio Performance Analysis")
@@ -175,7 +173,6 @@ def analyze_overall_performance(
 
         if latest_value is None:
             logger.warning(f"No recent market data found for {asset.name}. Skipping.")
-            logger.print("--------------------")
             continue
 
         performance_records.append(
@@ -208,9 +205,7 @@ def analyze_overall_performance(
         else:
             logger.warning(f"Absolute Loss: {abs_gain:.2f} EUR")
 
-        logger.print("--------------------")
-
-    logger.subsection("Global Analysis")
+    logger.section("Global Analysis")
 
     total_acquisition_cost: float = float(df_perf["acquisition_cost"].sum())
     total_latest_value: float = float(df_perf["latest_value"].sum())

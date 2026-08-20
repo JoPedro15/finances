@@ -5,7 +5,6 @@ Service wrapper for Google Drive file upload, download, and backup operations.
 from __future__ import annotations
 
 import io
-import os
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +14,7 @@ from googleapiclient.http import (  # type: ignore[import-untyped]
     MediaIoBaseDownload,
 )
 
+from src.config import settings
 from src.infra.gdrive.auth import get_google_service_credentials
 from src.utils.logger.logger import logger
 
@@ -36,7 +36,7 @@ class GDriveService:
 
         self.credentials_path: str | Path | None = credentials_path
         self.token_path: str | Path | None = token_path
-        self.folder_id: str | None = folder_id or os.getenv("GDRIVE_CONFIG_FOLDER_ID")
+        self.folder_id: str | None = folder_id or settings.gdrive_config_folder_id
         self._service: Resource | None = None
 
     def _get_service(self) -> Resource | None:
@@ -47,7 +47,7 @@ class GDriveService:
                     token_path=self.token_path,
                 )
                 if creds is None:
-                    logger.warning("No valid Google Drive credentials.json available.")
+                    logger.warning("No valid Google Drive credentials available.")
                     return None
                 self._service = build("drive", "v3", credentials=creds)
             except Exception as e:
