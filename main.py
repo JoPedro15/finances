@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 from pydantic import ValidationError
 
-from src.cli.recommend import recommend_rebalance
+from src.cli.decision import recommend_rebalance
 from src.config import DATA_DIR, settings
 from src.core.analysis import (
     PortfolioExposure,
@@ -122,7 +122,7 @@ def push_config_cmd() -> None:
 def _display_single_etf_details(isin: str, name: str, provider: ETFProvider) -> None:
     """Helper to fetch and print formatted details for a single ETF ISIN."""
     logger.section("ETF Details Inspection")
-    logger.info(f"ETF Name: {name}")
+    logger.subsection(f"ETF Name: {name}")
     logger.info(f"ETF ISIN: {isin}")
 
     dummy_asset: Asset = Asset(
@@ -239,7 +239,7 @@ def _display_single_stock_details(
 ) -> None:
     """Helper function to fetch and print formatted details for a stock."""
     logger.section("Stock Details Inspection")
-    logger.info(f"Stock Name: {name}")
+    logger.subsection(f"Stock Name: {name}")
     if asset and asset.isin:
         logger.info(f"Stock ISIN: {asset.isin}")
     logger.info(f"Ticker: {identifier}")
@@ -382,8 +382,8 @@ def analyze_exposure_cmd() -> None:
         logger.print(f"  - {country}: {pct:.2f}%")
 
 
-@app.command(name="recommend-rebalance")
-def recommend_rebalance_cmd(
+@app.command(name="decision")
+def decision_cmd(
     targets_file: Annotated[
         Path,
         typer.Option(
@@ -409,20 +409,31 @@ def recommend_rebalance_cmd(
             help="Skip Gemini AI analysis and display quantitative scores only.",
         ),
     ] = False,
-    notify: Annotated[
+    verbose: Annotated[
         bool,
         typer.Option(
-            "--notify",
-            help="Send rebalancing recommendations to Discord webhook.",
+            "--verbose",
+            "-v",
+            help="Display detailed quantitative score factors breakdown.",
         ),
     ] = False,
+    output_csv: Annotated[
+        Path,
+        typer.Option(
+            "--output-csv",
+            "-o",
+            help="Path to export decision matrix as CSV file.",
+        ),
+    ] = Path("output")
+    / "decision_output.csv",
 ) -> None:
-    """Ranks targets and provides AI-driven rebalancing recommendations."""
+    """Ranks targets and provides AI-driven investment decision recommendations."""
     recommend_rebalance(
         targets_file=targets_file,
         portfolio_file=portfolio_file,
         skip_ai=skip_ai,
-        notify=notify,
+        verbose=verbose,
+        output_csv=output_csv,
     )
 
 
