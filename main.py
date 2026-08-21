@@ -9,6 +9,7 @@ import typer
 from pydantic import ValidationError
 
 from src.cli.decision import recommend_rebalance
+from src.cli.fundamentals import sync_stock_fundamentals
 from src.config import DATA_DIR, settings
 from src.core.analysis import (
     PortfolioExposure,
@@ -515,6 +516,24 @@ def decision_cmd(
         skip_ai=skip_ai,
         verbose=verbose,
     )
+
+
+@app.command(name="sync-fundamentals")
+def sync_fundamentals_cmd(
+    db_path: Annotated[
+        Path,
+        typer.Option(
+            "--db-path",
+            help="Path to SQLite database file.",
+        ),
+    ] = DEFAULT_DB_PATH,
+) -> None:
+    """Synchronizes fundamental history for stock holdings into SQLite database."""
+    try:
+        sync_stock_fundamentals(db_path=db_path)
+    except Exception as err:
+        logger.error(f"Failed to synchronize stock fundamentals: {err}")
+        raise typer.Exit(code=1) from err
 
 
 if __name__ == "__main__":
