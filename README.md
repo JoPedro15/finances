@@ -9,7 +9,7 @@
 ![Security](https://img.shields.io/badge/security-Bandit%20%7C%20Audit-44cc11?style=flat-square&logo=shield&logoColor=white)
 ![GNU Make](https://img.shields.io/badge/env-GNU%20Make-active?style=flat-square&logo=gnu-make&logoColor=white)
 <br />
-![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%25SQLite%20%7C%20Gemini%20AI%20%7C%20Typer%20%7C%20pytest-FF9900?style=flat-square&logo=python&logoColor=white)
+![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20SQLite%20%7C%20Gemini%20AI%20%7C%20Typer%20%7C%20pytest-FF9900?style=flat-square&logo=python&logoColor=white)
 ![MIT License](https://img.shields.io/badge/license-MIT-607D8B?style=flat-square)
 
 ---
@@ -54,7 +54,8 @@ Rather than relying purely on opaque LLM predictions, the engine uses explicit q
 * **`ETFProvider`**: Combines real-time price feeds with structured composition data extracted by `JustETFClient`, leveraging local TTL-based caching (`etf_cache.json`) to minimize network overhead.
 
 ### 4. Relational Persistence & Cloud Sync (`src/infra/database/` & `src/infra/gdrive/`)
-* **SQLite Repository Pattern**: Fully normalized relational schema storing assets, historical valuation snapshots, stock fundamental history, and decision audit logs.
+* **SQLite Repository Pattern**: Fully normalized relational schema storing assets, historical valuation snapshots, stock & ETF fundamental history, and decision audit logs.
+* **Automated Weekly Sync Workflow**: Scheduled GitHub Actions pipeline (`sync-fundamentals.yml`) executing weekly time-series snapshot persistence of fundamental metrics directly into `finances.db`.
 * **Google Drive Backup (`GDriveService`)**: Non-blocking automated backup of `finances.db` upon saving portfolio snapshots, alongside bidirectional synchronization of configuration files (`portfolio.json`, `portfolio_targets.json`).
 
 ---
@@ -100,6 +101,10 @@ python main.py pull-config
 
 # Push local configuration files to Google Drive
 python main.py push-config
+
+# Portfolio Fundamental History Sync
+# Synchronize live fundamental snapshots (stocks and ETFs) into SQLite history
+python main.py sync-fundamentals
 ```
 
 ---
