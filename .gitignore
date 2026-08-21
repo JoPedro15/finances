@@ -38,4 +38,5 @@ Thumbs.db
 data/history.json
 data/portfolio.json
 *.db
+!data/finances.db
 *.log
