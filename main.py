@@ -9,7 +9,7 @@ import typer
 from pydantic import ValidationError
 
 from src.cli.decision import recommend_rebalance
-from src.cli.fundamentals import sync_stock_fundamentals
+from src.cli.fundamentals import sync_portfolio_fundamentals
 from src.config import DATA_DIR, settings
 from src.core.analysis import (
     PortfolioExposure,
@@ -528,11 +528,11 @@ def sync_fundamentals_cmd(
         ),
     ] = DEFAULT_DB_PATH,
 ) -> None:
-    """Synchronizes fundamental history for stock holdings into SQLite database."""
+    """Synchronizes portfolio fundamental history into SQLite database."""
     try:
-        sync_stock_fundamentals(db_path=db_path)
+        sync_portfolio_fundamentals(db_path=db_path)
     except Exception as err:
-        logger.error(f"Failed to synchronize stock fundamentals: {err}")
+        logger.error(f"Failed to synchronize portfolio fundamentals: {err}")
         raise typer.Exit(code=1) from err
 
 

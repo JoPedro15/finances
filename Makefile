@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details analyze-exposure migrate decision
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details analyze-exposure migrate decision sync-fundamentals
 
 # ==============================================================================
 # 📖 Help
@@ -33,6 +33,7 @@ help:
 	@echo "  make etf-details ISIN= - Inspects composition and details for an ETF ISIN."
 	@echo "  make stock-details TICKER= - Inspects fundamental metrics for a stock ticker or ISIN."
 	@echo "  make analyze-exposure - Analyzes portfolio sector and country exposure."
+	@echo "  make sync-fundamentals - Synchronizes stock and ETF fundamental metrics into SQLite database."
 	@echo "  make decision [FLAGS=...] - Ranks investment targets using live market data."
 	@echo "       Available Flags:"
 	@echo "         -t, --targets-file PATH : Path to targets wishlist JSON (default: data/portfolio_targets.json)"
@@ -135,6 +136,10 @@ stock-details:
 # Analyzes consolidated portfolio sector and country exposure across active ETF holdings.
 analyze-exposure:
 	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
+
+# Synchronizes fundamental history snapshots for both stocks and ETFs into SQLite history.
+sync-fundamentals:
+	PYTHONPATH=src $(PYTHON) main.py sync-fundamentals
 
 # Orchestrates portfolio decision ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
 # Accepts optional CLI flags via FLAGS variable (e.g., make decision FLAGS="--skip-ai -v"):
