@@ -13,7 +13,13 @@ import pandas as pd
 
 from src.config import DEFAULT_ETF_CACHE_TTL_DAYS, ETF_CACHE_FILE
 from src.core.exceptions import StorageReadError, StorageWriteError
-from src.core.models import Asset, AssetSnapshot, ETFDetails, PortfolioSnapshot
+from src.core.models import (
+    Asset,
+    AssetSnapshot,
+    ETFDetails,
+    PortfolioSnapshot,
+    StockDetails,
+)
 from src.infra.database.connection import DEFAULT_DB_PATH, get_db_context
 from src.infra.database.schema import initialize_database
 from src.utils.logger.logger import logger
@@ -560,3 +566,66 @@ class SqliteDecisionRepository:
         except Exception as e:
             logger.warning(f"Failed to load asset history for '{symbol}': {e}")
             return []
+
+    def save_stock_fundamentals(self, asset_id: int, details: StockDetails) -> None:
+        """Inserts a historical fundamental data snapshot for a specific stock asset.
+
+        Args:
+            asset_id: Database primary key of the asset in the assets table.
+            details: Stock details object containing fundamental metrics.
+        """
+        query: str = """
+            INSERT INTO stock_fundamental_history (
+                asset_id,
+                fetched_at,
+                market_cap,
+                pe_ratio,
+                forward_pe,
+                dividend_yield_pct,
+                fifty_two_week_high,
+                fifty_two_week_low,
+                sector,
+                industry
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        fetched_at_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        params: tuple[
+            int,
+            str,
+            float | None,
+            float | None,
+            float | None,
+            float | None,
+            float | None,
+            float | None,
+            str | None,
+            str | None,
+        ] = (
+            asset_id,
+            fetched_at_str,
+            details.market_cap,
+            details.pe_ratio,
+            details.forward_pe,
+            details.dividend_yield_pct,
+            details.fifty_two_week_high,
+            details.fifty_two_week_low,
+            details.sector,
+            details.industry,
+        )
+
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA foreign_keys = ON;")
+                cursor.execute(query, params)
+                conn.commit()
+
+            logger.info(
+                "Successfully saved fundamental history snapshot for "
+                f"asset_id={asset_id}."
+            )
+        except Exception as e:
+            raise StorageWriteError(
+                f"Failed to save stock fundamentals to '{self.db_path}': {e}"
+            ) from e
