@@ -28,7 +28,7 @@ from src.core.models import (
     SectorExposure,
     StockDetails,
 )
-from src.core.repositories import SqliteDecisionRepository
+from src.core.repositories import SqliteOpportunityRepository
 from src.infra.database.connection import get_db_context
 from src.infra.database.schema import initialize_database
 
@@ -68,7 +68,9 @@ def empty_db_path(tmp_path: Path) -> Path:
 
 def test_save_stock_fundamentals_success(temp_db_path: Path) -> None:
     """Tests persisting stock fundamental details into SQLite database."""
-    repo: SqliteDecisionRepository = SqliteDecisionRepository(db_path=temp_db_path)
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(
+        db_path=temp_db_path
+    )
     details: StockDetails = StockDetails(
         market_cap=2_500_000_000_000.0,
         pe_ratio=30.5,
@@ -97,7 +99,9 @@ def test_save_stock_fundamentals_success(temp_db_path: Path) -> None:
 
 def test_save_etf_fundamentals_success(temp_db_path: Path) -> None:
     """Tests persisting ETF fundamental details into SQLite database."""
-    repo: SqliteDecisionRepository = SqliteDecisionRepository(db_path=temp_db_path)
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(
+        db_path=temp_db_path
+    )
     details: ETFDetails = ETFDetails(
         ter_pct=0.22,
         holdings=[

@@ -2,7 +2,7 @@
 and target allocation."""
 
 from src.config import DEFAULT_STOCK_CONFIG, StockStrategyConfig
-from src.core.decision.base import AssetScore, AssetType, ScoringStrategy
+from src.core.opportunity_evaluation.base import AssetScore, AssetType, ScoringStrategy
 
 
 class StockScoringStrategy(ScoringStrategy):

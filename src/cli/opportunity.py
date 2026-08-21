@@ -1,4 +1,4 @@
-"""CLI module for evaluating investment targets and decision
+"""CLI module for evaluating investment targets and opportunity
 ranking with exposure policy constraints."""
 
 from __future__ import annotations
@@ -17,8 +17,6 @@ from rich.table import Table
 from rich.text import Text
 
 from src.config import DATA_DIR, settings
-from src.core.decision.base import AssetScore
-from src.core.decision.engine import PortfolioDecisionEngine
 from src.core.exceptions import (
     GeminiAPIError,
     GeminiAuthError,
@@ -34,8 +32,10 @@ from src.core.models import (
     StockDetails,
     UrgencyLevel,
 )
+from src.core.opportunity_evaluation.base import AssetScore
+from src.core.opportunity_evaluation.engine import PortfolioOpportunityEngine
 from src.core.providers import ETFProvider, StockProvider
-from src.core.repositories import SqliteDecisionRepository, SqliteHistoryRepository
+from src.core.repositories import SqliteHistoryRepository, SqliteOpportunityRepository
 from src.infra.ai.client import GeminiClient
 from src.infra.database.connection import DEFAULT_DB_PATH
 from src.infra.gdrive.service import GDriveService
@@ -43,7 +43,9 @@ from src.utils.logger.logger import logger
 
 OUTPUT_DIR: Path = Path("output")
 
-app: typer.Typer = typer.Typer(help="Investment decision engine CLI commands.")
+app: typer.Typer = typer.Typer(
+    help="Investment opportunity evaluation engine CLI commands."
+)
 console: Console = Console()
 
 
@@ -273,8 +275,8 @@ def export_outputs(
     formatted_date_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path: Path = output_dir / "decision_output.csv"
-    md_path: Path = output_dir / "decision_report.md"
+    csv_path: Path = output_dir / "opportunity_output.csv"
+    md_path: Path = output_dir / "opportunity_report.md"
 
     csv_fieldnames: list[str] = [
         "rank",
@@ -330,7 +332,7 @@ def export_outputs(
                 }
                 writer.writerow(row)
 
-        logger.info(f"Successfully exported decision matrix CSV to '{csv_path}'.")
+        logger.info(f"Successfully exported opportunity matrix CSV to '{csv_path}'.")
     except Exception as err:
         logger.error(f"Failed to export CSV to '{csv_path}': {err}")
 
@@ -352,17 +354,17 @@ def export_outputs(
     )
 
     md_lines: list[str] = [
-        "# Portfolio Rebalancing & Investment Decision Report",
+        "# Portfolio Opportunity Evaluation & Rebalancing Report",
         f"*Generated on: {formatted_date_str}*\n",
-        "## Portfolio & Decision Strategy Summary\n",
+        "## Portfolio & Strategy Summary\n",
         f"- **Total Portfolio Value:** {total_val:,.2f} EUR",
         f"- **Target Assets Evaluated:** {len(ranked_scores)}\n",
-        "### Active Decision Strategy Weights",
+        "### Active Strategy Weights",
         f"- **Stocks Formula:** {stock_weights_str}",
         f"- **ETFs Formula:** {etf_weights_str}",
         f"- **Exposure Penalties:** {penalty_weights_str}\n",
         "---",
-        "\n## Portfolio Rebalancing & Investment Decision Matrix\n",
+        "\n## Portfolio Rebalancing & Opportunity Matrix\n",
         (
             "| Rank | Symbol | Type | Price (€) | Current % | "
             "Target % | Score | AI Action | Urgency | Conf. |"
@@ -534,7 +536,9 @@ def export_outputs(
     try:
         with open(md_path, mode="w", encoding="utf-8") as md_file:
             md_file.write("\n".join(md_lines))
-        logger.info(f"Successfully exported decision report Markdown to '{md_path}'.")
+        logger.info(
+            f"Successfully exported opportunity report Markdown to '{md_path}'."
+        )
     except Exception as err:
         logger.error(f"Failed to export Markdown report to '{md_path}': {err}")
 
@@ -546,11 +550,13 @@ def export_outputs(
             drive_service.upload_file(csv_path, overwrite=True)
             drive_service.upload_file(md_path, overwrite=True)
             logger.info(
-                "Successfully backed up decision reports to "
+                "Successfully backed up opportunity reports to "
                 "Google Drive reports folder."
             )
         except Exception as err:
-            logger.warning(f"Failed to back up decision reports to Google Drive: {err}")
+            logger.warning(
+                f"Failed to back up opportunity reports to Google Drive: {err}"
+            )
 
 
 def _display_rebalance_results(
@@ -561,7 +567,7 @@ def _display_rebalance_results(
     has_ai: bool,
     verbose: bool = False,
 ) -> None:
-    """Renders decision strategy coefficients, matrix, and expanded action cards."""
+    """Renders opportunity strategy coefficients, matrix, and expanded action cards."""
     console.print()
 
     stock_weights: str = (
@@ -585,7 +591,7 @@ def _display_rebalance_results(
         f"[green]{total_val:,.2f} EUR[/green]  │  "
         f"[bold white]Target Assets Evaluated:[/bold white] "
         f"[cyan]{len(ranked_scores)}[/cyan]\n\n"
-        f"[bold yellow]Active Decision Strategy Weights:[/bold yellow]\n"
+        f"[bold yellow]Active Strategy Weights:[/bold yellow]\n"
         f"  • [bold]Stocks Formula:[/bold] {stock_weights}\n"
         f"  • [bold]ETFs Formula:[/bold]   {etf_weights}\n"
         f"  • [bold]Exposure Penalties:[/bold] {penalty_weights}"
@@ -593,7 +599,7 @@ def _display_rebalance_results(
 
     summary_panel: Panel = Panel(
         summary_text,
-        title="[bold yellow]Portfolio & Decision Strategy Summary[/bold yellow]",
+        title="[bold yellow]Portfolio & Strategy Summary[/bold yellow]",
         border_style="blue",
         expand=True,
     )
@@ -601,7 +607,7 @@ def _display_rebalance_results(
     console.print()
 
     table: Table = Table(
-        title="PORTFOLIO REBALANCING & INVESTMENT DECISION MATRIX",
+        title="PORTFOLIO REBALANCING & OPPORTUNITY MATRIX",
         header_style="bold magenta",
         show_header=True,
         pad_edge=True,
@@ -912,7 +918,7 @@ def recommend_rebalance(
 
     stock_provider: StockProvider = StockProvider()
     etf_provider: ETFProvider = ETFProvider()
-    decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(db_path)
+    opportunity_repo: SqliteOpportunityRepository = SqliteOpportunityRepository(db_path)
     history_repo: SqliteHistoryRepository = SqliteHistoryRepository(db_path)
 
     with console.status("[bold cyan]Fetching market data and evaluating portfolio..."):
@@ -933,7 +939,7 @@ def recommend_rebalance(
                     target, alloc_pct, stock_provider, etf_provider
                 )
                 historical_trend: list[dict[str, Any]] = (
-                    decision_repo.load_asset_history(symbol, limit=3)
+                    opportunity_repo.load_asset_history(symbol, limit=3)
                 )
                 enriched["historical_trend"] = historical_trend
 
@@ -948,7 +954,7 @@ def recommend_rebalance(
     history: list[PortfolioSnapshot] = history_repo.load_history()
     latest_snapshot: PortfolioSnapshot | None = history[-1] if history else None
 
-    engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
+    engine: PortfolioOpportunityEngine = PortfolioOpportunityEngine()
     ranked_scores: list[AssetScore] = engine.rank_assets(
         enriched_assets, portfolio_snapshot=latest_snapshot
     )
@@ -983,7 +989,7 @@ def recommend_rebalance(
                 logger.error(f"Gemini AI batch analysis failed: {err}")
                 logger.warning(
                     "Gemini AI analysis unavailable. "
-                    "Displaying quantitative decision matrix only."
+                    "Displaying quantitative opportunity matrix only."
                 )
                 gemini_client = None
 
@@ -998,10 +1004,18 @@ def recommend_rebalance(
         verbose=verbose,
     )
 
+    export_outputs(
+        ranked_scores=ranked_scores,
+        asset_dict_map=asset_dict_map,
+        recommendations_map=recommendations_map,
+        total_val=total_val,
+        has_ai=has_ai_active,
+    )
+
     if "pytest" not in sys.modules:
         try:
             timestamp_key: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            decision_repo.save_decision_report(
+            opportunity_repo.save_opportunity_report(
                 timestamp=timestamp_key,
                 total_value_eur=total_val,
                 has_ai=has_ai_active,
@@ -1009,9 +1023,11 @@ def recommend_rebalance(
                 asset_dict_map=asset_dict_map,
                 recommendations_map=recommendations_map,
             )
-            logger.info("Successfully persisted decision report into SQLite database.")
+            logger.info(
+                "Successfully persisted opportunity report into SQLite database."
+            )
         except Exception as err:
-            logger.error(f"Failed to save decision report to database: {err}")
+            logger.error(f"Failed to save opportunity report to database: {err}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Finances Portfolio Tracker & Decision Engine
+# Finances Portfolio Tracker & Opportunity Engine
 
 ![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Tests Coverage](./coverage.svg)
@@ -13,7 +13,7 @@
 
 ---
 
-The **Finances Portfolio Tracker & Decision Engine** is an enterprise-grade command-line interface (CLI) application engineered to track personal investment portfolios, monitor market prices, analyze asset performance, and execute **deterministic multi-factor rebalancing powered by Google Gemini AI**.
+The **Finances Portfolio Tracker & Opportunity Engine** is an enterprise-grade command-line interface (CLI) application engineered to track personal investment portfolios, monitor market prices, analyze asset performance, and execute **deterministic multi-factor rebalancing powered by Google Gemini AI**.
 
 Designed with a strict separation of concerns, this system leverages Google Drive as a **Cloud Single Source of Truth (SSoT)** for all dynamic data (`finances.db`, portfolios, targets, and caches), integrating real-time market data retrieval, multi-currency conversion, relational SQLite persistence, and quantitative scoring strategies.
 
@@ -21,35 +21,35 @@ Designed with a strict separation of concerns, this system leverages Google Driv
 
 ## Architectural Blueprint & Directory Structure
 
-The repository follows a clean, modular architecture, segregating domain logic, infrastructure providers, decision engines, and presentation layers.
+The repository follows a clean, modular architecture, segregating domain logic, infrastructure providers, opportunity engines, and presentation layers.
 
 
 ```mermaid
 graph TD
     GDrive[(Google Drive SSoT)] <-->|Pull / Push Sync| LocalDB[(Local SQLite / JSON Cache)]
     LocalDB --> Providers[Data Providers: yfinance / JustETF]
-    Providers --> Engine[Decision Engine: Quant Scoring]
+    Providers --> Engine[Opportunity Engine: Quant Scoring]
     Engine --> Gemini[Gemini AI: Batch Rebalance]
     Gemini --> Report[CLI Output & Snapshot Save]
     Report -->|Auto Backup| GDrive
 ```
 
 
-| Layer | Path | Description |
-| :--- | :--- | :--- |
-| **Core Domain** | `src/core/` | Business logic, quotation retrieval, multi-currency exchange, snapshot management, performance analysis, and repository protocols. |
-| **Decision Engine** | `src/core/decision/` | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) for stocks and ETFs. |
-| **AI Infrastructure** | `src/infra/ai/` | Google Gemini API client (`gemini-2.0-flash`) executing robust batch structured JSON portfolio rebalancing analysis with Pydantic validation. |
-| **Database & Schema** | `src/infra/database/` | SQLite connection management, foreign key enforcement, transactional contexts, and relational schema DDL. |
-| **Cloud SSoT Engine** | `src/infra/gdrive/` | Google Drive service wrapper handling bidirectional synchronization of `finances.db` and configuration JSON files. |
-| **JustETF Scraper** | `src/infra/justetf/` | Scraper client extracting ETF composition, sector weights, geographic allocation, and TER directly from JustETF profile pages. |
-| **CLI & Automation** | `src/cli/` & `root` | Typer-powered CLI interface (`main.py`, `cli/`) and GNU Make automation workflows. |
+| Layer | Path                    | Description |
+| :--- |:------------------------| :--- |
+| **Core Domain** | `src/core/`             | Business logic, quotation retrieval, multi-currency exchange, snapshot management, performance analysis, and repository protocols. |
+| **Opportunity Engine** | `src/core/opportunity/` | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) for stocks and ETFs. |
+| **AI Infrastructure** | `src/infra/ai/`         | Google Gemini API client (`gemini-2.0-flash`) executing robust batch structured JSON portfolio rebalancing analysis with Pydantic validation. |
+| **Database & Schema** | `src/infra/database/`   | SQLite connection management, foreign key enforcement, transactional contexts, and relational schema DDL. |
+| **Cloud SSoT Engine** | `src/infra/gdrive/`     | Google Drive service wrapper handling bidirectional synchronization of `finances.db` and configuration JSON files. |
+| **JustETF Scraper** | `src/infra/justetf/`    | Scraper client extracting ETF composition, sector weights, geographic allocation, and TER directly from JustETF profile pages. |
+| **CLI & Automation** | `src/cli/` & `root`     | Typer-powered CLI interface (`main.py`, `cli/`) and GNU Make automation workflows. |
 
 ---
 
 ## Core Modules & Technical Highlights
 
-### 1. Deterministic Decision Engine (`src/core/decision/`)
+### 1. Deterministic Opportunity Engine (`src/core/opportunity/`)
 Rather than relying purely on opaque LLM predictions, the engine uses explicit quantitative models implementing the Strategy Pattern:
 * **Stock Scoring Strategy (`stock_strategy.py`)**: Evaluates price pullbacks from 52-week highs (with *falling knife* protection), forward vs. trailing P/E growth ratios, and 52-week range positioning.
 * **ETF Scoring Strategy (`etf_strategy.py`)**: Combines technical discount sweet-spots, cost efficiency via Total Expense Ratio (TER), and target allocation gaps.
@@ -58,7 +58,7 @@ Rather than relying purely on opaque LLM predictions, the engine uses explicit q
 ### 2. Gemini AI Batch Advisory (`src/infra/ai/`)
 * **Enterprise Client (`GeminiClient`)**: Powered by `gemini-2.0-flash` via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
 * **Batch Portfolio Analysis**: Processes the entire target asset wishlist in a single API call, returning strict structured JSON validated through Pydantic (`BatchRebalanceRecommendations`).
-* **Graceful Fallback**: Automatically falls back to the quantitative decision matrix if AI quotas are exhausted or credentials are unconfigured.
+* **Graceful Fallback**: Automatically falls back to the quantitative opportunity matrix if AI quotas are exhausted or credentials are unconfigured.
 
 ### 3. Data Providers & Web Scraping (`src/core/providers.py` & `src/infra/justetf/`)
 * **`StockProvider`**: Fetches real-time equity quotations, currency conversions, and fundamental metrics (`StockDetails`) via `yfinance`.
@@ -127,17 +127,17 @@ ETF_WEIGHT_ALLOCATION=0.40
 
 The application is controlled via a rich Typer CLI interface defined in `main.py` and GNU Make shortcuts. All operational workflows are accessible directly through the main entrypoint.
 
-### Portfolio Monitoring & Decision Execution
+### Portfolio Monitoring & =pportunity Execution
 
 ```bash
-# Full Rebalancing Decision Pipeline (Quantitative + Gemini AI Batch Analysis)
-make decision
+# Full Rebalancing Opportunity Pipeline (Quantitative + Gemini AI Batch Analysis)
+make opportunity_evaluation
 
-# Run decision pipeline directly with verbose factor score breakdown
-python main.py decision --verbose
+# Run opportunity_evaluation pipeline directly with verbose factor score breakdown
+python main.py opportunity_evaluation --verbose
 
-# Run decision pipeline in quantitative-only mode (bypassing AI)
-python main.py decision --skip-ai
+# Run opportunity_evaluation pipeline in quantitative-only mode (bypassing AI)
+python main.py opportunity_evaluation --skip-ai
 
 # Calculate and display current portfolio valuation and asset distribution
 python main.py get-snapshot
@@ -213,12 +213,12 @@ The project enforces strict code quality standards, verified through automated G
 
 Development tasks and quality checks are orchestrated via GNU Make shortcuts:
 
-| Target | Description |
-| :--- | :--- |
+| Target | Description                                                                    |
+| :--- |:-------------------------------------------------------------------------------|
 | `make quality` | Runs complete quality pipeline (Black, Ruff, Mypy, Bandit, Pip-Audit, Pytest). |
-| `make test` | Executes unit tests with branch coverage report. |
-| `make test-integration` | Runs integration tests against SQLite test database. |
-| `make decision` | Triggers the complete rebalancing decision pipeline. |
+| `make test` | Executes unit tests with branch coverage report.                               |
+| `make test-integration` | Runs integration tests against SQLite test database.                           |
+| `make opportunity` | Triggers the complete rebalancing opportunity pipeline.                        |
 
 The quality pipeline executes:
 - **Black**: Code formatting verification (`black --check`).

@@ -2,7 +2,7 @@
 ratios (TER), and allocation gaps."""
 
 from src.config import DEFAULT_ETF_CONFIG, EtfStrategyConfig
-from src.core.decision.base import AssetScore, AssetType, ScoringStrategy
+from src.core.opportunity_evaluation.base import AssetScore, AssetType, ScoringStrategy
 
 
 class EtfScoringStrategy(ScoringStrategy):

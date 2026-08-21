@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from src.utils.logger.logger import logger
+
 CREATE_ASSETS_TABLE_SQL: str = """
 CREATE TABLE IF NOT EXISTS assets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +55,8 @@ CREATE TABLE IF NOT EXISTS stock_fundamental_history (
     fifty_two_week_low REAL,
     sector TEXT,
     industry TEXT,
+    quality_tier TEXT,
+    quality_score INTEGER,
     FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
 );
 """
@@ -66,12 +70,14 @@ CREATE TABLE IF NOT EXISTS etf_fundamental_history (
     holdings_json TEXT,
     sector_breakdown_json TEXT,
     country_breakdown_json TEXT,
+    quality_tier TEXT,
+    quality_score INTEGER,
     FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
 );
 """
 
-CREATE_DECISIONS_TABLE_SQL: str = """
-CREATE TABLE IF NOT EXISTS decisions (
+CREATE_OPPORTUNITIES_TABLE_SQL: str = """
+CREATE TABLE IF NOT EXISTS opportunities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL UNIQUE,
     total_value_eur REAL NOT NULL,
@@ -79,10 +85,10 @@ CREATE TABLE IF NOT EXISTS decisions (
 );
 """
 
-CREATE_DECISION_ASSET_METRICS_TABLE_SQL: str = """
-CREATE TABLE IF NOT EXISTS decision_asset_metrics (
+CREATE_OPPORTUNITY_ASSET_METRICS_TABLE_SQL: str = """
+CREATE TABLE IF NOT EXISTS opportunity_asset_metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    decision_id INTEGER NOT NULL,
+    opportunity_id INTEGER NOT NULL,
     symbol TEXT NOT NULL,
     asset_type TEXT NOT NULL,
     rank INTEGER NOT NULL,
@@ -102,19 +108,33 @@ CREATE TABLE IF NOT EXISTS decision_asset_metrics (
     price_to_book REAL,
     dividend_yield_pct REAL,
     ter REAL,
-    FOREIGN KEY (decision_id) REFERENCES decisions (id) ON DELETE CASCADE
+    FOREIGN KEY (opportunity_id) REFERENCES opportunities (id) ON DELETE CASCADE
 );
 """
 
 
 def initialize_database(conn: sqlite3.Connection) -> None:
-    """Executes DDL statements to create all required database tables."""
+    """Executes DDL statements to create all required database tables
+    and applies safe migrations."""
     cursor: sqlite3.Cursor = conn.cursor()
     cursor.execute(CREATE_ASSETS_TABLE_SQL)
     cursor.execute(CREATE_SNAPSHOTS_TABLE_SQL)
     cursor.execute(CREATE_ASSET_SNAPSHOTS_TABLE_SQL)
     cursor.execute(CREATE_STOCK_FUNDAMENTALS_TABLE_SQL)
     cursor.execute(CREATE_ETF_FUNDAMENTALS_TABLE_SQL)
-    cursor.execute(CREATE_DECISIONS_TABLE_SQL)
-    cursor.execute(CREATE_DECISION_ASSET_METRICS_TABLE_SQL)
+    cursor.execute(CREATE_OPPORTUNITIES_TABLE_SQL)
+    cursor.execute(CREATE_OPPORTUNITY_ASSET_METRICS_TABLE_SQL)
+
+    # Safe schema migrations for existing databases lacking quality columns
+    for table in ("stock_fundamental_history", "etf_fundamental_history"):
+        for column, col_type in [
+            ("quality_tier", "TEXT"),
+            ("quality_score", "INTEGER"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type};")
+                logger.info(f"Successfully added column '{column}' to table '{table}'.")
+            except sqlite3.OperationalError:
+                pass
+
     conn.commit()

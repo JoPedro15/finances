@@ -1,4 +1,4 @@
-"""Unit tests for CLI decision module in src/cli/decision.py."""
+"""Unit tests for CLI opportunity module in src/cli/opportunity.py."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from src.cli.decision import (
+from src.cli.opportunity import (
     _display_rebalance_results,
     _format_action,
     _format_urgency,
@@ -21,7 +21,6 @@ from src.cli.decision import (
     export_outputs,
     load_json_data,
 )
-from src.core.decision.base import AssetScore, AssetType
 from src.core.exceptions import GeminiAPIError, GeminiAuthError
 from src.core.models import (
     CountryExposure,
@@ -34,6 +33,7 @@ from src.core.models import (
     StockDetails,
     UrgencyLevel,
 )
+from src.core.opportunity_evaluation.base import AssetScore, AssetType
 
 runner = CliRunner()
 
@@ -213,7 +213,8 @@ def test_format_action_and_urgency() -> None:
 
 
 def test_export_outputs_success(tmp_path: Path) -> None:
-    """Validates export_outputs writes decision matrix and markdown report."""
+    """Validates export_outputs writes opportunity evaluation
+    matrix and markdown report."""
     score: AssetScore = AssetScore(
         symbol="AAPL",
         asset_type=AssetType.STOCK,
@@ -250,8 +251,8 @@ def test_export_outputs_success(tmp_path: Path) -> None:
         output_dir=tmp_path,
     )
 
-    csv_path: Path = tmp_path / "decision_output.csv"
-    md_path: Path = tmp_path / "decision_report.md"
+    csv_path: Path = tmp_path / "opportunity_output.csv"
+    md_path: Path = tmp_path / "opportunity_report.md"
 
     assert csv_path.exists()
     assert md_path.exists()
@@ -350,9 +351,9 @@ def test_rebalance_command_missing_targets(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
-@patch("src.cli.decision.calculate_current_allocations")
-@patch("src.cli.decision.enrich_target_asset")
-@patch("src.cli.decision.GeminiClient")
+@patch("src.cli.opportunity.calculate_current_allocations")
+@patch("src.cli.opportunity.enrich_target_asset")
+@patch("src.cli.opportunity.GeminiClient")
 def test_rebalance_command_full_success(
     mock_gemini_cls: MagicMock,
     mock_enrich: MagicMock,
@@ -406,9 +407,9 @@ def test_rebalance_command_full_success(
     assert result.exit_code == 0
 
 
-@patch("src.cli.decision.calculate_current_allocations")
-@patch("src.cli.decision.enrich_target_asset")
-@patch("src.cli.decision.GeminiClient")
+@patch("src.cli.opportunity.calculate_current_allocations")
+@patch("src.cli.opportunity.enrich_target_asset")
+@patch("src.cli.opportunity.GeminiClient")
 def test_rebalance_command_gemini_auth_error_fallback(
     mock_gemini_cls: MagicMock,
     mock_enrich: MagicMock,
@@ -457,9 +458,9 @@ def test_rebalance_command_gemini_auth_error_fallback(
     assert result.exit_code == 0
 
 
-@patch("src.cli.decision.calculate_current_allocations")
-@patch("src.cli.decision.enrich_target_asset")
-@patch("src.cli.decision.GeminiClient")
+@patch("src.cli.opportunity.calculate_current_allocations")
+@patch("src.cli.opportunity.enrich_target_asset")
+@patch("src.cli.opportunity.GeminiClient")
 def test_rebalance_command_gemini_api_error_fallback(
     mock_gemini_cls: MagicMock,
     mock_enrich: MagicMock,
@@ -510,8 +511,8 @@ def test_rebalance_command_gemini_api_error_fallback(
     assert result.exit_code == 0
 
 
-@patch("src.cli.decision.calculate_current_allocations")
-@patch("src.cli.decision.enrich_target_asset")
+@patch("src.cli.opportunity.calculate_current_allocations")
+@patch("src.cli.opportunity.enrich_target_asset")
 def test_rebalance_command_enrichment_failure_exits(
     mock_enrich: MagicMock,
     mock_calc: MagicMock,

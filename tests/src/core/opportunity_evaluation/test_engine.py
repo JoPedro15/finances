@@ -1,15 +1,17 @@
-"""Unit tests for strategies, configuration, and portfolio decision engine."""
+"""Unit tests for strategies, configuration, and portfolio
+opportunity_evaluation engine.
+"""
 
 from unittest.mock import MagicMock
 
 import pytest
 
 from src.config import EtfStrategyConfig, StockStrategyConfig
-from src.core.decision.base import AssetScore
-from src.core.decision.engine import PortfolioDecisionEngine
-from src.core.decision.etf_strategy import EtfScoringStrategy
-from src.core.decision.stock_strategy import StockScoringStrategy
 from src.core.models import PortfolioSnapshot
+from src.core.opportunity_evaluation.base import AssetScore
+from src.core.opportunity_evaluation.engine import PortfolioOpportunityEngine
+from src.core.opportunity_evaluation.etf_strategy import EtfScoringStrategy
+from src.core.opportunity_evaluation.stock_strategy import StockScoringStrategy
 
 
 def test_stock_config_invalid_weights() -> None:
@@ -121,8 +123,8 @@ def test_etf_allocation_score() -> None:
 
 
 def test_engine_ranks_assets_correctly() -> None:
-    """Verifies decision engine scores and ranks assets correctly."""
-    engine = PortfolioDecisionEngine()
+    """Verifies opportunity_evaluation engine scores and ranks assets correctly."""
+    engine = PortfolioOpportunityEngine()
 
     assets_data = [
         {
@@ -153,14 +155,14 @@ def test_engine_ranks_assets_correctly() -> None:
 
 
 def test_engine_rank_assets_empty_list() -> None:
-    """Verifies decision engine handles empty asset lists gracefully."""
-    engine = PortfolioDecisionEngine()
+    """Verifies opportunity_evaluation engine handles empty asset lists gracefully."""
+    engine = PortfolioOpportunityEngine()
     assert engine.rank_assets([]) == []
 
 
 def test_engine_raises_error_on_invalid_asset_type() -> None:
     """Verifies engine raises ValueError on unknown asset_type."""
-    engine = PortfolioDecisionEngine()
+    engine = PortfolioOpportunityEngine()
     invalid_asset = [
         {
             "symbol": "CRYPTO",
@@ -178,7 +180,7 @@ def test_engine_raises_error_on_invalid_asset_type() -> None:
 
 def test_engine_raises_error_on_unregistered_strategy() -> None:
     """Verifies engine raises ValueError when no strategy is registered."""
-    engine = PortfolioDecisionEngine(strategies={})
+    engine = PortfolioOpportunityEngine(strategies={})
     asset = [
         {
             "symbol": "AAPL",
@@ -196,7 +198,7 @@ def test_engine_raises_error_on_unregistered_strategy() -> None:
 
 def test_engine_validates_required_keys() -> None:
     """Verifies engine raises KeyError when required fields are missing."""
-    engine = PortfolioDecisionEngine()
+    engine = PortfolioOpportunityEngine()
     incomplete_asset = [{"symbol": "AAPL"}]
 
     with pytest.raises(KeyError, match="missing required fields"):
@@ -210,7 +212,7 @@ def test_engine_resolves_company_exposure_fallbacks() -> None:
     mock_exposure.calculate_consolidated_exposure.return_value = ({}, {})
     mock_exposure.calculate_penalty_factor.return_value = 1.0
 
-    engine = PortfolioDecisionEngine(exposure_engine=mock_exposure)
+    engine = PortfolioOpportunityEngine(exposure_engine=mock_exposure)
     assets_data = [
         {
             "symbol": "AAPL",
@@ -232,7 +234,7 @@ def test_engine_resolves_company_exposure_fallbacks() -> None:
 
 def test_resolve_company_exposure_matching_variations() -> None:
     """Verifies _resolve_company_exposure lookup strategies directly."""
-    engine = PortfolioDecisionEngine()
+    engine = PortfolioOpportunityEngine()
     exposures = {
         "MSFT": 12.0,
         "Microsoft Corporation": 18.0,
@@ -267,7 +269,7 @@ def test_engine_applies_sector_country_penalty() -> None:
     )
     mock_exposure.calculate_penalty_factor.return_value = 0.80
 
-    engine = PortfolioDecisionEngine(exposure_engine=mock_exposure)
+    engine = PortfolioOpportunityEngine(exposure_engine=mock_exposure)
     assets_data = [
         {
             "symbol": "AAPL",
@@ -284,7 +286,7 @@ def test_engine_applies_sector_country_penalty() -> None:
         timestamp="2026-08-21", total_value_eur=1000.0, assets_snapshot=[]
     )
 
-    unpenalized_engine = PortfolioDecisionEngine()
+    unpenalized_engine = PortfolioOpportunityEngine()
     unpenalized_scores = unpenalized_engine.rank_assets(assets_data)
     penalized_scores = engine.rank_assets(assets_data, portfolio_snapshot=snapshot)
 

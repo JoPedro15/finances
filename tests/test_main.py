@@ -868,15 +868,15 @@ def test_exposure_check_cmd_no_history(
     assert "No portfolio history found for exposure check." in result.output
 
 
-# --- DECISION COMMAND TESTS ---
+# --- OPPORTUNITY COMMAND TESTS ---
 
 
 @patch("main.recommend_rebalance")
-def test_decision_command_defaults(
+def test_opportunity_command_defaults(
     mock_recommend: MagicMock,
 ) -> None:
-    """Tests 'decision' CLI command execution with default parameters."""
-    result: Any = runner.invoke(app, ["decision"])
+    """Tests 'opportunity_evaluation' CLI command execution with default parameters."""
+    result: Any = runner.invoke(app, ["opportunity_evaluation"])
 
     assert result.exit_code == 0
     mock_recommend.assert_called_once()
@@ -886,14 +886,14 @@ def test_decision_command_defaults(
 
 
 @patch("main.recommend_rebalance")
-def test_decision_command_custom_options(
+def test_opportunity_command_custom_options(
     mock_recommend: MagicMock,
 ) -> None:
-    """Tests 'decision' CLI command with custom options."""
+    """Tests 'opportunity_evaluation' CLI command with custom options."""
     result: Any = runner.invoke(
         app,
         [
-            "decision",
+            "opportunity_evaluation",
             "--targets-file",
             "custom_targets.json",
             "--portfolio-file",

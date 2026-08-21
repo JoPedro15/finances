@@ -1,15 +1,15 @@
-"""Comprehensive unit tests covering all decision strategies, boundary conditions,
-and portfolio decision engine ranking logic."""
+"""Comprehensive unit tests covering all opportunity_evaluation strategies,
+boundary conditions,and portfolio opportunity_evaluation engine ranking logic."""
 
 from typing import Any
 
 import pytest
 
 from src.config import EtfStrategyConfig, StockStrategyConfig
-from src.core.decision.base import AssetScore, AssetType, ScoringStrategy
-from src.core.decision.engine import PortfolioDecisionEngine
-from src.core.decision.etf_strategy import EtfScoringStrategy
-from src.core.decision.stock_strategy import StockScoringStrategy
+from src.core.opportunity_evaluation.base import AssetScore, AssetType, ScoringStrategy
+from src.core.opportunity_evaluation.engine import PortfolioOpportunityEngine
+from src.core.opportunity_evaluation.etf_strategy import EtfScoringStrategy
+from src.core.opportunity_evaluation.stock_strategy import StockScoringStrategy
 
 # ==============================================================================
 # CONFIGURATION VALIDATION TESTS
@@ -305,14 +305,14 @@ def test_stock_calculate_score_composite() -> None:
 
 
 # ==============================================================================
-# PORTFOLIO DECISION ENGINE TESTS
+# PORTFOLIO OPPORTUNITY ENGINE TESTS
 # ==============================================================================
 
 
 def test_engine_ranks_assets_correctly() -> None:
-    """Verifies that the decision engine scores and
+    """Verifies that the opportunity_evaluation engine scores and
     ranks assets in descending order."""
-    engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
+    engine: PortfolioOpportunityEngine = PortfolioOpportunityEngine()
 
     assets_data: list[dict[str, Any]] = [
         {
@@ -345,7 +345,7 @@ def test_engine_ranks_assets_correctly() -> None:
 
 def test_engine_handles_asset_type_enum_instance() -> None:
     """Verifies engine handles AssetType enum instances directly."""
-    engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
+    engine: PortfolioOpportunityEngine = PortfolioOpportunityEngine()
 
     assets_data: list[dict[str, Any]] = [
         {
@@ -365,12 +365,12 @@ def test_engine_handles_asset_type_enum_instance() -> None:
 
 def test_engine_custom_strategies_injection() -> None:
     """Verifies dependency injection of custom strategy
-    mapping in PortfolioDecisionEngine."""
+    mapping in PortfolioOpportunityEngine."""
     dummy_strategy: ScoringStrategy = EtfScoringStrategy()
     custom_strategies: dict[AssetType, ScoringStrategy] = {
         AssetType.ETF: dummy_strategy,
     }
-    engine: PortfolioDecisionEngine = PortfolioDecisionEngine(
+    engine: PortfolioOpportunityEngine = PortfolioOpportunityEngine(
         strategies=custom_strategies
     )
 
@@ -392,7 +392,7 @@ def test_engine_custom_strategies_injection() -> None:
 def test_engine_raises_error_on_missing_required_key() -> None:
     """Verifies that engine raises KeyError with missing field
     list and symbol when mandatory keys are missing."""
-    engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
+    engine: PortfolioOpportunityEngine = PortfolioOpportunityEngine()
 
     invalid_asset: list[dict[str, Any]] = [
         {
@@ -410,7 +410,7 @@ def test_engine_raises_error_on_missing_required_key() -> None:
 
 def test_engine_raises_error_on_missing_symbol_and_required_keys() -> None:
     """Verifies default symbol 'UNKNOWN' when symbol key is missing."""
-    engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
+    engine: PortfolioOpportunityEngine = PortfolioOpportunityEngine()
 
     invalid_asset: list[dict[str, Any]] = [
         {
@@ -426,7 +426,7 @@ def test_engine_raises_error_on_missing_symbol_and_required_keys() -> None:
 def test_engine_raises_error_on_invalid_asset_type() -> None:
     """Verifies that engine raises ValueError when encountering
     an unknown asset_type string."""
-    engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
+    engine: PortfolioOpportunityEngine = PortfolioOpportunityEngine()
 
     invalid_asset: list[dict[str, Any]] = [
         {
@@ -449,7 +449,7 @@ def test_engine_raises_error_on_unregistered_asset_type() -> None:
     custom_strategies: dict[AssetType, ScoringStrategy] = {
         AssetType.ETF: EtfScoringStrategy(),
     }
-    engine: PortfolioDecisionEngine = PortfolioDecisionEngine(
+    engine: PortfolioOpportunityEngine = PortfolioOpportunityEngine(
         strategies=custom_strategies
     )
 
