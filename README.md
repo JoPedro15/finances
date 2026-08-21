@@ -1,7 +1,7 @@
 # Finances Portfolio Tracker & Decision Engine
 
 ![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)
-![Tests Coverage](https://img.shields.io/badge/coverage-93.94%25-44cc11?style=flat-square)
+![Tests Coverage](./coverage.svg)
 ![CI Quality Pipeline](https://github.com/JoPedro15/finances/actions/workflows/ci.yml/badge.svg?branch=main)
 <br />
 ![Formatter](https://img.shields.io/badge/formatter-Black-000000?style=flat-square&logo=python&logoColor=white)
@@ -9,8 +9,7 @@
 ![Security](https://img.shields.io/badge/security-Bandit%20%7C%20Audit-44cc11?style=flat-square&logo=shield&logoColor=white)
 ![GNU Make](https://img.shields.io/badge/env-GNU%20Make-active?style=flat-square&logo=gnu-make&logoColor=white)
 <br />
-![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20SQLite%20%7C%20Gemini%203.6%20Flash%20%7C%20Typer%20%7C%20pytest-FF9900?style=flat-square&logo=python&logoColor=white)
-![MIT License](https://img.shields.io/badge/license-MIT-607D8B?style=flat-square)
+![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20SQLite%20%7C%20Gemini%202.0%20Flash%20%7C%20Typer%20%7C%20pytest-FF9900?style=flat-square&logo=python&logoColor=white)![MIT License](https://img.shields.io/badge/license-MIT-607D8B?style=flat-square)
 
 ---
 
@@ -24,11 +23,23 @@ Designed with a strict separation of concerns, this system leverages Google Driv
 
 The repository follows a clean, modular architecture, segregating domain logic, infrastructure providers, decision engines, and presentation layers.
 
+
+```mermaid
+graph TD
+    GDrive[(Google Drive SSoT)] <-->|Pull / Push Sync| LocalDB[(Local SQLite / JSON Cache)]
+    LocalDB --> Providers[Data Providers: yfinance / JustETF]
+    Providers --> Engine[Decision Engine: Quant Scoring]
+    Engine --> Gemini[Gemini AI: Batch Rebalance]
+    Gemini --> Report[CLI Output & Snapshot Save]
+    Report -->|Auto Backup| GDrive
+```
+
+
 | Layer | Path | Description |
 | :--- | :--- | :--- |
 | **Core Domain** | `src/core/` | Business logic, quotation retrieval, multi-currency exchange, snapshot management, performance analysis, and repository protocols. |
 | **Decision Engine** | `src/core/decision/` | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) for stocks and ETFs. |
-| **AI Infrastructure** | `src/infra/ai/` | Google Gemini API client (`gemini-3.6-flash`) executing robust batch structured JSON portfolio rebalancing analysis with Pydantic validation. |
+| **AI Infrastructure** | `src/infra/ai/` | Google Gemini API client (`gemini-2.0-flash`) executing robust batch structured JSON portfolio rebalancing analysis with Pydantic validation. |
 | **Database & Schema** | `src/infra/database/` | SQLite connection management, foreign key enforcement, transactional contexts, and relational schema DDL. |
 | **Cloud SSoT Engine** | `src/infra/gdrive/` | Google Drive service wrapper handling bidirectional synchronization of `finances.db` and configuration JSON files. |
 | **JustETF Scraper** | `src/infra/justetf/` | Scraper client extracting ETF composition, sector weights, geographic allocation, and TER directly from JustETF profile pages. |
@@ -45,7 +56,7 @@ Rather than relying purely on opaque LLM predictions, the engine uses explicit q
 * **Composite Priority**: Combines weighted sub-scores into a normalized total score (`total_score`) to rank target wishlist assets objectively.
 
 ### 2. Gemini AI Batch Advisory (`src/infra/ai/`)
-* **Enterprise Client (`GeminiClient`)**: Powered by `gemini-3.6-flash` via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
+* **Enterprise Client (`GeminiClient`)**: Powered by `gemini-2.0-flash` via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
 * **Batch Portfolio Analysis**: Processes the entire target asset wishlist in a single API call, returning strict structured JSON validated through Pydantic (`BatchRebalanceRecommendations`).
 * **Graceful Fallback**: Automatically falls back to the quantitative decision matrix if AI quotas are exhausted or credentials are unconfigured.
 
@@ -89,7 +100,7 @@ Key configuration parameters in `.env`:
 ```ini
 # Gemini AI Configuration
 GEMINI_API_KEY=your_api_key_here
-GEMINI_MODEL=gemini-3.6-flash
+GEMINI_MODEL=gemini-2.0-flash
 
 # Google Drive Folders (Cloud SSoT)
 GDRIVE_CLIENT_SECRET_FILE=secrets/credentials.json
@@ -114,7 +125,7 @@ ETF_WEIGHT_ALLOCATION=0.40
 
 ## CLI Reference & Usage
 
-The application is controlled via a rich Typer CLI interface defined in `main.py` and GNU Make shortcuts.
+The application is controlled via a rich Typer CLI interface defined in `main.py` and GNU Make shortcuts. All operational workflows are accessible directly through the main entrypoint.
 
 ### Portfolio Monitoring & Decision Execution
 
@@ -138,7 +149,7 @@ python main.py save-snapshot
 python main.py analyze-exposure
 
 # Qualitative CLI asset metric evaluator
-python -m cli.recommend analyze-quality
+python main.py analyze-quality
 ```
 
 ### Asset Inspection & Data Sync
@@ -162,23 +173,72 @@ python main.py sync-fundamentals
 
 ---
 
-## Quality Gates & Testing Suite
+## Database Schema & Legacy Data Migration
 
-The project enforces strict code quality standards, verified through automated GitHub Actions CI pipelines (`ci.yml`).  
+The application relies on SQLite for structured relational persistence, enforcing foreign key integrity, transactional isolation, and historical tracking.
 
-Run the complete quality check suite locally using GNU Make:  
+### Automatic Schema Initialization
+
+Database tables and indexes are managed automatically via `src/infra/database/schema.py`. Upon establishing a database connection context (`get_db_context`), the system executes `initialize_database(conn)` to ensure all required relational structures exist:
+
+* **`assets`**: Stores active portfolio equities and ETFs, ISINs, tickers, quantities, and average buy prices.
+* **`portfolio_snapshots`**: Persists timestamped portfolio valuations, total returns, and asset weight distributions.
+* **`stock_fundamental_history`**: Records historical equity metrics (P/E ratios, market cap, sector, industry, margins).
+* **`etf_fundamental_history`**: Stores TER, top holdings, sector allocations, and geographic distributions in structured JSON columns.
+
+### Migrating Legacy JSON Storage to SQLite
+
+When upgrading from legacy file-based setups (`portfolio.json` and `portfolio_targets.json`), execute the standalone migration utility to populate `finances.db`:
 
 ```bash
-make quality
+# Run migration script to transform legacy JSON files into relational SQLite records
+python -m src.migrate_json_to_sqlite
 ```
 
-The quality suite executes:
+The migration pipeline executes the following steps:
+
+1. Validates and initializes the target SQLite database schema.
+
+2. Parses active holdings and allocation target percentages from local or pulled JSON files.
+
+3. Inserts asset records into the `assets` table while preventing duplicate ISIN entries.
+
+4. Triggers an automated Cloud SSoT backup, synchronizing the updated `finances.db` directly to Google Drive.
+
+---
+
+## Quality Gates & Testing Suite
+
+The project enforces strict code quality standards, verified through automated GitHub Actions CI pipelines (`ci.yml`).
+
+Development tasks and quality checks are orchestrated via GNU Make shortcuts:
+
+| Target | Description |
+| :--- | :--- |
+| `make quality` | Runs complete quality pipeline (Black, Ruff, Mypy, Bandit, Pip-Audit, Pytest). |
+| `make test` | Executes unit tests with branch coverage report. |
+| `make test-integration` | Runs integration tests against SQLite test database. |
+| `make decision` | Triggers the complete rebalancing decision pipeline. |
+
+The quality pipeline executes:
 - **Black**: Code formatting verification (`black --check`).
 - **Ruff**: Fast Python linting and import sorting (`ruff check`).
 - **Mypy**: Strict static type checking across all modules (`mypy`).
 - **Bandit**: Security vulnerability scanning (`bandit`).
 - **Pip-Audit**: Known dependency vulnerability auditing (`pip-audit`).
-- **Pytest**: Unit test execution with rigorous branch coverage reporting (`pytest --cov=src`).  
+- **Pytest**: Unit test execution with rigorous branch coverage reporting (`pytest --cov=src`).
+
+---
+
+## Troubleshooting & Operational Gotchas
+
+### 1. Google Drive OAuth Initial Token
+* **Interactive First Run:** Upon initial execution, the Google Drive SSoT integration opens a browser window for OAuth2 user consent, generating the credentials token file at `secrets/token.json`.
+* **Headless & CI Environments:** In environments without a browser interface (e.g., remote servers, CI/CD pipelines), pre-generate `secrets/token.json` locally and inject it into your deployment environment or secrets manager.
+
+### 2. JustETF Scraper Rate Limits
+* **IP Blocks & HTTP 429:** Aggressive or repetitive scraping of ETF profiles can trigger temporary IP rate-limiting on JustETF.
+* **Local TTL Caching:** The client relies on `etf_cache.json` with a configurable Time-To-Live (`ETF_CACHE_TTL_DAYS` in `.env`). Avoid clearing this cache unnecessarily to minimize HTTP requests and prevent scraping throttles.
 
 ---
 

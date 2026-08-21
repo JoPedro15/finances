@@ -90,6 +90,19 @@ class Settings(BaseSettings):
     etf_ter_high_pct: float = Field(default=0.50, alias="ETF_TER_HIGH_PCT")
     etf_alloc_gap_max_pct: float = Field(default=10.0, alias="ETF_ALLOC_GAP_MAX_PCT")
 
+    max_country_allocation_pct: float = Field(
+        default=60.0, alias="MAX_COUNTRY_ALLOCATION_PCT"
+    )
+    max_tech_allocation_pct: float = Field(
+        default=50.0, alias="MAX_TECH_ALLOCATION_PCT"
+    )
+    max_other_sector_allocation_pct: float = Field(
+        default=15.0, alias="MAX_OTHER_SECTOR_ALLOCATION_PCT"
+    )
+    max_company_allocation_pct: float = Field(
+        default=15.0, alias="MAX_COMPANY_ALLOCATION_PCT"
+    )
+
     # SMTP / Email Settings
     smtp_server: str = Field(default="", alias="SMTP_SERVER")
     smtp_port: int = Field(default=587, alias="SMTP_PORT")

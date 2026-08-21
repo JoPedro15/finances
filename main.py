@@ -7,15 +7,15 @@ from typing import Annotated
 
 import typer
 from pydantic import ValidationError
+from rich.console import Console
 
 from src.cli.decision import recommend_rebalance
 from src.cli.fundamentals import sync_portfolio_fundamentals
 from src.config import DATA_DIR, settings
 from src.core.analysis import (
-    PortfolioExposure,
     analyze_overall_performance,
-    calculate_portfolio_exposure,
 )
+from src.core.exposure import ExposureEngine
 from src.core.models import (
     Asset,
     ETFDetails,
@@ -23,7 +23,7 @@ from src.core.models import (
     StockDetails,
 )
 from src.core.providers import ETFProvider, StockProvider
-from src.core.repositories import SqlitePortfolioRepository
+from src.core.repositories import SqliteHistoryRepository, SqlitePortfolioRepository
 from src.core.snapshot import display_snapshot, get_snapshot, save_snapshot
 from src.infra.database.connection import DEFAULT_DB_PATH
 from src.infra.gdrive.service import GDriveService
@@ -46,6 +46,8 @@ app: typer.Typer = typer.Typer(
     "investment decision ranking.",
     add_completion=False,
 )
+
+console: Console = Console()
 
 
 def _pull_cloud_data() -> bool:
@@ -188,54 +190,29 @@ def push_config_cmd() -> None:
 
 
 def _display_single_etf_details(isin: str, name: str, provider: ETFProvider) -> None:
-    """Helper to fetch and print formatted details for a single ETF ISIN."""
-    logger.section("ETF Details Inspection")
-    logger.subsection(f"ETF Name: {name}")
-    logger.info(f"ETF ISIN: {isin}")
-
+    """Displays detailed composition and breakdowns for a single ETF."""
     dummy_asset: Asset = Asset(
-        name=name,
         isin=isin,
-        yahoo_ticker="",
-        quantity=0,
+        name=name,
+        yahoo_ticker=isin,
+        quantity=0.0,
         average_buy_price=0.0,
         asset_type="ETF",
     )
-
-    try:
-        details: ETFDetails | None = provider.get_details(dummy_asset)
-    except Exception as err:
-        logger.error(f"Failed to fetch details for ETF ISIN {isin}: {err}")
-        return
-
-    if details is None:
-        logger.error(f"Failed to fetch details for ETF ISIN {isin}.")
-        return
-
-    ter_str: str = f"{details.ter_pct:.2f}%" if details.ter_pct is not None else "N/A"
-    logger.info(f"TER (Total Expense Ratio): {ter_str}")
-
-    logger.info("Top Holdings:")
-    if details.holdings:
-        for holding in details.holdings:
-            isin_s: str = f" ({holding.isin})" if holding.isin else ""
-            logger.print(f"  - {holding.name}{isin_s}: {holding.weight_pct:.2f}%")
+    details: ETFDetails | None = provider.get_details(dummy_asset)
+    console.print(f"\n[bold cyan]=== ETF DETAILS: {name} ({isin}) ===[/bold cyan]")
+    if details:
+        ter_str = f"{details.ter_pct}%" if details.ter_pct else "TER: N/A"
+        console.print(f"TER: {ter_str}", highlight=False)
+        if details.holdings:
+            console.print("\nTop Holdings:", highlight=False)
+            for h in details.holdings[:10]:
+                console.print(
+                    f"  • {h.name} ({h.isin or 'N/A'}): {h.weight_pct}%",
+                    highlight=False,
+                )
     else:
-        logger.print("  No holding details available.")
-
-    logger.info("Sector Breakdown:")
-    if details.sector_breakdown:
-        for sector in details.sector_breakdown:
-            logger.print(f"  - {sector.sector_name}: {sector.weight_pct:.2f}%")
-    else:
-        logger.print("  No sector breakdown available.")
-
-    logger.info("Country Breakdown:")
-    if details.country_breakdown:
-        for country in details.country_breakdown:
-            logger.print(f"  - {country.country_name}: {country.weight_pct:.2f}%")
-    else:
-        logger.print("  No country breakdown available.")
+        console.print("[red]Failed to fetch details.[/red]")
 
 
 @app.command(name="etf-details")
@@ -246,7 +223,7 @@ def etf_details_cmd(
             help=(
                 "Optional ISIN of the ETF to inspect. "
                 "If omitted, inspects all ETFs in portfolio."
-            ),
+            )
         ),
     ] = None,
 ) -> None:
@@ -294,229 +271,206 @@ def etf_details_cmd(
 
         for asset in etf_assets:
             _display_single_etf_details(asset.isin, asset.name, provider)
-    finally:
+
         _trigger_cloud_push()
+    except typer.Exit:
+        raise
+    except Exception as err:
+        logger.error(f"Unexpected error fetching ETF details: {err}")
+        raise typer.Exit(code=1) from err
 
 
 def _format_market_cap(val: float | None) -> str:
-    """Formats market capitalization values with dynamic scale suffixes."""
+    """Formats market cap values with dynamic scale suffixes (B/T)
+
+    rounded to two decimal places.
+    """
     if val is None:
         return "N/A"
-    if val >= 1e12:
-        return f"{val / 1e12:.2f}T"
-    if val >= 1e9:
-        return f"{val / 1e9:.2f}B"
-    if val >= 1e6:
-        return f"{val / 1e6:.2f}M"
+    if val >= 1_000_000_000_000:
+        return f"{val / 1_000_000_000_000:.2f}T"
+    if val >= 1_000_000_000:
+        return f"{val / 1_000_000_000:.2f}B"
+    if val >= 1_000_000:
+        return f"{val / 1_000_000:.2f}M"
     return f"{val:.2f}"
 
 
 def _display_single_stock_details(
-    identifier: str,
-    name: str,
-    provider: StockProvider,
-    asset: Asset | None = None,
+    ticker: str, name: str, provider: StockProvider
 ) -> None:
-    """Helper function to fetch and print formatted details for a stock."""
-    logger.section("Stock Details Inspection")
-    logger.subsection(f"Stock Name: {name}")
-    if asset and asset.isin:
-        logger.info(f"Stock ISIN: {asset.isin}")
-    logger.info(f"Ticker: {identifier}")
-
-    dummy_asset: Asset = asset or Asset(
+    """Displays fundamental financial metrics for a single stock."""
+    dummy_asset: Asset = Asset(
+        isin=ticker if len(ticker) == 12 else "",
         name=name,
-        isin="",
-        yahoo_ticker=identifier,
-        quantity=0,
+        yahoo_ticker=ticker,
+        quantity=0.0,
         average_buy_price=0.0,
         asset_type="STOCK",
     )
+    details: StockDetails | None = provider.get_details(dummy_asset)
+    console.print(f"\n[bold cyan]=== STOCK DETAILS: {name} ({ticker}) ===[/bold cyan]")
+    if details:
+        console.print(f"Sector: {details.sector or 'N/A'}", highlight=False)
+        console.print(f"Industry: {details.industry or 'N/A'}", highlight=False)
+        mcap = _format_market_cap(details.market_cap)
+        console.print(f"Market Cap: {mcap}", highlight=False)
 
-    try:
-        details: StockDetails | None = provider.get_details(dummy_asset)
-    except Exception as err:
-        logger.error(f"Error retrieving stock details for '{identifier}': {err}")
-        return
+        pe_str = f"{details.pe_ratio:.2f}" if details.pe_ratio is not None else "N/A"
+        fwd_str = (
+            f"{details.forward_pe:.2f}" if details.forward_pe is not None else "N/A"
+        )
+        div_str = (
+            f"{details.dividend_yield_pct:.2f}%"
+            if details.dividend_yield_pct is not None
+            else "N/A"
+        )
 
-    if details is None:
-        logger.error(f"Failed to fetch details for stock '{identifier}'.")
-        return
-
-    mcap_str: str = _format_market_cap(details.market_cap)
-    pe_str: str = f"{details.pe_ratio:.2f}" if details.pe_ratio is not None else "N/A"
-    fwd_pe_str: str = (
-        f"{details.forward_pe:.2f}" if details.forward_pe is not None else "N/A"
-    )
-    peg_str: str = (
-        f"{details.peg_ratio:.2f}" if details.peg_ratio is not None else "N/A"
-    )
-    pb_str: str = (
-        f"{details.price_to_book:.2f}" if details.price_to_book is not None else "N/A"
-    )
-    div_str: str = (
-        f"{details.dividend_yield_pct:.2f}%"
-        if details.dividend_yield_pct is not None
-        else "N/A"
-    )
-    beta_str: str = f"{details.beta:.2f}" if details.beta is not None else "N/A"
-    margin_str: str = (
-        f"{details.profit_margins_pct:.2f}%"
-        if details.profit_margins_pct is not None
-        else "N/A"
-    )
-    rev_growth_str: str = (
-        f"{details.revenue_growth_pct:.2f}%"
-        if details.revenue_growth_pct is not None
-        else "N/A"
-    )
-    earn_growth_str: str = (
-        f"{details.earnings_growth_pct:.2f}%"
-        if details.earnings_growth_pct is not None
-        else "N/A"
-    )
-    debt_eq_str: str = (
-        f"{details.total_debt_to_equity:.2f}"
-        if details.total_debt_to_equity is not None
-        else "N/A"
-    )
-    target_price_str: str = (
-        f"{details.target_mean_price:.2f} EUR"
-        if details.target_mean_price is not None
-        else "N/A"
-    )
-    rec_key_str: str = (
-        details.recommendation_key.upper() if details.recommendation_key else "N/A"
-    )
-    high_str: str = (
-        f"{details.fifty_two_week_high:.2f}"
-        if details.fifty_two_week_high is not None
-        else "N/A"
-    )
-    low_str: str = (
-        f"{details.fifty_two_week_low:.2f}"
-        if details.fifty_two_week_low is not None
-        else "N/A"
-    )
-
-    logger.info(f"Sector: {details.sector or 'N/A'}")
-    logger.info(f"Industry: {details.industry or 'N/A'}")
-    logger.info(f"Market Cap: {mcap_str}")
-    logger.info(f"P/E Ratio: {pe_str} (Forward P/E: {fwd_pe_str})")
-    logger.info(f"PEG Ratio: {peg_str} | Price to Book: {pb_str}")
-    logger.info(f"Dividend Yield: {div_str} | Beta: {beta_str}")
-    logger.info(f"Profit Margins: {margin_str} | Debt/Equity: {debt_eq_str}")
-    logger.info(
-        f"Revenue Growth: {rev_growth_str} | Earnings Growth: {earn_growth_str}"
-    )
-    logger.info(f"Analyst Consensus: {rec_key_str} (Target Price: {target_price_str})")
-    logger.info(f"52-Week Range: {low_str} - {high_str}")
+        console.print(f"P/E Ratio: {pe_str}", highlight=False)
+        console.print(f"Forward P/E: {fwd_str}", highlight=False)
+        console.print(f"Dividend Yield: {div_str}", highlight=False)
+    else:
+        console.print("[red]Failed to fetch fundamental metrics.[/red]")
 
 
 @app.command(name="stock-details")
 def stock_details_cmd(
-    ticker_or_isin: Annotated[
+    ticker: Annotated[
         str | None,
         typer.Argument(
             help=(
-                "Optional Ticker or ISIN of the stock to inspect. "
+                "Optional stock ticker symbol or ISIN. "
                 "If omitted, inspects all stocks in portfolio."
-            ),
+            )
         ),
     ] = None,
 ) -> None:
-    """Inspects fundamental metrics for portfolio stock holdings."""
+    """Inspects fundamental financial metrics for portfolio stocks."""
     provider: StockProvider = StockProvider()
     repo: SqlitePortfolioRepository = SqlitePortfolioRepository(DEFAULT_DB_PATH)
 
-    if ticker_or_isin:
-        clean_input: str = ticker_or_isin.strip().upper()
-        assets_lookup: list[Asset] = []
-        try:
-            assets_lookup = repo.load_assets()
-        except Exception:
-            assets_lookup = []
-
-        matched_asset: Asset | None = next(
-            (
-                a
-                for a in assets_lookup
-                if str(a.asset_type).upper() == "STOCK"
-                and (
-                    a.yahoo_ticker.upper() == clean_input
-                    or (a.isin and a.isin.upper() == clean_input)
-                )
-            ),
-            None,
-        )
-
-        ticker: str = matched_asset.yahoo_ticker if matched_asset else clean_input
-        asset_name: str = matched_asset.name if matched_asset else clean_input
-        _display_single_stock_details(
-            identifier=ticker,
-            name=asset_name,
-            provider=provider,
-            asset=matched_asset,
-        )
-        return
-
     try:
-        assets: list[Asset] = repo.load_assets()
-    except Exception as e:
-        logger.error(f"Failed to load portfolio assets: {e}")
-        raise typer.Exit(code=1) from e
+        if ticker:
+            clean_ticker: str = ticker.strip()
+            assets_lookup: list[Asset] = []
+            try:
+                assets_lookup = repo.load_assets()
+            except Exception:
+                assets_lookup = []
 
-    stock_assets: list[Asset] = [
-        a for a in assets if str(a.asset_type).upper() == "STOCK"
-    ]
-    if not stock_assets:
-        logger.warning("No active stock holdings found in portfolio.")
-        return
-
-    for asset in stock_assets:
-        _display_single_stock_details(
-            identifier=asset.yahoo_ticker,
-            name=asset.name,
-            provider=provider,
-            asset=asset,
-        )
-
-
-@app.command(name="analyze-exposure")
-def analyze_exposure_cmd() -> None:
-    """Analyzes consolidated portfolio sector and country exposure."""
-    logger.section("Analyzing Consolidated Portfolio Exposure")
-
-    try:
-        snapshot: PortfolioSnapshot | None = get_snapshot()
-        if not snapshot:
-            logger.error(
-                "Failed to calculate portfolio snapshot for exposure analysis."
+            matched_asset: Asset | None = next(
+                (
+                    a
+                    for a in assets_lookup
+                    if a.yahoo_ticker.upper() == clean_ticker.upper()
+                    or (a.isin and a.isin.upper() == clean_ticker.upper())
+                ),
+                None,
             )
-            raise typer.Exit(code=1)
-
-        exposure: PortfolioExposure = calculate_portfolio_exposure(snapshot)
-
-        if exposure.total_etf_value_eur == 0.0:
-            logger.warning("No active ETF holdings found in portfolio.")
+            asset_name: str = matched_asset.name if matched_asset else clean_ticker
+            _display_single_stock_details(clean_ticker, asset_name, provider)
             return
 
-        logger.info(
-            f"Total ETF Portfolio Value: {exposure.total_etf_value_eur:.2f} EUR"
-        )
+        try:
+            assets: list[Asset] = repo.load_assets()
+        except Exception as e:
+            logger.error(f"Failed to load portfolio assets: {e}")
+            raise typer.Exit(code=1) from e
 
-        logger.info("Consolidated Sector Exposure:")
-        for sector, pct in exposure.sector_exposure.items():
-            logger.print(f"  - {sector}: {pct:.2f}%")
+        stock_assets: list[Asset] = [
+            a for a in assets if str(a.asset_type).upper() == "STOCK"
+        ]
+        if not stock_assets:
+            logger.warning("No active stock holdings found in portfolio.")
+            return
 
-        logger.info("Consolidated Country Exposure:")
-        for country, pct in exposure.country_exposure.items():
-            logger.print(f"  - {country}: {pct:.2f}%")
+        for asset in stock_assets:
+            _display_single_stock_details(asset.yahoo_ticker, asset.name, provider)
+
+        _trigger_cloud_push()
     except typer.Exit:
         raise
     except Exception as err:
-        logger.error(f"Failed to analyze exposure: {err}")
+        logger.error(f"Unexpected error fetching stock details: {err}")
         raise typer.Exit(code=1) from err
+
+
+@app.command(name="exposure-check")
+def check_exposure() -> None:
+    """Displays consolidated look-through exposure (sectors, countries,
+    and individual companies) in the terminal.
+    """
+    exposure_engine: ExposureEngine = ExposureEngine()
+    history_repo: SqliteHistoryRepository = SqliteHistoryRepository(DEFAULT_DB_PATH)
+    history: list[PortfolioSnapshot] = history_repo.load_history()
+
+    if not history:
+        console.print("[red]No portfolio history found for exposure check.[/red]")
+        return
+
+    latest_snapshot: PortfolioSnapshot = history[-1]
+
+    with console.status("[bold cyan]Calculating look-through exposures..."):
+        sectors: dict[str, float]
+        countries: dict[str, float]
+        sectors, countries = exposure_engine.calculate_consolidated_exposure(
+            latest_snapshot
+        )
+        companies: dict[str, float] = exposure_engine.calculate_company_exposure(
+            latest_snapshot
+        )
+
+        sector_violations: list[str] = exposure_engine.validate_exposure_limits(
+            sectors, countries
+        )
+        company_violations: list[str] = exposure_engine.validate_company_limits(
+            companies
+        )
+
+    console.print("\n[bold yellow]=== CONSOLIDATED SECTOR EXPOSURE ===[/bold yellow]")
+    for sector, pct in sorted(sectors.items(), key=lambda x: x[1], reverse=True):
+        is_tech: bool = "technology" in sector.lower() or "tech" in sector.lower()
+        sector_limit: float = (
+            settings.max_tech_allocation_pct
+            if is_tech
+            else settings.max_other_sector_allocation_pct
+        )
+        sector_status_style: str = "red" if pct > sector_limit else "green"
+        console.print(
+            f"  • {sector}: "
+            f"[{sector_status_style}]{pct:.2f}%[/{sector_status_style}] "
+            f"(Max: {sector_limit:.1f}%)"
+        )
+
+    console.print("\n[bold yellow]=== CONSOLIDATED COUNTRY EXPOSURE ===[/bold yellow]")
+    for country, pct in sorted(countries.items(), key=lambda x: x[1], reverse=True):
+        country_limit: float = settings.max_country_allocation_pct
+        country_status_style: str = "red" if pct > country_limit else "green"
+        console.print(
+            f"  • {country}: "
+            f"[{country_status_style}]{pct:.2f}%[/{country_status_style}] "
+            f"(Max: {country_limit:.1f}%)"
+        )
+
+    console.print(
+        "\n[bold yellow]=== CONSOLIDATED COMPANY EXPOSURE "
+        "(Top Look-Through) ===[/bold yellow]"
+    )
+    for comp, pct in sorted(companies.items(), key=lambda x: x[1], reverse=True)[:10]:
+        company_status_style: str = (
+            "red" if pct > settings.max_company_allocation_pct else "green"
+        )
+        console.print(
+            f"  • {comp}: "
+            f"[{company_status_style}]{pct:.2f}%[/{company_status_style}]"
+        )
+
+    if company_violations or sector_violations:
+        console.print("\n[bold red]⚠️ Policy Violations Detected:[/bold red]")
+        for v in sector_violations + company_violations:
+            console.print(f"  - {v}", style="red")
+    else:
+        console.print("\n[bold green]✓ All exposure limits are respected.[/bold green]")
 
 
 @app.command(name="decision")

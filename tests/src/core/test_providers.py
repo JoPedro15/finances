@@ -6,7 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from src.core.models import Asset, ETFDetails, Quotation, StockDetails
+from src.core.models import (
+    Asset,
+    CountryExposure,
+    ETFDetails,
+    Quotation,
+    SectorExposure,
+    StockDetails,
+)
 from src.core.providers import ETFProvider, StockProvider
 
 # ==============================================================================
@@ -357,7 +364,12 @@ def test_etf_provider_uses_cache_hit(mock_get_price: MagicMock) -> None:
     mock_get_price.return_value = Quotation(price=100.0, currency="EUR")
     mock_cache: MagicMock = MagicMock()
     sample_details: ETFDetails = ETFDetails(
-        holdings=[], sector_breakdown=[], country_breakdown=[], ter_pct=0.20
+        holdings=[],
+        sector_breakdown=[SectorExposure(sector_name="Technology", weight_pct=100.0)],
+        country_breakdown=[
+            CountryExposure(country_name="United States", weight_pct=100.0)
+        ],
+        ter_pct=0.20,
     )
     mock_cache.get_etf_details.return_value = sample_details
 
@@ -390,7 +402,12 @@ def test_etf_provider_cache_miss_fetches_and_saves() -> None:
     mock_cache.get_etf_details.return_value = None
 
     sample_details: ETFDetails = ETFDetails(
-        holdings=[], sector_breakdown=[], country_breakdown=[], ter_pct=0.20
+        holdings=[],
+        sector_breakdown=[SectorExposure(sector_name="Technology", weight_pct=100.0)],
+        country_breakdown=[
+            CountryExposure(country_name="United States", weight_pct=100.0)
+        ],
+        ter_pct=0.20,
     )
     mock_client: MagicMock = MagicMock()
     mock_client.get_etf_details.return_value = sample_details
@@ -428,7 +445,29 @@ def test_etf_provider_get_details_missing_isin() -> None:
 
 
 def test_etf_provider_get_details_scraper_exception() -> None:
-    """Validates ETFProvider handles scraper exceptions gracefully and returns None."""
+    """Validates ETFProvider handles scraper exceptions gracefully for generic ETFs."""
+    mock_cache: MagicMock = MagicMock()
+    mock_cache.get_etf_details.return_value = None
+
+    mock_client: MagicMock = MagicMock()
+    mock_client.get_etf_details.side_effect = Exception("Scraper network error")
+
+    provider: ETFProvider = ETFProvider(
+        justetf_client=mock_client, cache_repo=mock_cache
+    )
+    asset: Asset = Asset(
+        name="Generic Global Bond Fund",
+        isin="IE00B1234567",
+        yahoo_ticker="BOND.DE",
+        quantity=5.0,
+        average_buy_price=80.0,
+    )
+
+    assert provider.get_details(asset) is None
+
+
+def test_etf_provider_get_details_scraper_exception_with_fallback() -> None:
+    """Validates benchmark fallback is applied when scraper fails for benchmark ETF."""
     mock_cache: MagicMock = MagicMock()
     mock_cache.get_etf_details.return_value = None
 
@@ -446,7 +485,11 @@ def test_etf_provider_get_details_scraper_exception() -> None:
         average_buy_price=80.0,
     )
 
-    assert provider.get_details(asset) is None
+    details: ETFDetails | None = provider.get_details(asset)
+
+    assert details is not None
+    assert len(details.country_breakdown) > 0
+    assert len(details.sector_breakdown) > 0
 
 
 @patch("src.core.providers.JustETFClient")

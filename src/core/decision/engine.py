@@ -1,4 +1,5 @@
-"""Portfolio decision engine orchestrating asset scoring strategies using Pandas."""
+"""Portfolio decision engine orchestrating asset scoring strategies
+and enforcing exposure constraints using Pandas."""
 
 from __future__ import annotations
 
@@ -6,9 +7,13 @@ from typing import Any
 
 import pandas as pd
 
+from src.config import settings
 from src.core.decision.base import AssetScore, AssetType, ScoringStrategy
 from src.core.decision.etf_strategy import EtfScoringStrategy
 from src.core.decision.stock_strategy import StockScoringStrategy
+from src.core.exposure import ExposureEngine
+from src.core.models import PortfolioSnapshot
+from src.utils.logger.logger import logger
 
 _REQUIRED_ASSET_KEYS: tuple[str, ...] = (
     "symbol",
@@ -20,20 +25,27 @@ _REQUIRED_ASSET_KEYS: tuple[str, ...] = (
 
 
 class PortfolioDecisionEngine:
-    """Decision engine that delegates calculations to asset-specific strategies."""
+    """Decision engine that delegates calculations to asset-specific
+    strategies and applies exposure constraints."""
 
     def __init__(
-        self, strategies: dict[AssetType, ScoringStrategy] | None = None
+        self,
+        strategies: dict[AssetType, ScoringStrategy] | None = None,
+        exposure_engine: ExposureEngine | None = None,
     ) -> None:
-        """Initializes the engine with strategy mappings for supported asset types.
+        """Initializes the engine with strategy mappings
+        and exposure engine for policy checks.
 
         Args:
             strategies: Optional custom strategy mapping for dependency injection.
+            exposure_engine: Optional exposure engine for
+            look-through allocation checks.
         """
         self._strategies: dict[AssetType, ScoringStrategy] = strategies or {
             AssetType.ETF: EtfScoringStrategy(),
             AssetType.STOCK: StockScoringStrategy(),
         }
+        self._exposure_engine: ExposureEngine = exposure_engine or ExposureEngine()
 
     def _validate_required_keys(self, asset: dict[str, Any]) -> None:
         """Validates that all mandatory fields exist in the asset payload.
@@ -53,11 +65,61 @@ class PortfolioDecisionEngine:
                 f"Asset '{symbol}' is missing required fields: {missing_keys}"
             )
 
-    def rank_assets(self, assets_data: list[dict[str, Any]]) -> list[AssetScore]:
-        """Calculates scores for all assets using DataFrame processing and ranks them.
+    def _resolve_company_exposure(
+        self,
+        symbol: str,
+        asset_name: str | None,
+        company_exposures: dict[str, float],
+    ) -> float:
+        """Resolves company exposure robustly by matching ticker symbol,
+        asset name, or partial substrings.
+
+        Args:
+            symbol: Ticker symbol of the asset.
+            asset_name: Optional descriptive name of the asset.
+            company_exposures: Dictionary mapping consolidated
+            entity names to exposure percentages.
+
+        Returns:
+            Matched exposure percentage or 0.0 if not found.
+        """
+        if not company_exposures:
+            return 0.0
+
+        # Direct lookups
+        if symbol in company_exposures:
+            return company_exposures[symbol]
+
+        if asset_name and asset_name in company_exposures:
+            return company_exposures[asset_name]
+
+        # Case-insensitive and substring fallback matching
+        symbol_lower: str = symbol.lower()
+        name_lower: str = asset_name.lower() if asset_name else ""
+
+        for key, exposure in company_exposures.items():
+            key_lower: str = key.lower()
+            if (
+                symbol_lower in key_lower
+                or key_lower in symbol_lower
+                or (name_lower and (name_lower in key_lower or key_lower in name_lower))
+            ):
+                return exposure
+
+        return 0.0
+
+    def rank_assets(
+        self,
+        assets_data: list[dict[str, Any]],
+        portfolio_snapshot: PortfolioSnapshot | None = None,
+    ) -> list[AssetScore]:
+        """Calculates scores for all assets using DataFrame processing,
+        evaluates exposure limits, and ranks them.
 
         Args:
             assets_data: List of enriched asset payload dictionaries.
+            portfolio_snapshot: Optional portfolio snapshot
+            for look-through exposure validation.
 
         Returns:
             Sorted list of AssetScore instances ordered by composite priority.
@@ -73,6 +135,15 @@ class PortfolioDecisionEngine:
         for asset in assets_data:
             self._validate_required_keys(asset)
 
+        # Calculate company look-through exposures if snapshot is provided
+        company_exposures: dict[str, float] = {}
+        if portfolio_snapshot and portfolio_snapshot.total_value_eur > 0.0:
+            company_exposures = self._exposure_engine.calculate_company_exposure(
+                portfolio_snapshot
+            )
+
+        max_company_limit: float = settings.max_company_allocation_pct
+
         # Convert input list to a pandas DataFrame for batch processing
         df: pd.DataFrame = pd.DataFrame(assets_data)
         scores: list[AssetScore] = []
@@ -80,6 +151,7 @@ class PortfolioDecisionEngine:
         for _, row in df.iterrows():
             raw_type: Any = row.get("asset_type")
             symbol_str: str = str(row["symbol"])
+            asset_name_str: str | None = row.get("name") or row.get("description")
 
             try:
                 asset_type: AssetType = (
@@ -116,6 +188,33 @@ class PortfolioDecisionEngine:
                 low_52w=row.get("low_52w") if pd.notna(row.get("low_52w")) else None,
                 high_52w=row.get("high_52w") if pd.notna(row.get("high_52w")) else None,
             )
+
+            # Evaluate exposure policy limits using robust resolution helper
+            current_company_exposure: float = self._resolve_company_exposure(
+                symbol=symbol_str,
+                asset_name=asset_name_str,
+                company_exposures=company_exposures,
+            )
+
+            if current_company_exposure > max_company_limit:
+                exposure_penalty: float = 0.5
+                logger.warning(
+                    f"Asset '{symbol_str}' penalized in ranking: "
+                    f"Consolidated company exposure "
+                    f"({current_company_exposure:.1f}%) exceeds "
+                    f"policy limit ({max_company_limit:.1f}%)."
+                )
+                score = AssetScore(
+                    symbol=score.symbol,
+                    asset_type=score.asset_type,
+                    dip_score=score.dip_score,
+                    cost_score=score.cost_score,
+                    allocation_score=score.allocation_score,
+                    total_score=max(
+                        0.0, round(score.total_score - exposure_penalty, 3)
+                    ),
+                )
+
             scores.append(score)
 
         if not scores:
