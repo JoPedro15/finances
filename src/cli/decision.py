@@ -182,6 +182,14 @@ def enrich_target_asset(
     target_alloc_pct: float = float(target.get("target_allocation_pct", 0.0))
     alloc_gap_pct: float = round(target_alloc_pct - current_alloc_pct, 2)
 
+    country_val: str | None = (
+        getattr(stock_details, "country", None)
+        if stock_details
+        else target.get("country")
+    )
+    if not country_val and asset_type == "STOCK":
+        country_val = "United States"
+
     return {
         "symbol": symbol,
         "isin": isin,
@@ -193,7 +201,8 @@ def enrich_target_asset(
         "target_allocation_pct": target_alloc_pct,
         "current_allocation_pct": current_alloc_pct,
         "allocation_gap_pct": alloc_gap_pct,
-        "sector": stock_details.sector if stock_details else None,
+        "sector": stock_details.sector if stock_details else target.get("sector"),
+        "country": country_val,
         "industry": stock_details.industry if stock_details else None,
         "market_cap": stock_details.market_cap if stock_details else None,
         "trailing_pe": stock_details.pe_ratio if stock_details else None,
@@ -337,6 +346,10 @@ def export_outputs(
         f"TER/Cost: `{settings.etf_weight_ter:.2f}` | "
         f"Gap: `{settings.etf_weight_allocation:.2f}`"
     )
+    penalty_weights_str: str = (
+        f"Sector Penalty: `{settings.exposure_sector_penalty_weight:.2f}` | "
+        f"Country Penalty: `{settings.exposure_country_penalty_weight:.2f}`"
+    )
 
     md_lines: list[str] = [
         "# Portfolio Rebalancing & Investment Decision Report",
@@ -346,7 +359,8 @@ def export_outputs(
         f"- **Target Assets Evaluated:** {len(ranked_scores)}\n",
         "### Active Decision Strategy Weights",
         f"- **Stocks Formula:** {stock_weights_str}",
-        f"- **ETFs Formula:** {etf_weights_str}\n",
+        f"- **ETFs Formula:** {etf_weights_str}",
+        f"- **Exposure Penalties:** {penalty_weights_str}\n",
         "---",
         "\n## Portfolio Rebalancing & Investment Decision Matrix\n",
         (
@@ -561,6 +575,10 @@ def _display_rebalance_results(
         f"TER/Cost: [cyan]{settings.etf_weight_ter:.2f}[/cyan] | "
         f"Gap: [cyan]{settings.etf_weight_allocation:.2f}[/cyan]"
     )
+    penalty_weights: str = (
+        f"Sector Penalty: [cyan]{settings.exposure_sector_penalty_weight:.2f}[/cyan] | "
+        f"Country Penalty: [cyan]{settings.exposure_country_penalty_weight:.2f}[/cyan]"
+    )
 
     summary_text: str = (
         f"[bold white]Total Portfolio Value:[/bold white] "
@@ -569,7 +587,8 @@ def _display_rebalance_results(
         f"[cyan]{len(ranked_scores)}[/cyan]\n\n"
         f"[bold yellow]Active Decision Strategy Weights:[/bold yellow]\n"
         f"  • [bold]Stocks Formula:[/bold] {stock_weights}\n"
-        f"  • [bold]ETFs Formula:[/bold]   {etf_weights}"
+        f"  • [bold]ETFs Formula:[/bold]   {etf_weights}\n"
+        f"  • [bold]Exposure Penalties:[/bold] {penalty_weights}"
     )
 
     summary_panel: Panel = Panel(

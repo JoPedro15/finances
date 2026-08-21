@@ -152,6 +152,12 @@ def test_engine_ranks_assets_correctly() -> None:
     assert scores[1].symbol == "LOW_PRIORITY"
 
 
+def test_engine_rank_assets_empty_list() -> None:
+    """Verifies decision engine handles empty asset lists gracefully."""
+    engine = PortfolioDecisionEngine()
+    assert engine.rank_assets([]) == []
+
+
 def test_engine_raises_error_on_invalid_asset_type() -> None:
     """Verifies engine raises ValueError on unknown asset_type."""
     engine = PortfolioDecisionEngine()
@@ -170,6 +176,24 @@ def test_engine_raises_error_on_invalid_asset_type() -> None:
         engine.rank_assets(invalid_asset)
 
 
+def test_engine_raises_error_on_unregistered_strategy() -> None:
+    """Verifies engine raises ValueError when no strategy is registered."""
+    engine = PortfolioDecisionEngine(strategies={})
+    asset = [
+        {
+            "symbol": "AAPL",
+            "asset_type": "STOCK",
+            "current_price": 150.0,
+            "peak_price": 150.0,
+            "target_allocation_pct": 10.0,
+            "current_allocation_pct": 10.0,
+        }
+    ]
+
+    with pytest.raises(ValueError, match="No strategy registered for asset_type"):
+        engine.rank_assets(asset)
+
+
 def test_engine_validates_required_keys() -> None:
     """Verifies engine raises KeyError when required fields are missing."""
     engine = PortfolioDecisionEngine()
@@ -183,6 +207,8 @@ def test_engine_resolves_company_exposure_fallbacks() -> None:
     """Verifies robust company exposure resolution via symbol and substrings."""
     mock_exposure = MagicMock()
     mock_exposure.calculate_company_exposure.return_value = {"Apple Inc.": 20.0}
+    mock_exposure.calculate_consolidated_exposure.return_value = ({}, {})
+    mock_exposure.calculate_penalty_factor.return_value = 1.0
 
     engine = PortfolioDecisionEngine(exposure_engine=mock_exposure)
     assets_data = [
@@ -202,4 +228,65 @@ def test_engine_resolves_company_exposure_fallbacks() -> None:
 
     scores = engine.rank_assets(assets_data, portfolio_snapshot=snapshot)
     assert len(scores) == 1
-    # Triggered penalty because exposure (20.0%) > limit (15.0%)
+
+
+def test_resolve_company_exposure_matching_variations() -> None:
+    """Verifies _resolve_company_exposure lookup strategies directly."""
+    engine = PortfolioDecisionEngine()
+    exposures = {
+        "MSFT": 12.0,
+        "Microsoft Corporation": 18.0,
+        "Alphabet Inc.": 10.0,
+    }
+
+    # Direct ticker lookup
+    assert engine._resolve_company_exposure("MSFT", None, exposures) == 12.0
+
+    # Direct asset name lookup
+    assert (
+        engine._resolve_company_exposure("UNKNOWN", "Alphabet Inc.", exposures) == 10.0
+    )
+
+    # Substring / partial lookup
+    assert engine._resolve_company_exposure("GOOGL", "Alphabet", exposures) == 10.0
+
+    # No match
+    assert engine._resolve_company_exposure("AMZN", "Amazon.com", exposures) == 0.0
+
+    # Empty exposures
+    assert engine._resolve_company_exposure("MSFT", "Microsoft", {}) == 0.0
+
+
+def test_engine_applies_sector_country_penalty() -> None:
+    """Verifies sector/country exposure penalty adjusts total_score."""
+    mock_exposure = MagicMock()
+    mock_exposure.calculate_company_exposure.return_value = {}
+    mock_exposure.calculate_consolidated_exposure.return_value = (
+        {"Technology": 55.0},
+        {"United States": 65.0},
+    )
+    mock_exposure.calculate_penalty_factor.return_value = 0.80
+
+    engine = PortfolioDecisionEngine(exposure_engine=mock_exposure)
+    assets_data = [
+        {
+            "symbol": "AAPL",
+            "asset_type": "STOCK",
+            "current_price": 150.0,
+            "peak_price": 150.0,
+            "target_allocation_pct": 10.0,
+            "current_allocation_pct": 5.0,
+            "sector": "Technology",
+            "country": "United States",
+        }
+    ]
+    snapshot = PortfolioSnapshot(
+        timestamp="2026-08-21", total_value_eur=1000.0, assets_snapshot=[]
+    )
+
+    unpenalized_engine = PortfolioDecisionEngine()
+    unpenalized_scores = unpenalized_engine.rank_assets(assets_data)
+    penalized_scores = engine.rank_assets(assets_data, portfolio_snapshot=snapshot)
+
+    assert len(penalized_scores) == 1
+    assert penalized_scores[0].total_score < unpenalized_scores[0].total_score

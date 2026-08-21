@@ -133,6 +133,59 @@ class ExposureEngine:
 
         return sector_percentages, country_percentages
 
+    def calculate_penalty_factor(
+        self,
+        sector: str | None = None,
+        country: str | None = None,
+        sector_percentages: dict[str, float] | None = None,
+        country_percentages: dict[str, float] | None = None,
+    ) -> float:
+        """Calculates multiplicative penalty factor based on sector and country
+        exposure limit breaches.
+
+        Args:
+            sector: Asset sector name.
+            country: Asset country or region name.
+            sector_percentages: Pre-calculated portfolio sector exposure percentages.
+            country_percentages: Pre-calculated portfolio country exposure percentages.
+
+        Returns:
+            Multiplicative penalty factor between 0.0 and 1.0.
+        """
+        sector_factor: float = 1.0
+        country_factor: float = 1.0
+
+        if sector and sector.lower() != "unknown" and sector_percentages:
+            sec_exposure: float = sector_percentages.get(sector, 0.0)
+            is_tech_sector: bool = (
+                "technology" in sector.lower() or "tech" in sector.lower()
+            )
+            sec_limit: float = (
+                settings.max_tech_allocation_pct
+                if is_tech_sector
+                else settings.max_other_sector_allocation_pct
+            )
+            if sec_exposure > sec_limit and sec_limit > 0.0:
+                sec_excess_ratio: float = min(
+                    1.0, (sec_exposure - sec_limit) / sec_limit
+                )
+                sector_factor -= (
+                    settings.exposure_sector_penalty_weight * sec_excess_ratio
+                )
+
+        if country and country.lower() != "unknown" and country_percentages:
+            cou_exposure: float = country_percentages.get(country, 0.0)
+            cou_limit: float = settings.max_country_allocation_pct
+            if cou_exposure > cou_limit and cou_limit > 0.0:
+                cou_excess_ratio: float = min(
+                    1.0, (cou_exposure - cou_limit) / cou_limit
+                )
+                country_factor -= (
+                    settings.exposure_country_penalty_weight * cou_excess_ratio
+                )
+
+        return max(0.0, sector_factor * country_factor)
+
     def validate_exposure_limits(
         self,
         sector_percentages: dict[str, float],
@@ -230,13 +283,16 @@ class ExposureEngine:
                         if holding_isin not in isin_to_name:
                             isin_to_name[holding_isin] = holding.name
 
-        # Map back to display names only for final output
+        # Consolidate values by display name before calculating percentages
+        display_totals: dict[str, float] = {}
+        for isin_key, val in company_totals.items():
+            disp_name: str = isin_to_name.get(isin_key, isin_key)
+            display_totals[disp_name] = display_totals.get(disp_name, 0.0) + val
+
         company_percentages: dict[str, float] = {
-            isin_to_name.get(isin_key, isin_key): round(
-                (val / total_portfolio_value) * 100.0, 2
-            )
-            for isin_key, val in sorted(
-                company_totals.items(), key=lambda item: item[1], reverse=True
+            disp_name: round((val / total_portfolio_value) * 100.0, 2)
+            for disp_name, val in sorted(
+                display_totals.items(), key=lambda item: item[1], reverse=True
             )
         }
 
