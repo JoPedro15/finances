@@ -35,7 +35,7 @@ def test_settings_default_values() -> None:
 
 
 def test_settings_environment_override() -> None:
-    """Validates that environment variables correctly override Settings defaults."""
+    """Validates environment variables override Settings defaults."""
     env_vars: dict[str, str] = {
         "GEMINI_API_KEY": "test_key_123",
         "GEMINI_MODEL": "gemini-1.5-pro",

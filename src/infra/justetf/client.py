@@ -1,6 +1,4 @@
-"""
-Infrastructure client for scraping ETF details from JustETF.
-"""
+"""Infrastructure client for scraping ETF details from JustETF."""
 
 from __future__ import annotations
 
@@ -22,7 +20,7 @@ from src.core.models import (
 
 
 class JustETFClient:
-    """Scraper client for retrieving ETF holdings and exposure details from JustETF."""
+    """Scraper client for retrieving ETF holdings and exposure details."""
 
     BASE_URL: str = "https://www.justetf.com/en/etf-profile.html"
     DEFAULT_HEADERS: dict[str, str] = {
@@ -50,11 +48,6 @@ class JustETFClient:
         self.session.mount("http://", adapter)
 
     def get_etf_details(self, isin: str) -> ETFDetails:
-        """Fetches and parses ETF profile page for the given ISIN.
-
-        Raises:
-            JustETFScrapeError: If request fails or HTML cannot be parsed.
-        """
         url: str = f"{self.BASE_URL}?isin={isin}"
         try:
             response: requests.Response = self.session.get(url, timeout=self.timeout)
@@ -88,8 +81,6 @@ class JustETFClient:
             ) from e
 
     def _extract_isin_from_element(self, element: Tag) -> str:
-        """Extracts a 12-character ISIN from links, attributes,
-        or HTML of an element."""
         if not element:
             return ""
 
@@ -114,7 +105,6 @@ class JustETFClient:
 
     def _parse_holdings(self, soup: BeautifulSoup) -> list[Holding]:
         holdings: list[Holding] = []
-
         rows: list[Tag] = soup.find_all(
             "tr", {"data-testid": lambda x: x and "top-holdings_row" in str(x)}
         )
@@ -128,87 +118,47 @@ class JustETFClient:
                 rows = container.find_all("tr")
 
         if not rows:
-            container_res = soup.find(
-                lambda tag: tag.name in ["div", "section", "table"]
-                and tag.get("id")
-                and "holding" in str(tag.get("id")).lower()
-            )
-            container = container_res if isinstance(container_res, Tag) else None
-            if isinstance(container, Tag):
-                target_res: Any = (
-                    container if container.name == "table" else container.find("table")
-                )
-                target_table: Tag | None = (
-                    target_res if isinstance(target_res, Tag) else None
-                )
-                if isinstance(target_table, Tag):
-                    rows = target_table.find_all("tr")
-
-        if not rows:
             for table in soup.find_all("table"):
                 header_text: str = table.get_text().lower()
                 if (
                     ("top holdings" in header_text or "holding" in header_text)
                     and "sector" not in header_text
                     and "country" not in header_text
-                    and "inception" not in header_text
                 ):
                     rows = table.find_all("tr")
                     break
 
         for row in rows:
-            raw_name_elem: Any = row.find(
-                attrs={"data-testid": lambda x: x and "link_name" in str(x)}
-            )
-            name_elem: Tag | None = (
-                raw_name_elem if isinstance(raw_name_elem, Tag) else None
-            )
+            cols: list[Tag] = row.find_all(["td", "th"])
+            if len(cols) >= 2:
+                name: str = cols[0].get_text(strip=True)
+                weight_text: str = cols[-1].get_text(strip=True)
+                isin: str = self._extract_isin_from_element(row)
 
-            raw_weight_elem: Any = row.find(
-                attrs={"data-testid": lambda x: x and "value_percentage" in str(x)}
-            )
-            weight_elem: Tag | None = (
-                raw_weight_elem if isinstance(raw_weight_elem, Tag) else None
-            )
-
-            name: str = ""
-            isin: str = ""
-            weight_text: str = ""
-
-            if name_elem and weight_elem:
-                name = name_elem.get_text(strip=True)
-                weight_text = weight_elem.get_text(strip=True)
-                isin = self._extract_isin_from_element(row)
-            else:
-                cols: list[Tag] = row.find_all(["td", "th"])
-                if len(cols) >= 2:
-                    name = cols[0].get_text(strip=True)
-                    weight_text = cols[-1].get_text(strip=True)
-                    isin = self._extract_isin_from_element(row)
-
-            if not name or name.lower() in [
-                "name",
-                "holding",
-                "top holdings",
-                "weight",
-                "components",
-            ]:
-                continue
-
-            match: re.Match[str] | None = re.search(r"(\d+[.,]?\d*)\s*%", weight_text)
-            if match:
-                try:
-                    weight_pct: float = float(match.group(1).replace(",", "."))
-                    holdings.append(
-                        Holding(
-                            name=name,
-                            isin=isin,
-                            ticker=None,
-                            weight_pct=weight_pct,
-                        )
-                    )
-                except ValueError:
+                if not name or name.lower() in [
+                    "name",
+                    "holding",
+                    "weight",
+                    "components",
+                ]:
                     continue
+
+                match: re.Match[str] | None = re.search(
+                    r"(\d+[.,]?\d*)\s*%", weight_text
+                )
+                if match:
+                    try:
+                        weight_pct: float = float(match.group(1).replace(",", "."))
+                        holdings.append(
+                            Holding(
+                                name=name,
+                                isin=isin,
+                                ticker=None,
+                                weight_pct=weight_pct,
+                            )
+                        )
+                    except ValueError:
+                        continue
 
         return holdings
 
@@ -228,14 +178,8 @@ class JustETFClient:
                 container_res if isinstance(container_res, Tag) else None
             )
             if isinstance(container, Tag):
-                target_res: Any = (
-                    container if container.name == "table" else container.find("table")
-                )
-                target_table: Tag | None = (
-                    target_res if isinstance(target_res, Tag) else None
-                )
-                if isinstance(target_table, Tag):
-                    rows = target_table.find_all("tr")
+                rows = container.find_all("tr")
+
         if not rows:
             for table in soup.find_all("table"):
                 header_text: str = table.get_text().lower()
@@ -250,8 +194,8 @@ class JustETFClient:
                 if not sector_name or sector_name.lower() in [
                     "sector",
                     "name",
-                    "weight",
                     "breakdown",
+                    "sector breakdown",
                 ]:
                     continue
 
@@ -289,14 +233,8 @@ class JustETFClient:
                 container_res if isinstance(container_res, Tag) else None
             )
             if isinstance(container, Tag):
-                target_res: Any = (
-                    container if container.name == "table" else container.find("table")
-                )
-                target_table: Tag | None = (
-                    target_res if isinstance(target_res, Tag) else None
-                )
-                if isinstance(target_table, Tag):
-                    rows = target_table.find_all("tr")
+                rows = container.find_all("tr")
+
         if not rows:
             for table in soup.find_all("table"):
                 header_text: str = table.get_text().lower()
@@ -317,8 +255,8 @@ class JustETFClient:
                     "countries",
                     "region",
                     "name",
-                    "weight",
-                    "breakdown",
+                    "region breakdown",
+                    "country breakdown",
                 ]:
                     continue
 
