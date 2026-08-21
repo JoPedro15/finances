@@ -832,3 +832,29 @@ def test_decision_command_custom_options(
     assert str(kwargs["portfolio_file"]) == "custom_portfolio.json"
     assert kwargs["skip_ai"] is True
     assert kwargs["verbose"] is True
+
+
+# --- SYNC FUNDAMENTALS COMMAND TESTS ---
+
+
+@patch("main.sync_portfolio_fundamentals")
+def test_sync_fundamentals_command_success(
+    mock_sync: MagicMock,
+) -> None:
+    """Tests 'sync-fundamentals' CLI command on successful execution."""
+    result: Any = runner.invoke(app, ["sync-fundamentals"])
+
+    assert result.exit_code == 0
+    mock_sync.assert_called_once()
+
+
+@patch("main.sync_portfolio_fundamentals")
+def test_sync_fundamentals_command_exception(
+    mock_sync: MagicMock,
+) -> None:
+    """Tests 'sync-fundamentals' CLI command handling exception."""
+    mock_sync.side_effect = RuntimeError("Database error")
+
+    result: Any = runner.invoke(app, ["sync-fundamentals"])
+
+    assert result.exit_code == 1

@@ -629,3 +629,62 @@ class SqliteDecisionRepository:
             raise StorageWriteError(
                 f"Failed to save stock fundamentals to '{self.db_path}': {e}"
             ) from e
+
+    def save_etf_fundamentals(self, asset_id: int, details: ETFDetails) -> None:
+        """Persists an ETF fundamental snapshot record into SQLite history.
+
+        Args:
+            asset_id: Database identifier of the ETF asset.
+            details: ETF details containing TER, holdings, and breakdowns.
+        """
+        query: str = """
+            INSERT INTO etf_fundamental_history (
+                asset_id,
+                fetched_at,
+                ter_pct,
+                holdings_json,
+                sector_breakdown_json,
+                country_breakdown_json
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        """
+        fetched_at_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        holdings_data = (
+            [h.to_dict() for h in details.holdings] if details.holdings else []
+        )
+        sector_data = (
+            [s.to_dict() for s in details.sector_breakdown]
+            if details.sector_breakdown
+            else []
+        )
+        country_data = (
+            [c.to_dict() for c in details.country_breakdown]
+            if details.country_breakdown
+            else []
+        )
+
+        params = (
+            asset_id,
+            fetched_at_str,
+            details.ter_pct,
+            json.dumps(holdings_data),
+            json.dumps(sector_data),
+            json.dumps(country_data),
+        )
+
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA foreign_keys = ON;")
+                cursor.execute(query, params)
+                conn.commit()
+
+            logger.info(
+                "Successfully saved ETF fundamental history snapshot for "
+                f"asset_id={asset_id}."
+            )
+        except Exception as e:
+            raise StorageWriteError(
+                f"Failed to save ETF fundamentals to '{self.db_path}': {e}"
+            ) from e
