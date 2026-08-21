@@ -8,7 +8,14 @@ from typing import Any, Protocol
 import yfinance as yf  # type: ignore[import-untyped]
 
 from src.core.currency_exchange import get_exchange_rate
-from src.core.models import Asset, ETFDetails, Quotation, StockDetails
+from src.core.models import (
+    Asset,
+    CountryExposure,
+    ETFDetails,
+    Quotation,
+    SectorExposure,
+    StockDetails,
+)
 from src.core.repositories import ETFCacheRepository, JsonETFCacheRepository
 from src.infra.justetf.client import JustETFClient
 from src.utils.logger.logger import logger
@@ -17,20 +24,15 @@ from src.utils.logger.logger import logger
 class AssetDataProvider(Protocol):
     """Protocol defining operations for fetching asset price and metadata."""
 
-    def get_price(self, asset: Asset) -> Quotation | None:
-        """Fetches the current market quotation for an asset."""
-        ...
+    def get_price(self, asset: Asset) -> Quotation | None: ...
 
-    def get_details(self, asset: Asset) -> ETFDetails | StockDetails | None:
-        """Fetches extended details (ETF composition or stock fundamentals)."""
-        ...
+    def get_details(self, asset: Asset) -> ETFDetails | StockDetails | None: ...
 
 
 class StockProvider:
     """Data provider for standard equity/stock assets using yfinance."""
 
     def get_price(self, asset: Asset) -> Quotation | None:
-        """Retrieves real-time quotation for a stock, converting to EUR if necessary."""
         if not asset.yahoo_ticker:
             logger.error(f"No Yahoo ticker provided for stock asset '{asset.name}'.")
             return None
@@ -72,7 +74,6 @@ class StockProvider:
             return None
 
     def get_details(self, asset: Asset) -> StockDetails | None:
-        """Retrieves fundamental metrics for a stock via yfinance."""
         if not asset.yahoo_ticker:
             logger.error(f"No Yahoo ticker provided for stock asset '{asset.name}'.")
             return None
@@ -172,25 +173,90 @@ class ETFProvider:
         self._stock_provider: StockProvider = stock_provider or StockProvider()
 
     def get_price(self, asset: Asset) -> Quotation | None:
-        """Retrieves real-time ETF market quotation via yfinance."""
         return self._stock_provider.get_price(asset)
 
+    def _apply_benchmark_fallback(
+        self, asset: Asset, details: ETFDetails
+    ) -> ETFDetails:
+        """Applies benchmark profile fallback when breakdowns are missing."""
+        name_upper: str = asset.name.upper()
+        country_breakdown: list[CountryExposure] = (
+            list(details.country_breakdown) if details.country_breakdown else []
+        )
+        sector_breakdown: list[SectorExposure] = (
+            list(details.sector_breakdown) if details.sector_breakdown else []
+        )
+
+        # Fallback 1: Benchmark S&P 500 detection
+        if "S&P 500" in name_upper or "SP500" in name_upper:
+            if not country_breakdown:
+                country_breakdown = [
+                    CountryExposure(country_name="United States", weight_pct=100.0)
+                ]
+            if not sector_breakdown:
+                sector_breakdown = [
+                    SectorExposure(sector_name="Technology", weight_pct=31.5),
+                    SectorExposure(sector_name="Finance", weight_pct=13.0),
+                    SectorExposure(sector_name="Healthcare", weight_pct=11.5),
+                    SectorExposure(sector_name="Consumer Cyclicals", weight_pct=10.0),
+                    SectorExposure(sector_name="Communication", weight_pct=9.0),
+                    SectorExposure(sector_name="Industrials", weight_pct=8.5),
+                    SectorExposure(sector_name="Other", weight_pct=16.5),
+                ]
+
+        # Fallback 2: Benchmark MSCI World detection
+        elif "MSCI WORLD" in name_upper:
+            if not country_breakdown:
+                country_breakdown = [
+                    CountryExposure(country_name="United States", weight_pct=70.0),
+                    CountryExposure(country_name="Japan", weight_pct=6.0),
+                    CountryExposure(country_name="United Kingdom", weight_pct=4.0),
+                    CountryExposure(country_name="Other", weight_pct=20.0),
+                ]
+            if not sector_breakdown:
+                sector_breakdown = [
+                    SectorExposure(sector_name="Technology", weight_pct=25.0),
+                    SectorExposure(sector_name="Finance", weight_pct=15.0),
+                    SectorExposure(sector_name="Healthcare", weight_pct=12.0),
+                    SectorExposure(sector_name="Industrials", weight_pct=11.0),
+                    SectorExposure(sector_name="Other", weight_pct=37.0),
+                ]
+
+        return ETFDetails(
+            holdings=details.holdings,
+            sector_breakdown=sector_breakdown,
+            country_breakdown=country_breakdown,
+            ter_pct=details.ter_pct,
+        )
+
     def get_details(self, asset: Asset) -> ETFDetails | None:
-        """Retrieves ETF composition, checking local cache before scraping."""
+        """Retrieves ETF composition, verifying breakdown validity before caching."""
         if not asset.isin:
             logger.error(f"No ISIN provided for ETF asset {asset.name}.")
             return None
 
         cached_details: ETFDetails | None = self.cache_repo.get_etf_details(asset.isin)
         if cached_details is not None:
-            return cached_details
+            if cached_details.sector_breakdown or cached_details.country_breakdown:
+                return cached_details
 
         try:
             details: ETFDetails = self.justetf_client.get_etf_details(asset.isin)
-            self.cache_repo.save_etf_details(asset.isin, details)
+            details = self._apply_benchmark_fallback(asset, details)
+
+            if details.sector_breakdown or details.country_breakdown:
+                self.cache_repo.save_etf_details(asset.isin, details)
             return details
         except Exception as e:
             logger.warning(
                 f"Failed to fetch ETF details for {asset.name} ({asset.isin}): {e}"
             )
+            fallback_details: ETFDetails = self._apply_benchmark_fallback(
+                asset,
+                ETFDetails(
+                    holdings=[], sector_breakdown=[], country_breakdown=[], ter_pct=None
+                ),
+            )
+            if fallback_details.sector_breakdown or fallback_details.country_breakdown:
+                return fallback_details
             return None

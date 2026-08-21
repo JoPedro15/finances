@@ -291,7 +291,7 @@ class StockDetails:
 
 
 class RecommendationAction(StrEnum):
-    """Supported investment decision actions."""
+    """Supported investment opportunity_evaluation actions."""
 
     BUY = "BUY"
     SELL = "SELL"

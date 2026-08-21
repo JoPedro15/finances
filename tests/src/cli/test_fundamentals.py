@@ -1,14 +1,21 @@
-"""Unit tests for stock and ETF fundamental repository and CLI sync logic."""
+"""Unit tests for stock and ETF fundamental repository and CLI sync logic.
+
+Covers repository persistence, stock/ETF sync loops, provider None returns,
+loop exceptions, database failure exits, empty asset states, portfolio sync,
+and CLI argument parsing in main().
+"""
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.cli.fundamentals import (
+    main,
     sync_etf_fundamentals,
     sync_portfolio_fundamentals,
     sync_stock_fundamentals,
@@ -21,7 +28,7 @@ from src.core.models import (
     SectorExposure,
     StockDetails,
 )
-from src.core.repositories import SqliteDecisionRepository
+from src.core.repositories import SqliteOpportunityRepository
 from src.infra.database.connection import get_db_context
 from src.infra.database.schema import initialize_database
 
@@ -45,9 +52,25 @@ def temp_db_path(tmp_path: Path) -> Path:
     return db_file
 
 
+@pytest.fixture
+def empty_db_path(tmp_path: Path) -> Path:
+    """Fixture providing an initialized SQLite database without assets."""
+    db_file: Path = tmp_path / "empty_finances.db"
+    with get_db_context(str(db_file)) as conn:
+        initialize_database(conn)
+    return db_file
+
+
+# ==============================================================================
+# Repository Persistence Tests
+# ==============================================================================
+
+
 def test_save_stock_fundamentals_success(temp_db_path: Path) -> None:
     """Tests persisting stock fundamental details into SQLite database."""
-    repo: SqliteDecisionRepository = SqliteDecisionRepository(db_path=temp_db_path)
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(
+        db_path=temp_db_path
+    )
     details: StockDetails = StockDetails(
         market_cap=2_500_000_000_000.0,
         pe_ratio=30.5,
@@ -76,7 +99,9 @@ def test_save_stock_fundamentals_success(temp_db_path: Path) -> None:
 
 def test_save_etf_fundamentals_success(temp_db_path: Path) -> None:
     """Tests persisting ETF fundamental details into SQLite database."""
-    repo: SqliteDecisionRepository = SqliteDecisionRepository(db_path=temp_db_path)
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(
+        db_path=temp_db_path
+    )
     details: ETFDetails = ETFDetails(
         ter_pct=0.22,
         holdings=[
@@ -118,8 +143,13 @@ def test_save_etf_fundamentals_success(temp_db_path: Path) -> None:
         assert holdings[0]["name"] == "Microsoft Corp"
 
 
+# ==============================================================================
+# Stock Sync Logic Tests
+# ==============================================================================
+
+
 @patch("src.cli.fundamentals.StockProvider")
-def test_sync_stock_fundamentals_cli(
+def test_sync_stock_fundamentals_cli_success(
     mock_provider_cls: MagicMock, temp_db_path: Path
 ) -> None:
     """Tests the sync_stock_fundamentals CLI execution workflow."""
@@ -143,8 +173,67 @@ def test_sync_stock_fundamentals_cli(
     assert call_arg.yahoo_ticker == "AAPL"
 
 
+@patch("src.cli.fundamentals.StockProvider")
+def test_sync_stock_fundamentals_no_assets(
+    mock_provider_cls: MagicMock, empty_db_path: Path
+) -> None:
+    """Validates sync_stock_fundamentals returns cleanly when no stocks exist."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+
+    sync_stock_fundamentals(db_path=empty_db_path)
+
+    mock_provider.get_details.assert_not_called()
+
+
+@patch("src.cli.fundamentals.StockProvider")
+def test_sync_stock_fundamentals_details_returns_none(
+    mock_provider_cls: MagicMock, temp_db_path: Path
+) -> None:
+    """Validates sync_stock_fundamentals handles None return from provider."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+    mock_provider.get_details.return_value = None
+
+    sync_stock_fundamentals(db_path=temp_db_path)
+
+    mock_provider.get_details.assert_called_once()
+
+
+@patch("src.cli.fundamentals.StockProvider")
+def test_sync_stock_fundamentals_provider_exception(
+    mock_provider_cls: MagicMock, temp_db_path: Path
+) -> None:
+    """Validates sync_stock_fundamentals catches provider exceptions safely."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+    mock_provider.get_details.side_effect = Exception("yfinance API error")
+
+    sync_stock_fundamentals(db_path=temp_db_path)
+
+    mock_provider.get_details.assert_called_once()
+
+
+@patch("src.cli.fundamentals.get_db_context")
+def test_sync_stock_fundamentals_db_error_exits(
+    mock_db_context: MagicMock, temp_db_path: Path
+) -> None:
+    """Validates sync_stock_fundamentals calls sys.exit(1) on database error."""
+    mock_db_context.side_effect = Exception("Database connection failure")
+
+    with pytest.raises(SystemExit) as exc_info:
+        sync_stock_fundamentals(db_path=temp_db_path)
+
+    assert exc_info.value.code == 1
+
+
+# ==============================================================================
+# ETF Sync Logic Tests
+# ==============================================================================
+
+
 @patch("src.cli.fundamentals.ETFProvider")
-def test_sync_etf_fundamentals_cli(
+def test_sync_etf_fundamentals_cli_success(
     mock_provider_cls: MagicMock, temp_db_path: Path
 ) -> None:
     """Tests the sync_etf_fundamentals CLI execution workflow."""
@@ -162,6 +251,65 @@ def test_sync_etf_fundamentals_cli(
     mock_provider.get_details.assert_called_once()
     call_arg: Asset = mock_provider.get_details.call_args[0][0]
     assert call_arg.isin == "IE00BK5BQT36"
+
+
+@patch("src.cli.fundamentals.ETFProvider")
+def test_sync_etf_fundamentals_no_assets(
+    mock_provider_cls: MagicMock, empty_db_path: Path
+) -> None:
+    """Validates sync_etf_fundamentals returns cleanly when no ETFs exist."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+
+    sync_etf_fundamentals(db_path=empty_db_path)
+
+    mock_provider.get_details.assert_not_called()
+
+
+@patch("src.cli.fundamentals.ETFProvider")
+def test_sync_etf_fundamentals_details_returns_none(
+    mock_provider_cls: MagicMock, temp_db_path: Path
+) -> None:
+    """Validates sync_etf_fundamentals handles None return from provider."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+    mock_provider.get_details.return_value = None
+
+    sync_etf_fundamentals(db_path=temp_db_path)
+
+    mock_provider.get_details.assert_called_once()
+
+
+@patch("src.cli.fundamentals.ETFProvider")
+def test_sync_etf_fundamentals_provider_exception(
+    mock_provider_cls: MagicMock, temp_db_path: Path
+) -> None:
+    """Validates sync_etf_fundamentals catches provider exceptions safely."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider_cls.return_value = mock_provider
+    mock_provider.get_details.side_effect = Exception("Scraper network error")
+
+    sync_etf_fundamentals(db_path=temp_db_path)
+
+    mock_provider.get_details.assert_called_once()
+
+
+@patch("src.cli.fundamentals.get_db_context")
+def test_sync_etf_fundamentals_db_error_exits(
+    mock_db_context: MagicMock, temp_db_path: Path
+) -> None:
+    """Validates sync_etf_fundamentals calls sys.exit(1) on database error."""
+    mock_db_context.side_effect = Exception("Database connection failure")
+
+    with pytest.raises(SystemExit) as exc_info:
+        sync_etf_fundamentals(db_path=temp_db_path)
+
+    assert exc_info.value.code == 1
+
+
+# ==============================================================================
+# Portfolio Sync & Main CLI Entrypoint Tests
+# ==============================================================================
 
 
 @patch("src.cli.fundamentals.ETFProvider")
@@ -198,3 +346,30 @@ def test_sync_portfolio_fundamentals_cli(
 
     mock_stock_provider.get_details.assert_called_once()
     mock_etf_provider.get_details.assert_called_once()
+
+
+@patch("src.cli.fundamentals.sync_portfolio_fundamentals")
+def test_main_cli_sync_command(
+    mock_sync_portfolio: MagicMock, temp_db_path: Path
+) -> None:
+    """Validates CLI main parser invoking sync command."""
+    test_args: list[str] = [
+        "cli.fundamentals",
+        "sync",
+        "--db-path",
+        str(temp_db_path),
+    ]
+
+    with patch.object(sys, "argv", test_args):
+        main()
+
+    mock_sync_portfolio.assert_called_once_with(db_path=str(temp_db_path))
+
+
+def test_main_script_execution_block() -> None:
+    """Validates direct script entrypoint execution (__name__ == '__main__')."""
+    with patch("src.cli.fundamentals.main") as mock_main:
+        import src.cli.fundamentals
+
+        with patch.object(src.cli.fundamentals, "__name__", "__main__"):
+            mock_main.assert_not_called()

@@ -39,7 +39,7 @@ runner: CliRunner = CliRunner()
 
 @pytest.fixture(autouse=True)
 def mock_cloud_sync_by_default() -> Generator[None]:
-    """Auto-mock cloud pull and push helpers to prevent network/disk side-effects."""
+    """Auto-mock cloud pull and push helpers to prevent side-effects."""
     with (
         patch("main._pull_cloud_data", return_value=True),
         patch("main._trigger_cloud_push", return_value=None),
@@ -358,7 +358,8 @@ def test_display_single_etf_details_provider_exception() -> None:
     mock_provider: MagicMock = MagicMock()
     mock_provider.get_details.side_effect = RuntimeError("Scraper failed")
 
-    _display_single_etf_details("IE00B4L5Y983", "Test ETF", mock_provider)
+    with pytest.raises(RuntimeError, match="Scraper failed"):
+        _display_single_etf_details("IE00B4L5Y983", "Test ETF", mock_provider)
     mock_provider.get_details.assert_called_once()
 
 
@@ -410,11 +411,11 @@ def test_etf_details_cmd_single_isin_success(
     result: Any = runner.invoke(app, ["etf-details", "IE00B4L5Y983"])
 
     assert result.exit_code == 0
-    assert "ETF DETAILS INSPECTION" in result.output
-    assert "IE00B4L5Y983" in result.output
-    assert "Core MSCI World USD (Acc)" in result.output
-    assert "Apple (US0378331005): 5.00%" in result.output
-    assert "Tech: 30.00%" in result.output
+    assert (
+        "=== ETF DETAILS: Core MSCI World USD (Acc) (IE00B4L5Y983) ===" in result.output
+    )
+    assert "TER: 0.2%" in result.output
+    assert "Apple (US0378331005): 5.0%" in result.output
 
 
 def test_etf_details_cmd_invalid_isin() -> None:
@@ -477,10 +478,8 @@ def test_etf_details_cmd_empty_breakdowns_and_holding_without_isin(
     result: Any = runner.invoke(app, ["etf-details", "IE00B4L5Y983"])
 
     assert result.exit_code == 0
-    assert "TER (Total Expense Ratio): N/A" in result.output
-    assert "Unlisted Asset: 10.00%" in result.output
-    assert "No sector breakdown available." in result.output
-    assert "No country breakdown available." in result.output
+    assert "TER: N/A" in result.output
+    assert "Unlisted Asset (N/A): 10.0%" in result.output
 
 
 @patch("main.ETFProvider")
@@ -576,7 +575,8 @@ def test_display_single_stock_details_provider_exception() -> None:
     mock_provider: MagicMock = MagicMock()
     mock_provider.get_details.side_effect = RuntimeError("yfinance failure")
 
-    _display_single_stock_details("AAPL", "Apple", mock_provider)
+    with pytest.raises(RuntimeError, match="yfinance failure"):
+        _display_single_stock_details("AAPL", "Apple", mock_provider)
     mock_provider.get_details.assert_called_once()
 
 
@@ -617,29 +617,15 @@ def test_stock_details_cmd_single_stock_success_with_all_metrics(
         market_cap=3000000000000.0,
         pe_ratio=30.0,
         forward_pe=25.0,
-        peg_ratio=1.2,
-        price_to_book=15.0,
         dividend_yield_pct=0.5,
-        beta=1.1,
-        profit_margins_pct=25.0,
-        revenue_growth_pct=10.0,
-        earnings_growth_pct=12.0,
-        total_debt_to_equity=1.5,
-        target_mean_price=220.0,
-        recommendation_key="buy",
-        fifty_two_week_high=200.0,
-        fifty_two_week_low=160.0,
     )
 
     result: Any = runner.invoke(app, ["stock-details", "AAPL"])
 
     assert result.exit_code == 0
-    assert "STOCK DETAILS INSPECTION" in result.output
-    assert "AAPL" in result.output
-    assert "US0378331005" in result.output
-    assert "Technology" in result.output
-    assert "PEG Ratio: 1.20" in result.output
-    assert "BUY" in result.output
+    assert "=== STOCK DETAILS: Apple (AAPL) ===" in result.output
+    assert "Sector: Technology" in result.output
+    assert "P/E Ratio: 30.00" in result.output
 
 
 @patch("main.StockProvider")
@@ -671,14 +657,13 @@ def test_stock_details_cmd_matched_by_isin(
         pe_ratio=32.0,
         forward_pe=28.0,
         dividend_yield_pct=0.8,
-        fifty_two_week_high=450.0,
-        fifty_two_week_low=320.0,
     )
 
     result: Any = runner.invoke(app, ["stock-details", "US5949181045"])
 
     assert result.exit_code == 0
-    assert "MSFT" in result.output
+    assert "Microsoft" in result.output
+    assert "US5949181045" in result.output
 
 
 @patch("main.StockProvider")
@@ -701,8 +686,6 @@ def test_stock_details_cmd_single_stock_repo_exception(
         pe_ratio=10.0,
         forward_pe=8.0,
         dividend_yield_pct=1.0,
-        fifty_two_week_high=120.0,
-        fifty_two_week_low=80.0,
     )
 
     result: Any = runner.invoke(app, ["stock-details", "AAPL"])
@@ -727,8 +710,6 @@ def test_stock_details_cmd_formatting_none_fields(
         pe_ratio=None,
         forward_pe=None,
         dividend_yield_pct=None,
-        fifty_two_week_high=None,
-        fifty_two_week_low=None,
     )
 
     result: Any = runner.invoke(app, ["stock-details", "AAPL"])
@@ -737,9 +718,9 @@ def test_stock_details_cmd_formatting_none_fields(
     assert "Sector: N/A" in result.output
     assert "Industry: N/A" in result.output
     assert "Market Cap: N/A" in result.output
-    assert "P/E Ratio: N/A (Forward P/E: N/A)" in result.output
+    assert "P/E Ratio: N/A" in result.output
+    assert "Forward P/E: N/A" in result.output
     assert "Dividend Yield: N/A" in result.output
-    assert "52-Week Range: N/A - N/A" in result.output
 
 
 @patch("main.StockProvider")
@@ -771,8 +752,6 @@ def test_stock_details_cmd_all_stocks_success(
         pe_ratio=40.0,
         forward_pe=35.0,
         dividend_yield_pct=0.0,
-        fifty_two_week_high=300.0,
-        fifty_two_week_low=150.0,
     )
 
     result: Any = runner.invoke(app, ["stock-details"])
@@ -810,82 +789,94 @@ def test_stock_details_cmd_all_stocks_repo_exception(
     assert result.exit_code == 1
 
 
-# --- ANALYZE EXPOSURE COMMAND TESTS ---
+# --- EXPOSURE CHECK COMMAND TESTS ---
 
 
-@patch("main.get_snapshot")
-@patch("main.calculate_portfolio_exposure")
-def test_analyze_exposure_cmd_success(
-    mock_calc_exposure: MagicMock, mock_get_snapshot: MagicMock
+@patch("main.SqliteHistoryRepository")
+@patch("main.ExposureEngine")
+def test_exposure_check_cmd_success_no_violations(
+    mock_exposure_cls: MagicMock, mock_history_cls: MagicMock
 ) -> None:
-    """Tests 'analyze-exposure' CLI command on successful execution."""
-    mock_snapshot: MagicMock = MagicMock()
-    mock_get_snapshot.return_value = mock_snapshot
+    """Tests 'exposure-check' CLI command on successful execution with no violations."""
+    mock_history: MagicMock = MagicMock()
+    mock_history_cls.return_value = mock_history
+    mock_snapshot = PortfolioSnapshot(
+        timestamp="2026-08-21", total_value_eur=1000.0, assets_snapshot=[]
+    )
+    mock_history.load_history.return_value = [mock_snapshot]
 
-    mock_exposure: MagicMock = MagicMock()
-    mock_exposure.total_etf_value_eur = 1000.0
-    mock_exposure.sector_exposure = {"Technology": 60.0}
-    mock_exposure.country_exposure = {"United States": 80.0}
-    mock_calc_exposure.return_value = mock_exposure
+    mock_engine: MagicMock = MagicMock()
+    mock_exposure_cls.return_value = mock_engine
+    mock_engine.calculate_consolidated_exposure.return_value = (
+        {"Technology": 30.0},
+        {"United States": 40.0},
+    )
+    mock_engine.calculate_company_exposure.return_value = {"Apple Inc.": 10.0}
+    mock_engine.validate_exposure_limits.return_value = []
+    mock_engine.validate_company_limits.return_value = []
 
-    result: Any = runner.invoke(app, ["analyze-exposure"])
+    result: Any = runner.invoke(app, ["exposure-check"])
 
     assert result.exit_code == 0
-    assert "ANALYZING CONSOLIDATED PORTFOLIO EXPOSURE" in result.output
-    assert "Technology: 60.00%" in result.output
-    assert "United States: 80.00%" in result.output
+    assert "CONSOLIDATED SECTOR EXPOSURE" in result.output
+    assert "CONSOLIDATED COUNTRY EXPOSURE" in result.output
+    assert "All exposure limits are respected" in result.output
 
 
-@patch("main.get_snapshot", return_value=None)
-def test_analyze_exposure_cmd_snapshot_failure(
-    mock_get_snapshot: MagicMock,
+@patch("main.SqliteHistoryRepository")
+@patch("main.ExposureEngine")
+def test_exposure_check_cmd_with_violations(
+    mock_exposure_cls: MagicMock, mock_history_cls: MagicMock
 ) -> None:
-    """Tests 'analyze-exposure' CLI command exiting with code 1 on failure."""
-    result: Any = runner.invoke(app, ["analyze-exposure"])
+    """Tests 'exposure-check' CLI command when policy violations are detected."""
+    mock_history: MagicMock = MagicMock()
+    mock_history_cls.return_value = mock_history
+    mock_snapshot = PortfolioSnapshot(
+        timestamp="2026-08-21", total_value_eur=1000.0, assets_snapshot=[]
+    )
+    mock_history.load_history.return_value = [mock_snapshot]
 
-    assert result.exit_code == 1
+    mock_engine: MagicMock = MagicMock()
+    mock_exposure_cls.return_value = mock_engine
+    mock_engine.calculate_consolidated_exposure.return_value = (
+        {"Technology": 60.0},
+        {"United States": 70.0},
+    )
+    mock_engine.calculate_company_exposure.return_value = {"Apple Inc.": 20.0}
+    mock_engine.validate_exposure_limits.return_value = ["Sector limit exceeded"]
+    mock_engine.validate_company_limits.return_value = ["Company limit exceeded"]
 
-
-@patch("main.get_snapshot")
-@patch("main.calculate_portfolio_exposure")
-def test_analyze_exposure_cmd_zero_etf_value(
-    mock_calc_exposure: MagicMock, mock_get_snapshot: MagicMock
-) -> None:
-    """Tests 'analyze-exposure' CLI command when portfolio has zero ETF value."""
-    mock_snapshot: MagicMock = MagicMock()
-    mock_get_snapshot.return_value = mock_snapshot
-
-    mock_exposure: MagicMock = MagicMock()
-    mock_exposure.total_etf_value_eur = 0.0
-    mock_calc_exposure.return_value = mock_exposure
-
-    result: Any = runner.invoke(app, ["analyze-exposure"])
+    result: Any = runner.invoke(app, ["exposure-check"])
 
     assert result.exit_code == 0
-    assert "No active ETF holdings found in portfolio." in result.output
+    assert "Policy Violations Detected" in result.output
+    assert "Sector limit exceeded" in result.output
 
 
-@patch("main.get_snapshot")
-def test_analyze_exposure_cmd_unexpected_exception(
-    mock_get_snapshot: MagicMock,
+@patch("main.SqliteHistoryRepository")
+def test_exposure_check_cmd_no_history(
+    mock_history_cls: MagicMock,
 ) -> None:
-    """Tests 'analyze-exposure' CLI command handling unexpected exception."""
-    mock_get_snapshot.side_effect = RuntimeError("Calculation error")
+    """Tests 'exposure-check' CLI command when history storage is empty."""
+    mock_history: MagicMock = MagicMock()
+    mock_history_cls.return_value = mock_history
+    mock_history.load_history.return_value = []
 
-    result: Any = runner.invoke(app, ["analyze-exposure"])
+    result: Any = runner.invoke(app, ["exposure-check"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 0
+    assert "No portfolio history found for exposure check." in result.output
 
 
-# --- DECISION COMMAND TESTS ---
+# --- OPPORTUNITY COMMAND TESTS ---
 
 
 @patch("main.recommend_rebalance")
-def test_decision_command_defaults(
+def test_opportunity_command_defaults(
     mock_recommend: MagicMock,
 ) -> None:
-    """Tests 'decision' CLI command execution with default parameters."""
-    result: Any = runner.invoke(app, ["decision"])
+    """Tests 'opportunity_evaluation' CLI command execution with default parameters."""
+    result: Any = runner.invoke(app, ["opportunity_evaluation"])
 
     assert result.exit_code == 0
     mock_recommend.assert_called_once()
@@ -895,14 +886,14 @@ def test_decision_command_defaults(
 
 
 @patch("main.recommend_rebalance")
-def test_decision_command_custom_options(
+def test_opportunity_command_custom_options(
     mock_recommend: MagicMock,
 ) -> None:
-    """Tests 'decision' CLI command with custom options."""
+    """Tests 'opportunity_evaluation' CLI command with custom options."""
     result: Any = runner.invoke(
         app,
         [
-            "decision",
+            "opportunity_evaluation",
             "--targets-file",
             "custom_targets.json",
             "--portfolio-file",

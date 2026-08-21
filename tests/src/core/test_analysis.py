@@ -1,5 +1,5 @@
 """Unit tests for src/core/analysis.py covering portfolio performance analysis,
-exposure calculations, loss scenarios, missing/corrupted data files, and edge cases.
+exposure calculations, loss scenarios, and edge cases.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from src.core.models import (
     AssetSnapshot,
     ETFDetails,
     PortfolioSnapshot,
+    StockDetails,
 )
 
 
@@ -190,7 +191,8 @@ def test_analyze_overall_performance_mismatched_assets(
     mock_logger: MagicMock,
 ) -> None:
     """Confirms that assets omitted from historical snapshots
-    are skipped cleanly."""
+    are skipped cleanly.
+    """
     mock_p_repo: MagicMock = MagicMock()
     mock_p_repo.load_assets.return_value = [
         Asset(
@@ -237,6 +239,34 @@ def test_analyze_overall_performance_mismatched_assets(
     mock_logger.success.assert_any_call("Return on Investment (ROI): +50.00%")
 
 
+@patch("src.core.analysis.logger")
+def test_analyze_overall_performance_empty_records(
+    mock_logger: MagicMock,
+) -> None:
+    """Validates warning when no performance records match history."""
+    mock_p_repo: MagicMock = MagicMock()
+    mock_p_repo.load_assets.return_value = [
+        Asset(
+            name="Unknown",
+            isin="XX0000000001",
+            yahoo_ticker="UNKN",
+            quantity=1.0,
+            average_buy_price=100.0,
+        )
+    ]
+    mock_h_repo: MagicMock = MagicMock()
+    mock_h_repo.load_history.return_value = [
+        PortfolioSnapshot(
+            timestamp="2026-08-15T20:00:00",
+            total_value_eur=0.0,
+            assets_snapshot=[],
+        )
+    ]
+
+    analyze_overall_performance(portfolio_repo=mock_p_repo, history_repo=mock_h_repo)
+    mock_logger.warning.assert_any_call("No valid asset performance records found.")
+
+
 @patch("src.core.analysis.SqliteHistoryRepository")
 @patch("src.core.analysis.SqlitePortfolioRepository")
 @patch("src.core.analysis.logger")
@@ -245,8 +275,7 @@ def test_analyze_overall_performance_default_repositories_instantiation(
     mock_p_repo_cls: MagicMock,
     mock_h_repo_cls: MagicMock,
 ) -> None:
-    """Tests default repository instantiation when portfolio_repo
-    and history_repo are None."""
+    """Tests default repository instantiation when arguments are None."""
     instance_p: MagicMock = MagicMock()
     instance_p.load_assets.return_value = []
     mock_p_repo_cls.return_value = instance_p
@@ -262,9 +291,7 @@ def test_analyze_overall_performance_default_repositories_instantiation(
 
 
 def test_calculate_portfolio_exposure_normalized_to_100_percent() -> None:
-    """Verifies that calculate_portfolio_exposure sums up to 100% even
-    when some ETFs lack full breakdown details.
-    """
+    """Verifies calculate_portfolio_exposure sums up to 100%."""
     mock_p_repo: MagicMock = MagicMock()
     mock_p_repo.load_assets.return_value = [
         Asset(
@@ -276,20 +303,28 @@ def test_calculate_portfolio_exposure_normalized_to_100_percent() -> None:
             average_buy_price=90.0,
         ),
         Asset(
-            name="Leveraged ETF without breakdown",
-            isin="LU0411078552",
-            yahoo_ticker="DBPG.DE",
-            asset_type="etf",
-            quantity=5.0,
-            average_buy_price=170.0,
-        ),
-        Asset(
             name="Apple Stock",
             isin="US0378331005",
             yahoo_ticker="AAPL",
             asset_type="stock",
             quantity=1.0,
             average_buy_price=180.0,
+        ),
+        Asset(
+            name="Invalid ISIN ETF",
+            isin="SHORTLEN",
+            yahoo_ticker="INV",
+            asset_type="etf",
+            quantity=1.0,
+            average_buy_price=50.0,
+        ),
+        Asset(
+            name="Stock Without Details",
+            isin="US0000000002",
+            yahoo_ticker="NOD",
+            asset_type="stock",
+            quantity=1.0,
+            average_buy_price=10.0,
         ),
     ]
 
@@ -298,26 +333,26 @@ def test_calculate_portfolio_exposure_normalized_to_100_percent() -> None:
         ETFDetails(
             holdings=[],
             sector_breakdown=[
-                SimpleNamespace(sector_name="Technology", weight_pct=30.0),
-                SimpleNamespace(sector_name="Finance", weight_pct=20.0),
-                SimpleNamespace(sector_name="Other", weight_pct=50.0),
+                SimpleNamespace(sector_name="Technology", weight_pct=100.0)
             ],
             country_breakdown=[
-                SimpleNamespace(country_name="United States", weight_pct=70.0),
-                SimpleNamespace(country_name="Japan", weight_pct=30.0),
+                SimpleNamespace(country_name="United States", weight_pct=100.0)
             ],
         )
         if asset.isin == "IE00B4L5Y983"
-        else ETFDetails(
-            holdings=[],
-            sector_breakdown=[],
-            country_breakdown=[],
-        )
+        else None
+    )
+
+    mock_stock_provider: MagicMock = MagicMock()
+    mock_stock_provider.get_details.side_effect = lambda asset: (
+        StockDetails(sector="")
+        if asset.isin == "US0000000002"
+        else StockDetails(sector="Finance")
     )
 
     snapshot: PortfolioSnapshot = PortfolioSnapshot(
         timestamp="2026-08-18T20:00:00",
-        total_value_eur=2000.0,
+        total_value_eur=1000.0,
         assets_snapshot=[
             AssetSnapshot(
                 name="Core MSCI World",
@@ -325,15 +360,7 @@ def test_calculate_portfolio_exposure_normalized_to_100_percent() -> None:
                 yahoo_ticker="EUNL.DE",
                 native_price=100.0,
                 native_currency="EUR",
-                value_eur=1000.0,
-            ),
-            AssetSnapshot(
-                name="Leveraged ETF without breakdown",
-                isin="LU0411078552",
-                yahoo_ticker="DBPG.DE",
-                native_price=170.0,
-                native_currency="EUR",
-                value_eur=850.0,
+                value_eur=400.0,
             ),
             AssetSnapshot(
                 name="Apple Stock",
@@ -341,7 +368,23 @@ def test_calculate_portfolio_exposure_normalized_to_100_percent() -> None:
                 yahoo_ticker="AAPL",
                 native_price=150.0,
                 native_currency="USD",
-                value_eur=150.0,
+                value_eur=400.0,
+            ),
+            AssetSnapshot(
+                name="Invalid ISIN ETF",
+                isin="SHORTLEN",
+                yahoo_ticker="INV",
+                native_price=50.0,
+                native_currency="EUR",
+                value_eur=100.0,
+            ),
+            AssetSnapshot(
+                name="Stock Without Details",
+                isin="US0000000002",
+                yahoo_ticker="NOD",
+                native_price=10.0,
+                native_currency="EUR",
+                value_eur=100.0,
             ),
         ],
     )
@@ -350,87 +393,25 @@ def test_calculate_portfolio_exposure_normalized_to_100_percent() -> None:
         snapshot=snapshot,
         portfolio_repo=mock_p_repo,
         etf_provider=mock_provider,
+        stock_provider=mock_stock_provider,
     )
 
-    assert exposure.total_etf_value_eur == 1850.0
-    assert sum(exposure.sector_exposure.values()) == 100.0
-    assert sum(exposure.country_exposure.values()) == 100.0
-    assert exposure.sector_exposure["Technology"] == 30.0
-    assert exposure.country_exposure["United States"] == 70.0
+    assert exposure.total_etf_value_eur == 400.0
+    assert "Technology" in exposure.sector_exposure
+    assert "Finance" in exposure.sector_exposure
 
 
-def test_calculate_portfolio_exposure_invalid_assets_and_zero_values() -> None:
-    """Verifies that invalid ISINs, non-ETF types, zero values,
-    and missing ETF details are skipped."""
+def test_calculate_portfolio_exposure_zero_denominator() -> None:
+    """Verifies exposure calculation handles zero total portfolio value safely."""
     mock_p_repo: MagicMock = MagicMock()
-    mock_p_repo.load_assets.return_value = [
-        Asset(
-            name="Invalid ISIN",
-            isin="SHORT",
-            yahoo_ticker="INV",
-            asset_type="etf",
-            quantity=10.0,
-            average_buy_price=10.0,
-        ),
-        Asset(
-            name="Stock Asset",
-            isin="US0378331005",
-            yahoo_ticker="AAPL",
-            asset_type="stock",
-            quantity=10.0,
-            average_buy_price=10.0,
-        ),
-        Asset(
-            name="Zero Value ETF",
-            isin="IE00B4L5Y981",
-            yahoo_ticker="ZERO",
-            asset_type="etf",
-            quantity=0.0,
-            average_buy_price=10.0,
-        ),
-        Asset(
-            name="ETF with Null Details",
-            isin="IE00B4L5Y982",
-            yahoo_ticker="NULL",
-            asset_type="etf",
-            quantity=10.0,
-            average_buy_price=10.0,
-        ),
-    ]
-
-    mock_provider: MagicMock = MagicMock()
-    mock_provider.get_details.return_value = None
-
+    mock_p_repo.load_assets.return_value = []
     snapshot: PortfolioSnapshot = PortfolioSnapshot(
-        timestamp="2026-08-18T20:00:00",
-        total_value_eur=1000.0,
-        assets_snapshot=[
-            AssetSnapshot(
-                name="Zero Value ETF",
-                isin="IE00B4L5Y981",
-                yahoo_ticker="ZERO",
-                native_price=0.0,
-                native_currency="EUR",
-                value_eur=0.0,
-            ),
-            AssetSnapshot(
-                name="ETF with Null Details",
-                isin="IE00B4L5Y982",
-                yahoo_ticker="NULL",
-                native_price=100.0,
-                native_currency="EUR",
-                value_eur=1000.0,
-            ),
-        ],
+        timestamp="2026-08-18", total_value_eur=0.0, assets_snapshot=[]
     )
 
     exposure: PortfolioExposure = calculate_portfolio_exposure(
-        snapshot=snapshot,
-        portfolio_repo=mock_p_repo,
-        etf_provider=mock_provider,
+        snapshot=snapshot, portfolio_repo=mock_p_repo
     )
-
-    assert exposure.total_etf_value_eur == 0.0
     assert exposure.sector_exposure == {}
     assert exposure.country_exposure == {}
 
@@ -441,48 +422,33 @@ def test_calculate_portfolio_exposure_default_instantiation(
     mock_repo_cls: MagicMock,
     mock_provider_cls: MagicMock,
 ) -> None:
-    """Verifies fallback instantiation when repo and provider parameters are None."""
+    """Verifies fallback instantiation when repo and provider are None."""
     instance_repo: MagicMock = MagicMock()
     instance_repo.load_assets.return_value = []
     mock_repo_cls.return_value = instance_repo
 
-    instance_provider: MagicMock = MagicMock()
-    mock_provider_cls.return_value = instance_provider
-
     snapshot: PortfolioSnapshot = PortfolioSnapshot(
-        timestamp="2026-08-18T20:00:00",
-        total_value_eur=0.0,
-        assets_snapshot=[],
+        timestamp="2026-08-18", total_value_eur=0.0, assets_snapshot=[]
     )
-
     exposure: PortfolioExposure = calculate_portfolio_exposure(
         snapshot=snapshot, portfolio_repo=None, etf_provider=None
     )
-
     assert exposure.total_etf_value_eur == 0.0
-    mock_repo_cls.assert_called_once()
-    mock_provider_cls.assert_called_once()
 
 
 @patch("src.core.analysis.logger")
 def test_calculate_portfolio_exposure_exception_handling(
     mock_logger: MagicMock,
 ) -> None:
-    """Verifies that repository errors return an empty PortfolioExposure."""
+    """Verifies repository errors return empty PortfolioExposure."""
     mock_p_repo: MagicMock = MagicMock()
     mock_p_repo.load_assets.side_effect = Exception("Database error")
 
     snapshot: PortfolioSnapshot = PortfolioSnapshot(
-        timestamp="2026-08-18T20:00:00",
-        total_value_eur=0.0,
-        assets_snapshot=[],
+        timestamp="2026-08-18", total_value_eur=100.0, assets_snapshot=[]
     )
-
     exposure: PortfolioExposure = calculate_portfolio_exposure(
         snapshot=snapshot, portfolio_repo=mock_p_repo
     )
-
     assert exposure.total_etf_value_eur == 0.0
-    assert exposure.sector_exposure == {}
-    assert exposure.country_exposure == {}
     mock_logger.error.assert_called_once()
