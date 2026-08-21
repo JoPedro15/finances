@@ -28,8 +28,12 @@ def test_format_tier() -> None:
     assert "Custom Tier" in _format_tier("Custom Tier").plain
 
 
+@patch("src.cli.quality.save_quality_to_database")
+@patch("src.cli.quality.export_quality_report")
 @patch("src.cli.quality.SqlitePortfolioRepository")
-def test_analyze_quality_repo_error_exits(mock_repo_cls: MagicMock) -> None:
+def test_analyze_quality_repo_error_exits(
+    mock_repo_cls: MagicMock, mock_export: MagicMock, mock_save: MagicMock
+) -> None:
     """Validates analyze-quality exits cleanly when repository loading fails."""
     mock_repo: MagicMock = MagicMock()
     mock_repo.load_assets.side_effect = StorageError("DB error")
@@ -39,8 +43,12 @@ def test_analyze_quality_repo_error_exits(mock_repo_cls: MagicMock) -> None:
     assert result.exit_code == 1
 
 
+@patch("src.cli.quality.save_quality_to_database")
+@patch("src.cli.quality.export_quality_report")
 @patch("src.cli.quality.SqlitePortfolioRepository")
-def test_analyze_quality_no_assets(mock_repo_cls: MagicMock) -> None:
+def test_analyze_quality_no_assets(
+    mock_repo_cls: MagicMock, mock_export: MagicMock, mock_save: MagicMock
+) -> None:
     """Validates analyze-quality logs warning and returns when portfolio is empty."""
     mock_repo: MagicMock = MagicMock()
     mock_repo.load_assets.return_value = []
@@ -50,8 +58,12 @@ def test_analyze_quality_no_assets(mock_repo_cls: MagicMock) -> None:
     assert result.exit_code == 0
 
 
+@patch("src.cli.quality.save_quality_to_database")
+@patch("src.cli.quality.export_quality_report")
 @patch("src.cli.quality.SqlitePortfolioRepository")
-def test_analyze_quality_ticker_not_found(mock_repo_cls: MagicMock) -> None:
+def test_analyze_quality_ticker_not_found(
+    mock_repo_cls: MagicMock, mock_export: MagicMock, mock_save: MagicMock
+) -> None:
     """Validates analyze-quality exits with error when requested ticker is missing."""
     mock_repo: MagicMock = MagicMock()
     mock_repo.load_assets.return_value = [
@@ -71,10 +83,15 @@ def test_analyze_quality_ticker_not_found(mock_repo_cls: MagicMock) -> None:
     assert "not found in active portfolio" in result.output
 
 
+@patch("src.cli.quality.save_quality_to_database")
+@patch("src.cli.quality.export_quality_report")
 @patch("src.cli.quality.StockProvider")
 @patch("src.cli.quality.SqlitePortfolioRepository")
 def test_analyze_quality_stock_success(
-    mock_repo_cls: MagicMock, mock_stock_cls: MagicMock
+    mock_repo_cls: MagicMock,
+    mock_stock_cls: MagicMock,
+    mock_export: MagicMock,
+    mock_save: MagicMock,
 ) -> None:
     """Validates analyze-quality successfully renders card for a stock asset."""
     mock_repo: MagicMock = MagicMock()
@@ -112,10 +129,15 @@ def test_analyze_quality_stock_success(
     assert "Apple (AAPL)" in result.output
 
 
+@patch("src.cli.quality.save_quality_to_database")
+@patch("src.cli.quality.export_quality_report")
 @patch("src.cli.quality.ETFProvider")
 @patch("src.cli.quality.SqlitePortfolioRepository")
 def test_analyze_quality_etf_success(
-    mock_repo_cls: MagicMock, mock_etf_cls: MagicMock
+    mock_repo_cls: MagicMock,
+    mock_etf_cls: MagicMock,
+    mock_export: MagicMock,
+    mock_save: MagicMock,
 ) -> None:
     """Validates analyze-quality successfully renders card for an ETF asset."""
     mock_repo: MagicMock = MagicMock()
@@ -146,10 +168,15 @@ def test_analyze_quality_etf_success(
     assert "Total Expense Ratio (TER)" in result.output
 
 
+@patch("src.cli.quality.save_quality_to_database")
+@patch("src.cli.quality.export_quality_report")
 @patch("src.cli.quality.StockProvider")
 @patch("src.cli.quality.SqlitePortfolioRepository")
 def test_analyze_quality_stock_provider_none(
-    mock_repo_cls: MagicMock, mock_stock_cls: MagicMock
+    mock_repo_cls: MagicMock,
+    mock_stock_cls: MagicMock,
+    mock_export: MagicMock,
+    mock_save: MagicMock,
 ) -> None:
     """Validates analyze-quality handles missing
     fundamental stock details gracefully."""
@@ -175,10 +202,15 @@ def test_analyze_quality_stock_provider_none(
     assert "Fundamental data unavailable" in result.output
 
 
+@patch("src.cli.quality.save_quality_to_database")
+@patch("src.cli.quality.export_quality_report")
 @patch("src.cli.quality.ETFProvider")
 @patch("src.cli.quality.SqlitePortfolioRepository")
 def test_analyze_quality_etf_provider_none(
-    mock_repo_cls: MagicMock, mock_etf_cls: MagicMock
+    mock_repo_cls: MagicMock,
+    mock_etf_cls: MagicMock,
+    mock_export: MagicMock,
+    mock_save: MagicMock,
 ) -> None:
     """Validates analyze-quality handles missing ETF metadata gracefully."""
     mock_repo: MagicMock = MagicMock()
