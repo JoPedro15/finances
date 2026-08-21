@@ -10,21 +10,21 @@ from src.core.models import Asset, ETFDetails, StockDetails
 from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import SqliteDecisionRepository
 from src.infra.database.connection import DEFAULT_DB_PATH, get_db_context
+from src.infra.database.schema import initialize_database
 from src.utils.logger.logger import logger
 
 
 def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     """Fetches fundamental data for stock assets and persists snapshots to SQLite."""
     db_path_obj: Path = Path(db_path)
-    if not db_path_obj.exists():
-        logger.error(f"Database file not found at '{db_path_obj}'. Aborting sync.")
-        sys.exit(1)
-
-    decision_repo = SqliteDecisionRepository(db_path=db_path_obj)
-    stock_provider = StockProvider()
+    decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(
+        db_path=db_path_obj
+    )
+    stock_provider: StockProvider = StockProvider()
 
     try:
         with get_db_context(str(db_path_obj)) as conn:
+            initialize_database(conn)
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT id, isin, name, yahoo_ticker, quantity, "
@@ -80,15 +80,14 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
 def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     """Fetches fundamental data for ETF assets and persists snapshots to SQLite."""
     db_path_obj: Path = Path(db_path)
-    if not db_path_obj.exists():
-        logger.error(f"Database file not found at '{db_path_obj}'. Aborting sync.")
-        sys.exit(1)
-
-    decision_repo = SqliteDecisionRepository(db_path=db_path_obj)
-    etf_provider = ETFProvider()
+    decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(
+        db_path=db_path_obj
+    )
+    etf_provider: ETFProvider = ETFProvider()
 
     try:
         with get_db_context(str(db_path_obj)) as conn:
+            initialize_database(conn)
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT id, isin, name, yahoo_ticker, quantity, "
@@ -148,12 +147,14 @@ def sync_portfolio_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
 
 def main() -> None:
     """Main CLI entry point for fundamentals management."""
-    parser = argparse.ArgumentParser(
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Stock and ETF fundamentals management and history sync."
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = (
+        parser.add_subparsers(dest="command", required=True)
+    )
 
-    sync_parser = subparsers.add_parser(
+    sync_parser: argparse.ArgumentParser = subparsers.add_parser(
         "sync", help="Synchronize portfolio fundamentals into database."
     )
     sync_parser.add_argument(
@@ -163,7 +164,7 @@ def main() -> None:
         help="Path to SQLite database file.",
     )
 
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
 
     if args.command == "sync":
         sync_portfolio_fundamentals(db_path=args.db_path)

@@ -617,9 +617,7 @@ class SqliteDecisionRepository:
             with get_db_context(str(self.db_path)) as conn:
                 initialize_database(conn)
                 cursor = conn.cursor()
-                cursor.execute("PRAGMA foreign_keys = ON;")
                 cursor.execute(query, params)
-                conn.commit()
 
             logger.info(
                 "Successfully saved fundamental history snapshot for "
@@ -676,9 +674,7 @@ class SqliteDecisionRepository:
             with get_db_context(str(self.db_path)) as conn:
                 initialize_database(conn)
                 cursor = conn.cursor()
-                cursor.execute("PRAGMA foreign_keys = ON;")
                 cursor.execute(query, params)
-                conn.commit()
 
             logger.info(
                 "Successfully saved ETF fundamental history snapshot for "

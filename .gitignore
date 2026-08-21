@@ -34,9 +34,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Project-specific Data & Logs
-data/history.json
-data/portfolio.json
+# Project-specific Data & Logs (Cloud SSOT)
+data/
+!data/example.portfolio.json
 *.db
-!data/finances.db
 *.log
