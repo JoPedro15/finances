@@ -15,7 +15,6 @@ from src.utils.logger.logger import logger
 
 
 def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
-    """Fetches fundamental data for stock assets and persists snapshots to SQLite."""
     db_path_obj: Path = Path(db_path)
     decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(
         db_path=db_path_obj
@@ -78,7 +77,6 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
 
 
 def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
-    """Fetches fundamental data for ETF assets and persists snapshots to SQLite."""
     db_path_obj: Path = Path(db_path)
     decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(
         db_path=db_path_obj
@@ -139,14 +137,12 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
 
 
 def sync_portfolio_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
-    """Synchronizes both stock and ETF fundamental metrics into SQLite database."""
     logger.section("Synchronizing Portfolio Fundamentals")
     sync_stock_fundamentals(db_path=db_path)
     sync_etf_fundamentals(db_path=db_path)
 
 
 def main() -> None:
-    """Main CLI entry point for fundamentals management."""
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Stock and ETF fundamentals management and history sync."
     )

@@ -1,4 +1,5 @@
-"""CLI module for evaluating investment targets and decision ranking."""
+"""CLI module for evaluating investment targets and decision
+ranking with exposure policy constraints."""
 
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from src.core.exceptions import (
 from src.core.models import (
     Asset,
     ETFDetails,
+    PortfolioSnapshot,
     Quotation,
     RebalanceRecommendation,
     RecommendationAction,
@@ -33,7 +35,7 @@ from src.core.models import (
     UrgencyLevel,
 )
 from src.core.providers import ETFProvider, StockProvider
-from src.core.repositories import SqliteDecisionRepository
+from src.core.repositories import SqliteDecisionRepository, SqliteHistoryRepository
 from src.infra.ai.client import GeminiClient
 from src.infra.database.connection import DEFAULT_DB_PATH
 from src.infra.gdrive.service import GDriveService
@@ -257,19 +259,14 @@ def export_outputs(
     has_ai: bool,
     output_dir: Path = OUTPUT_DIR,
 ) -> None:
-    """Exports both CSV matrix and Markdown report with static filenames
-
-    and uploads them to Google Drive.
-    """
+    """Exports both CSV matrix and Markdown report with static
+    filenames and uploads them to Google Drive."""
     formatted_date_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path: Path = output_dir / "decision_output.csv"
     md_path: Path = output_dir / "decision_report.md"
 
-    # Restante da função permanece igual...
-
-    # 1. Export CSV
     csv_fieldnames: list[str] = [
         "rank",
         "symbol",
@@ -328,7 +325,6 @@ def export_outputs(
     except Exception as err:
         logger.error(f"Failed to export CSV to '{csv_path}': {err}")
 
-    # 2. Export Markdown Report
     score_map: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
     stock_weights_str: str = (
         f"Dip: `{settings.stock_weight_dip:.2f}` | "
@@ -528,7 +524,6 @@ def export_outputs(
     except Exception as err:
         logger.error(f"Failed to export Markdown report to '{md_path}': {err}")
 
-    # 3. Automatic Google Drive Backup for Reports Folder
     if settings.gdrive_reports_folder_id and "pytest" not in sys.modules:
         try:
             drive_service: GDriveService = GDriveService(
@@ -555,7 +550,6 @@ def _display_rebalance_results(
     """Renders decision strategy coefficients, matrix, and expanded action cards."""
     console.print()
 
-    # Strategy weights
     stock_weights: str = (
         f"Dip: [cyan]{settings.stock_weight_dip:.2f}[/cyan] | "
         f"Fwd P/E: [cyan]{settings.stock_weight_forward_pe:.2f}[/cyan] | "
@@ -587,7 +581,6 @@ def _display_rebalance_results(
     console.print(summary_panel, soft_wrap=True)
     console.print()
 
-    # Decision Matrix Table
     table: Table = Table(
         title="PORTFOLIO REBALANCING & INVESTMENT DECISION MATRIX",
         header_style="bold magenta",
@@ -680,7 +673,6 @@ def _display_rebalance_results(
     console.print(table, soft_wrap=True)
     console.print()
 
-    # Actionable Advisory Cards
     score_map: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
     if has_ai and recommendations_map:
         active_recs: list[tuple[str, RebalanceRecommendation]] = [
@@ -902,6 +894,7 @@ def recommend_rebalance(
     stock_provider: StockProvider = StockProvider()
     etf_provider: ETFProvider = ETFProvider()
     decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(db_path)
+    history_repo: SqliteHistoryRepository = SqliteHistoryRepository(db_path)
 
     with console.status("[bold cyan]Fetching market data and evaluating portfolio..."):
         current_alloc_map: dict[str, float]
@@ -933,8 +926,13 @@ def recommend_rebalance(
         logger.error("Could not enrich any target asset.")
         raise typer.Exit(code=1)
 
+    history: list[PortfolioSnapshot] = history_repo.load_history()
+    latest_snapshot: PortfolioSnapshot | None = history[-1] if history else None
+
     engine: PortfolioDecisionEngine = PortfolioDecisionEngine()
-    ranked_scores: list[AssetScore] = engine.rank_assets(enriched_assets)
+    ranked_scores: list[AssetScore] = engine.rank_assets(
+        enriched_assets, portfolio_snapshot=latest_snapshot
+    )
 
     gemini_client: GeminiClient | None = None
     if not skip_ai:

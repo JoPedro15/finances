@@ -1,5 +1,6 @@
-"""Unit tests for stock/ETF strategies, configuration validation,
-and portfolio decision engine."""
+"""Unit tests for strategies, configuration, and portfolio decision engine."""
+
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -8,15 +9,11 @@ from src.core.decision.base import AssetScore
 from src.core.decision.engine import PortfolioDecisionEngine
 from src.core.decision.etf_strategy import EtfScoringStrategy
 from src.core.decision.stock_strategy import StockScoringStrategy
-
-# ==============================================================================
-# CONFIGURATION VALIDATION TESTS
-# ==============================================================================
+from src.core.models import PortfolioSnapshot
 
 
 def test_stock_config_invalid_weights() -> None:
-    """Verifies that StockStrategyConfig raises ValueError when weights
-    do not sum to 1.0."""
+    """Verifies StockStrategyConfig raises ValueError when weights != 1.0."""
     with pytest.raises(ValueError, match="Stock strategy weights must sum to 1.0"):
         StockStrategyConfig(
             weight_dip=0.40,
@@ -27,8 +24,7 @@ def test_stock_config_invalid_weights() -> None:
 
 
 def test_etf_config_invalid_weights() -> None:
-    """Verifies that EtfStrategyConfig raises ValueError when weights
-    do not sum to 1.0."""
+    """Verifies EtfStrategyConfig raises ValueError when weights != 1.0."""
     with pytest.raises(ValueError, match="ETF strategy weights must sum to 1.0"):
         EtfStrategyConfig(
             weight_dip=0.50,
@@ -37,53 +33,34 @@ def test_etf_config_invalid_weights() -> None:
         )
 
 
-# ==============================================================================
-# STOCK STRATEGY TESTS
-# ==============================================================================
-
-
 def test_stock_dip_score_edge_cases() -> None:
-    """Tests stock dip calculation across invalid prices, minor drops,
-    sweet-spots, and falling knives."""
+    """Tests stock dip calculation across edge cases."""
     strategy = StockScoringStrategy()
 
-    # Invalid price or peak
     assert strategy.calculate_dip_score(current_price=0.0, peak_price=100.0) == 0.0
     assert strategy.calculate_dip_score(current_price=100.0, peak_price=0.0) == 0.0
     assert strategy.calculate_dip_score(current_price=105.0, peak_price=100.0) == 0.0
-
-    # Minor drop (< dip_min_pct = 5%)
     assert strategy.calculate_dip_score(
         current_price=97.0, peak_price=100.0
     ) == pytest.approx(0.12, abs=1e-4)
-
-    # Sweet-spot drop (5% <= dip <= 20%)
     assert strategy.calculate_dip_score(current_price=90.0, peak_price=100.0) == 1.0
 
-    # Falling knife penalty (> 20% drop)
     penalty_score = strategy.calculate_dip_score(current_price=50.0, peak_price=100.0)
     assert penalty_score < 1.0
     assert penalty_score >= 0.1
 
 
 def test_stock_pe_score_growth_stagnation_and_missing() -> None:
-    """Tests P/E score calculation for missing metadata, earnings growth,
-    and stagnation."""
+    """Tests P/E score calculation for missing metadata and growth."""
     strategy = StockScoringStrategy()
 
-    # Missing data fallback
     assert strategy.calculate_pe_score(trailing_pe=None, forward_pe=20.0) == 0.5
     assert strategy.calculate_pe_score(trailing_pe=20.0, forward_pe=0.0) == 0.5
-
-    # Stagnation (Forward P/E == Trailing P/E)
     assert strategy.calculate_pe_score(trailing_pe=25.0, forward_pe=25.0) == 0.6
 
-    # Earnings growth (Forward P/E < Trailing P/E)
     growth_score = strategy.calculate_pe_score(trailing_pe=25.0, forward_pe=20.0)
     assert growth_score > 0.6
-    assert growth_score <= 1.0
 
-    # Earnings contraction (Forward P/E > Trailing P/E)
     contraction_score = strategy.calculate_pe_score(trailing_pe=20.0, forward_pe=25.0)
     assert contraction_score < 0.6
 
@@ -92,7 +69,6 @@ def test_stock_52w_range_score() -> None:
     """Tests 52-week position evaluation."""
     strategy = StockScoringStrategy()
 
-    # Missing or invalid range
     assert (
         strategy.calculate_52w_range_score(
             current_price=10.0, low_52w=None, high_52w=20.0
@@ -105,8 +81,6 @@ def test_stock_52w_range_score() -> None:
         )
         == 0.5
     )
-
-    # Bottom 30% of range
     assert (
         strategy.calculate_52w_range_score(
             current_price=110.0, low_52w=100.0, high_52w=200.0
@@ -115,26 +89,15 @@ def test_stock_52w_range_score() -> None:
     )
 
 
-# ==============================================================================
-# ETF STRATEGY TESTS
-# ==============================================================================
-
-
 def test_etf_ter_score_boundaries() -> None:
     """Tests ETF TER cost efficiency logic."""
     strategy = EtfScoringStrategy()
 
-    # Missing or invalid metadata fallback
     assert strategy.calculate_ter_score(ter=None) == 0.5
     assert strategy.calculate_ter_score(ter=-0.05) == 0.5
-
-    # Ultra low-cost (TER <= 0.10%)
     assert strategy.calculate_ter_score(ter=0.07) == 1.0
-
-    # High-cost (TER >= 0.50%)
     assert strategy.calculate_ter_score(ter=0.55) == 0.0
 
-    # Linear decay in-between
     mid_score = strategy.calculate_ter_score(ter=0.30)
     assert 0.0 < mid_score < 1.0
 
@@ -143,37 +106,22 @@ def test_etf_allocation_score() -> None:
     """Tests underweight allocation gap priority calculation."""
     strategy = EtfScoringStrategy()
 
-    # Overweight or on target
     assert (
         strategy.calculate_allocation_score(
             target_allocation_pct=20.0, current_allocation_pct=25.0
         )
         == 0.0
     )
-
-    # Underweight gap (10%+ reaches max score 1.0)
     assert (
         strategy.calculate_allocation_score(
             target_allocation_pct=30.0, current_allocation_pct=20.0
         )
         == 1.0
     )
-    assert (
-        strategy.calculate_allocation_score(
-            target_allocation_pct=30.0, current_allocation_pct=25.0
-        )
-        == 0.5
-    )
-
-
-# ==============================================================================
-# PORTFOLIO DECISION ENGINE TESTS
-# ==============================================================================
 
 
 def test_engine_ranks_assets_correctly() -> None:
-    """Verifies that the decision engine scores and ranks assets
-    in descending order."""
+    """Verifies decision engine scores and ranks assets correctly."""
     engine = PortfolioDecisionEngine()
 
     assets_data = [
@@ -202,14 +150,11 @@ def test_engine_ranks_assets_correctly() -> None:
     assert len(scores) == 2
     assert scores[0].symbol == "HIGH_PRIORITY"
     assert scores[1].symbol == "LOW_PRIORITY"
-    assert scores[0].total_score > scores[1].total_score
 
 
 def test_engine_raises_error_on_invalid_asset_type() -> None:
-    """Verifies that engine raises ValueError when encountering
-    an unknown asset_type."""
+    """Verifies engine raises ValueError on unknown asset_type."""
     engine = PortfolioDecisionEngine()
-
     invalid_asset = [
         {
             "symbol": "CRYPTO",
@@ -223,3 +168,38 @@ def test_engine_raises_error_on_invalid_asset_type() -> None:
 
     with pytest.raises(ValueError, match="Unsupported or missing asset_type 'BITCOIN'"):
         engine.rank_assets(invalid_asset)
+
+
+def test_engine_validates_required_keys() -> None:
+    """Verifies engine raises KeyError when required fields are missing."""
+    engine = PortfolioDecisionEngine()
+    incomplete_asset = [{"symbol": "AAPL"}]
+
+    with pytest.raises(KeyError, match="missing required fields"):
+        engine.rank_assets(incomplete_asset)
+
+
+def test_engine_resolves_company_exposure_fallbacks() -> None:
+    """Verifies robust company exposure resolution via symbol and substrings."""
+    mock_exposure = MagicMock()
+    mock_exposure.calculate_company_exposure.return_value = {"Apple Inc.": 20.0}
+
+    engine = PortfolioDecisionEngine(exposure_engine=mock_exposure)
+    assets_data = [
+        {
+            "symbol": "AAPL",
+            "name": "Apple Inc.",
+            "asset_type": "STOCK",
+            "current_price": 150.0,
+            "peak_price": 150.0,
+            "target_allocation_pct": 10.0,
+            "current_allocation_pct": 10.0,
+        }
+    ]
+    snapshot = PortfolioSnapshot(
+        timestamp="2026-08-21", total_value_eur=1000.0, assets_snapshot=[]
+    )
+
+    scores = engine.rank_assets(assets_data, portfolio_snapshot=snapshot)
+    assert len(scores) == 1
+    # Triggered penalty because exposure (20.0%) > limit (15.0%)

@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -69,8 +69,21 @@ jobs:
       - name: Install dependencies
         run: make install
 
-      - name: Run Tests
-        run: make test
+      - name: Run Tests with Coverage
+        run: |
+          PYTHONPATH=src python3 -m pytest --cov=src --cov-report=xml tests/
+
+      - name: Generate Coverage Badge
+        run: |
+          python3 -m pip install coverage-badge
+          coverage-badge -o coverage.svg -f
+
+      - name: Commit Updated Badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update coverage badge [skip ci]"
+          file_pattern: coverage.svg
 
       - name: Upload Test Artifacts
         if: always()
@@ -80,4 +93,5 @@ jobs:
           path: |
             htmlcov/
             .coverage
+            coverage.xml
           if-no-files-found: ignore

@@ -6,10 +6,10 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details analyze-exposure migrate decision sync-fundamentals
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details migrate decision sync-fundamentals exposure
 
 # ==============================================================================
-# 📖 Help
+# 📖 Help & Documentation
 # ==============================================================================
 # Displays the list of available CLI make commands and descriptions.
 help:
@@ -32,19 +32,12 @@ help:
 	@echo "  make analyze          - Analyzes overall portfolio performance."
 	@echo "  make etf-details ISIN= - Inspects composition and details for an ETF ISIN."
 	@echo "  make stock-details TICKER= - Inspects fundamental metrics for a stock ticker or ISIN."
-	@echo "  make analyze-exposure - Analyzes portfolio sector and country exposure."
+	@echo "  make exposure         - Runs consolidated look-through exposure check (sectors, countries, companies)."
 	@echo "  make sync-fundamentals - Synchronizes stock and ETF fundamental metrics into SQLite database."
 	@echo "  make decision [FLAGS=...] - Ranks investment targets using live market data."
-	@echo "       Available Flags:"
-	@echo "         -t, --targets-file PATH : Path to targets wishlist JSON (default: data/portfolio_targets.json)"
-	@echo "         -p, --portfolio-file PATH: Path to active holdings JSON (default: data/portfolio.json)"
-	@echo "         --skip-ai               : Run quantitative scoring matrix only (bypasses Gemini AI)"
-	@echo "         --notify                : Dispatch rebalancing report and chart to Discord webhook"
-	@echo "         -v, --verbose           : Display granular factor score breakdowns in table"
-	@echo "         -o, --output-csv PATH   : CSV export destination path (default: output/decision_output.csv)"
 
 # ==============================================================================
-# 🛠️ Setup, Maintenance & Quality
+# 🛠️ Setup, Maintenance & Quality Gates
 # ==============================================================================
 # Installs the package and its development dependencies in editable mode.
 install:
@@ -127,15 +120,15 @@ analyze:
 
 # Inspects detailed composition, TER, holdings, and sector/country breakdowns for an ETF.
 etf-details:
-	PYTHONPATH=src $(PYTHON) main.py etf-details $(ISIN)
+	PYTHONPATH=src $(PYTHON) main.py etf-details
 
 # Inspects fundamental financial metrics for a stock ticker or ISIN.
 stock-details:
-	PYTHONPATH=src $(PYTHON) main.py stock-details $(TICKER)
+	PYTHONPATH=src $(PYTHON) main.py stock-details
 
-# Analyzes consolidated portfolio sector and country exposure across active ETF holdings.
-analyze-exposure:
-	PYTHONPATH=src $(PYTHON) main.py analyze-exposure
+# Runs consolidated look-through exposure checks including individual company limits (max 15%).
+exposure:
+	$(PYTHON) main.py exposure-check
 
 # Synchronizes fundamental history snapshots for both stocks and ETFs into SQLite history.
 sync-fundamentals:
@@ -149,4 +142,4 @@ sync-fundamentals:
 #   -v, --verbose           : Display granular factor score breakdowns (Dip Sc, Cost Sc, Gap Sc)
 #   -o, --output-csv PATH   : CSV export destination path (default: output/decision_output.csv)
 decision:
-	PYTHONPATH=src $(PYTHON) -m cli.decision
+	PYTHONPATH=src $(PYTHON) -m cli.decision --skip-ai
