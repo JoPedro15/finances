@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details migrate decision sync-fundamentals exposure
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality
 
 # ==============================================================================
 # 📖 Help & Documentation
@@ -22,7 +22,7 @@ help:
 	@echo "  make test             - Runs unit tests (pytest)."
 	@echo "  make quality          - Runs full quality gate (lint + security-check + test)."
 	@echo "  make clean            - Cleans Python temporary cache files and coverage reports."
-	@echo "  --- Project Utils & Decision Engine ---"
+	@echo "  --- Project Utils & Opportunity Engine ---"
 	@echo "  make sync-portfolio   - Migrates JSON portfolio to SQLite DB and pushes config to Google Drive."
 	@echo "  make push-config      - Pushes local config files to Google Drive."
 	@echo "  make pull-config      - Pulls config files from Google Drive."
@@ -34,7 +34,8 @@ help:
 	@echo "  make stock-details TICKER= - Inspects fundamental metrics for a stock ticker or ISIN."
 	@echo "  make exposure         - Runs consolidated look-through exposure check (sectors, countries, companies)."
 	@echo "  make sync-fundamentals - Synchronizes stock and ETF fundamental metrics into SQLite database."
-	@echo "  make decision [FLAGS=...] - Ranks investment targets using live market data."
+	@echo "  make analyze-opportunity [FLAGS=...] - Ranks investment target opportunities using live market data."
+	@echo "  make analyze-quality TICKER= - Evaluates absolute quality tiers, fundamental metrics, and Bull/Bear cases."
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality Gates
@@ -134,12 +135,16 @@ exposure:
 sync-fundamentals:
 	PYTHONPATH=src $(PYTHON) main.py sync-fundamentals
 
-# Orchestrates portfolio decision ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
-# Accepts optional CLI flags via FLAGS variable (e.g., make decision FLAGS="--skip-ai -v"):
+# Orchestrates portfolio opportunity_evaluation ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
+# Accepts optional CLI flags via FLAGS variable (e.g., make opportunity FLAGS="--skip-ai -v"):
 #   -t, --targets-file PATH : Path to wishlist targets JSON file (default: data/portfolio_targets.json)
 #   -p, --portfolio-file PATH: Path to active holdings JSON file (default: data/portfolio.json)
 #   --skip-ai               : Run quantitative scoring matrix only (bypasses Gemini AI analysis)
 #   -v, --verbose           : Display granular factor score breakdowns (Dip Sc, Cost Sc, Gap Sc)
-#   -o, --output-csv PATH   : CSV export destination path (default: output/decision_output.csv)
-decision:
-	PYTHONPATH=src $(PYTHON) -m cli.decision --skip-ai
+#   -o, --output-csv PATH   : CSV export destination path (default: output/opportunity_output.csv)
+analyze-opportunity:
+	PYTHONPATH=src $(PYTHON) -m cli.opportunity --skip-ai
+
+# Evaluates absolute quality tiers, comprehensive fundamental metrics, and diagnostic Bull/Bear cases.
+analyze-quality:
+	PYTHONPATH=src $(PYTHON) main.py analyze-quality $(TICKER)

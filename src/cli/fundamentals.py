@@ -8,7 +8,7 @@ from pathlib import Path
 
 from src.core.models import Asset, ETFDetails, StockDetails
 from src.core.providers import ETFProvider, StockProvider
-from src.core.repositories import SqliteDecisionRepository
+from src.core.repositories import SqliteOpportunityRepository
 from src.infra.database.connection import DEFAULT_DB_PATH, get_db_context
 from src.infra.database.schema import initialize_database
 from src.utils.logger.logger import logger
@@ -16,7 +16,7 @@ from src.utils.logger.logger import logger
 
 def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     db_path_obj: Path = Path(db_path)
-    decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(
+    opportunity_repo: SqliteOpportunityRepository = SqliteOpportunityRepository(
         db_path=db_path_obj
     )
     stock_provider: StockProvider = StockProvider()
@@ -68,7 +68,7 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 )
                 continue
 
-            decision_repo.save_stock_fundamentals(asset_id=asset_id, details=details)
+            opportunity_repo.save_stock_fundamentals(asset_id=asset_id, details=details)
         except Exception as e:
             logger.error(
                 f"Failed to sync fundamentals for ticker "
@@ -78,7 +78,7 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
 
 def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     db_path_obj: Path = Path(db_path)
-    decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(
+    opportunity_repo: SqliteOpportunityRepository = SqliteOpportunityRepository(
         db_path=db_path_obj
     )
     etf_provider: ETFProvider = ETFProvider()
@@ -129,7 +129,7 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 )
                 continue
 
-            decision_repo.save_etf_fundamentals(asset_id=asset_id, details=details)
+            opportunity_repo.save_etf_fundamentals(asset_id=asset_id, details=details)
         except Exception as e:
             logger.error(
                 f"Failed to sync fundamentals for ETF ISIN '{asset.isin}': {e}"

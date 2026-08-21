@@ -1,5 +1,7 @@
-"""This file contains functions for analyzing portfolio
-performance and asset exposures using Pandas vectorization."""
+"""This file contains functions for analyzing portfolio performance, asset
+exposures, and deterministic fundamental quality tier evaluations using Pandas
+vectorization.
+"""
 
 from __future__ import annotations
 
@@ -252,3 +254,168 @@ def analyze_overall_performance(
         logger.success(f"Return on Investment (ROI): +{roi_percentage:.2f}%")
     else:
         logger.warning(f"Return on Investment (ROI): {roi_percentage:.2f}%")
+
+
+def evaluate_stock_quality(details: StockDetails) -> dict[str, Any]:
+    """Evaluates stock fundamental health deterministically (0-100 score)
+    and classifies it into Quality Tiers (Tier A, Tier B, Tier C) according to
+    established fundamental criteria and knockout rules.
+    """
+    score: int = 0
+    max_score: int = 100
+
+    # 1. Operating Margin (25 pts max)
+    margin: float | None = details.profit_margins_pct
+    if margin is not None:
+        if margin >= 20.0:
+            score += 25
+        elif margin >= 10.0:
+            score += 15
+
+    # 2. Revenue Growth YoY (25 pts max)
+    rev_growth: float | None = details.revenue_growth_pct
+    if rev_growth is not None:
+        if rev_growth >= 8.0:
+            score += 25
+        elif rev_growth >= 3.0:
+            score += 15
+
+    # 3. Balance Sheet Health - Debt to Equity (25 pts max)
+    debt_eq: float | None = details.total_debt_to_equity
+    normalized_de: float | None = None
+    if debt_eq is not None:
+        normalized_de = debt_eq / 100.0 if debt_eq > 10.0 else debt_eq
+        if normalized_de <= 1.0:
+            score += 25
+        elif normalized_de <= 2.0:
+            score += 15
+    else:
+        score += 12
+
+    # 4. Earnings Growth (25 pts max)
+    earn_growth: float | None = details.earnings_growth_pct
+    if earn_growth is not None:
+        if earn_growth >= 10.0:
+            score += 25
+        elif earn_growth >= 5.0:
+            score += 15
+
+    # --- Knockout Rules & Tier Assignment ---
+    tier: str = "Tier B"
+    is_knockout_c: bool = False
+
+    if margin is not None and margin < 0.0:
+        is_knockout_c = True
+    elif debt_eq is not None and debt_eq > 250.0:
+        is_knockout_c = True
+
+    if is_knockout_c:
+        tier = "Tier C"
+    else:
+        de_val: float = debt_eq if debt_eq is not None else 0.0
+        margin_val: float = margin if margin is not None else 0.0
+        if score >= 80 and margin_val > 10.0 and de_val <= 150.0:
+            tier = "Tier A"
+        elif score >= 50:
+            tier = "Tier B"
+        else:
+            tier = "Tier C"
+
+    # --- Diagnostic Bull & Bear Cases ---
+    bull_points: list[str] = []
+    bear_points: list[str] = []
+
+    if margin is not None and margin >= 15.0:
+        bull_points.append(f"Strong operating profit margins ({margin:.1f}%)")
+    else:
+        bear_points.append("Compressed or subdued operating margins")
+
+    if rev_growth is not None and rev_growth >= 5.0:
+        bull_points.append(f"Healthy revenue expansion ({rev_growth:.1f}% YoY)")
+    else:
+        bear_points.append("Slow or stagnant top-line revenue growth")
+
+    if debt_eq is not None:
+        if debt_eq <= 100.0:
+            bull_points.append("Conservative capital structure and low leverage")
+        else:
+            bear_points.append(f"Elevated debt-to-equity ratio ({debt_eq:.1f})")
+    else:
+        bear_points.append("Debt and leverage metrics unavailable")
+
+    if not bull_points:
+        bull_points.append("Established business model with stable market presence")
+    if not bear_points:
+        bear_points.append("No critical balance sheet vulnerabilities detected")
+
+    # --- Valuation Status ---
+    valuation_status: str = "Fair Value"
+    pe: float | None = details.pe_ratio
+    if pe is not None:
+        if pe < 15.0:
+            valuation_status = "Undervalued"
+        elif pe > 30.0:
+            valuation_status = "Overvalued"
+        else:
+            valuation_status = "Fair Value"
+
+    return {
+        "score": score,
+        "max_score": max_score,
+        "tier": tier,
+        "bull_case": bull_points,
+        "bear_case": bear_points,
+        "valuation_status": valuation_status,
+    }
+
+
+def evaluate_etf_quality(
+    details: ETFDetails,
+    aum_eur: float | None = None,
+    age_years: float | None = None,
+) -> dict[str, Any]:
+    """Classifies ETF quality based on TER, Assets Under Management (AUM),
+    and fund age, protecting against liquidity and closure risks.
+    """
+    ter: float | None = details.ter_pct
+    tier: str = "Tier B"
+
+    is_tier_a: bool = True
+    if ter is not None and ter > 0.20:
+        is_tier_a = False
+    if aum_eur is not None and aum_eur <= 500_000_000.0:
+        is_tier_a = False
+    if age_years is not None and age_years <= 3.0:
+        is_tier_a = False
+
+    if is_tier_a and (ter is not None or aum_eur is not None or age_years is not None):
+        tier = "Tier A"
+    else:
+        is_tier_c: bool = False
+        if ter is not None and ter > 0.45:
+            is_tier_c = True
+        if aum_eur is not None and aum_eur < 100_000_000.0:
+            is_tier_c = True
+
+        if is_tier_c:
+            tier = "Tier C"
+        else:
+            tier = "Tier B"
+
+    ter_str: str = f"{ter:.2f}%" if ter is not None else "N/A"
+    aum_str: str = f"{aum_eur / 1e6:,.1f}M€" if aum_eur is not None else "N/A"
+
+    return {
+        "score": 100 if tier == "Tier A" else (70 if tier == "Tier B" else 40),
+        "max_score": 100,
+        "tier": tier,
+        "bull_case": [
+            f"Attractive cost efficiency (TER: {ter_str})",
+            f"Fund scale and liquidity (AUM: {aum_str})",
+        ],
+        "bear_case": [
+            "Market systemic exposure without individual stock selection",
+            "Regulatory or structural tracking risks",
+        ],
+        "valuation_status": "Fair Value",
+    }

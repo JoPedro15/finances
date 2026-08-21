@@ -1,4 +1,4 @@
-"""Portfolio decision engine orchestrating asset scoring strategies
+"""Portfolio opportunity_evaluation engine orchestrating asset scoring strategies
 and enforcing exposure constraints using Pandas."""
 
 from __future__ import annotations
@@ -8,11 +8,11 @@ from typing import Any
 import pandas as pd
 
 from src.config import settings
-from src.core.decision.base import AssetScore, AssetType, ScoringStrategy
-from src.core.decision.etf_strategy import EtfScoringStrategy
-from src.core.decision.stock_strategy import StockScoringStrategy
 from src.core.exposure import ExposureEngine
 from src.core.models import PortfolioSnapshot
+from src.core.opportunity_evaluation.base import AssetScore, AssetType, ScoringStrategy
+from src.core.opportunity_evaluation.etf_strategy import EtfScoringStrategy
+from src.core.opportunity_evaluation.stock_strategy import StockScoringStrategy
 from src.utils.logger.logger import logger
 
 _REQUIRED_ASSET_KEYS: tuple[str, ...] = (
@@ -24,8 +24,8 @@ _REQUIRED_ASSET_KEYS: tuple[str, ...] = (
 )
 
 
-class PortfolioDecisionEngine:
-    """Decision engine that delegates calculations to asset-specific
+class PortfolioOpportunityEngine:
+    """Opportunity evaluation engine that delegates calculations to asset-specific
     strategies and applies exposure constraints."""
 
     def __init__(

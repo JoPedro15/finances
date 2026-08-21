@@ -9,8 +9,9 @@ import typer
 from pydantic import ValidationError
 from rich.console import Console
 
-from src.cli.decision import recommend_rebalance
 from src.cli.fundamentals import sync_portfolio_fundamentals
+from src.cli.opportunity import recommend_rebalance
+from src.cli.quality import analyze_quality_cmd
 from src.config import DATA_DIR, settings
 from src.core.analysis import analyze_overall_performance
 from src.core.exposure import ExposureEngine
@@ -41,7 +42,7 @@ DB_FILE: Path = DATA_DIR / "finances.db"
 app: typer.Typer = typer.Typer(
     name="finances",
     help="CLI tool for monitoring portfolio performance and "
-    "investment decision ranking.",
+    "investment opportunity evaluation ranking.",
     add_completion=False,
 )
 
@@ -280,7 +281,6 @@ def etf_details_cmd(
 
 def _format_market_cap(val: float | None) -> str:
     """Formats market cap values with dynamic scale suffixes (B/T)
-
     rounded to two decimal places.
     """
     if val is None:
@@ -329,6 +329,31 @@ def _display_single_stock_details(
         console.print(f"Dividend Yield: {div_str}", highlight=False)
     else:
         console.print("[red]Failed to fetch fundamental metrics.[/red]")
+
+
+@app.command(name="analyze-quality")
+def analyze_quality_cli(
+    ticker: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Optional ticker symbol or ISIN to analyze. "
+                "If omitted, analyzes all active portfolio assets."
+            )
+        ),
+    ] = None,
+) -> None:
+    """Evaluates absolute quality tiers, comprehensive fundamental metrics,
+    diagnostic Bull/Bear cases, and valuation status.
+    """
+    try:
+        analyze_quality_cmd(ticker=ticker)
+        _trigger_cloud_push()
+    except typer.Exit:
+        raise
+    except Exception as err:
+        logger.error(f"Failed to analyze asset quality: {err}")
+        raise typer.Exit(code=1) from err
 
 
 @app.command(name="stock-details")
@@ -471,8 +496,8 @@ def check_exposure() -> None:
         console.print("\n[bold green]✓ All exposure limits are respected.[/bold green]")
 
 
-@app.command(name="decision")
-def decision_cmd(
+@app.command(name="opportunity_evaluation")
+def opportunity_cmd(
     targets_file: Annotated[
         Path,
         typer.Option(
@@ -514,7 +539,9 @@ def decision_cmd(
         ),
     ] = False,
 ) -> None:
-    """Ranks targets and provides AI-driven investment decision recommendations."""
+    """Ranks targets and provides AI-driven investment
+    opportunity evaluation recommendations.
+    """
     recommend_rebalance(
         targets_file=targets_file,
         portfolio_file=portfolio_file,

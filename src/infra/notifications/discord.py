@@ -1,4 +1,6 @@
-"""Infrastructure module for dispatching decision alerts to Discord webhooks."""
+"""Infrastructure module for dispatching opportunity_evaluation
+alerts to Discord webhooks.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +9,8 @@ from pathlib import Path
 from discord_webhook import DiscordEmbed, DiscordWebhook  # type: ignore[import-untyped]
 
 from src.config import settings
-from src.core.decision.base import AssetScore
 from src.core.models import RebalanceRecommendation, RecommendationAction
+from src.core.opportunity_evaluation.base import AssetScore
 from src.utils.logger.logger import logger
 
 COLOR_GREEN: int = 0x2ECC71
@@ -33,7 +35,9 @@ def send_discord_notification(
     total_portfolio_value: float,
     image_path: Path | None = None,
 ) -> bool:
-    """Dispatches decision summary, matrix, and action cards to Discord."""
+    """Dispatches opportunity_evaluation summary, matrix, and
+    action cards to Discord.
+    """
     webhook_url: str | None = settings.discord_webhook_url
     if not webhook_url:
         logger.warning("Discord webhook URL is not configured in settings. Skipping.")
@@ -170,7 +174,7 @@ def send_discord_notification(
 
         response = webhook.execute()
         if response.status_code in (200, 204):
-            logger.info("Successfully sent decision report to Discord.")
+            logger.info("Successfully sent opportunity_evaluation report to Discord.")
             return True
 
         logger.error(

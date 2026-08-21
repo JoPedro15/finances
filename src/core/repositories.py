@@ -441,16 +441,14 @@ class JsonETFCacheRepository:
             ) from e
 
 
-class SqliteDecisionRepository:
+class SqliteOpportunityRepository:
     """SQLite database-backed implementation for persisting and querying
-
-    decision reports.
-    """
+    opportunity evaluation reports."""
 
     def __init__(self, db_path: str | Path = DEFAULT_DB_PATH) -> None:
         self.db_path: Path = Path(db_path)
 
-    def save_decision_report(
+    def save_opportunity_report(
         self,
         timestamp: str,
         total_value_eur: float,
@@ -459,8 +457,7 @@ class SqliteDecisionRepository:
         asset_dict_map: dict[str, dict[str, Any]],
         recommendations_map: dict[str, Any],
     ) -> None:
-        """Saves a complete decision evaluation run and its asset metrics
-
+        """Saves a complete opportunity evaluation run and its asset metrics
         into SQLite.
         """
         try:
@@ -470,7 +467,7 @@ class SqliteDecisionRepository:
 
                 cursor.execute(
                     """
-                    INSERT INTO decisions (timestamp, total_value_eur, has_ai)
+                    INSERT INTO opportunities (timestamp, total_value_eur, has_ai)
                     VALUES (?, ?, ?)
                     ON CONFLICT(timestamp) DO NOTHING;
                     """,
@@ -478,12 +475,12 @@ class SqliteDecisionRepository:
                 )
 
                 cursor.execute(
-                    "SELECT id FROM decisions WHERE timestamp = ?", (timestamp,)
+                    "SELECT id FROM opportunities WHERE timestamp = ?", (timestamp,)
                 )
                 row = cursor.fetchone()
                 if not row:
                     return
-                decision_id: int = int(row["id"])
+                opportunity_id: int = int(row["id"])
 
                 for rank, score in enumerate(ranked_scores, start=1):
                     symbol: str = str(score.symbol)
@@ -492,8 +489,8 @@ class SqliteDecisionRepository:
 
                     cursor.execute(
                         """
-                        INSERT INTO decision_asset_metrics (
-                            decision_id, symbol, asset_type, rank, price_eur,
+                        INSERT INTO opportunity_asset_metrics (
+                            opportunity_id, symbol, asset_type, rank, price_eur,
                             current_allocation_pct, target_allocation_pct,
                             dip_score, cost_score, gap_score, quant_score,
                             ai_action, ai_urgency, ai_confidence_pct,
@@ -506,7 +503,7 @@ class SqliteDecisionRepository:
                         )
                         """,
                         (
-                            decision_id,
+                            opportunity_id,
                             symbol,
                             str(score.asset_type.value).upper(),
                             rank,
@@ -534,12 +531,11 @@ class SqliteDecisionRepository:
                     )
         except Exception as e:
             raise StorageWriteError(
-                f"Failed to save decision report to SQLite: {e}"
+                f"Failed to save opportunity report to SQLite: {e}"
             ) from e
 
     def load_asset_history(self, symbol: str, limit: int = 5) -> list[dict[str, Any]]:
-        """Loads historical decision metrics for a specific asset to enable
-
+        """Loads historical opportunity metrics for a specific asset to enable
         trend analysis.
         """
         if not self.db_path.exists():
@@ -551,12 +547,12 @@ class SqliteDecisionRepository:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT d.timestamp, dam.rank, dam.price_eur, dam.quant_score,
-                           dam.forward_pe, dam.dividend_yield_pct, dam.ai_action
-                    FROM decision_asset_metrics dam
-                    JOIN decisions d ON dam.decision_id = d.id
-                    WHERE dam.symbol = ?
-                    ORDER BY d.timestamp DESC
+                    SELECT o.timestamp, oam.rank, oam.price_eur, oam.quant_score,
+                           oam.forward_pe, oam.dividend_yield_pct, oam.ai_action
+                    FROM opportunity_asset_metrics oam
+                    JOIN opportunities o ON oam.opportunity_id = o.id
+                    WHERE oam.symbol = ?
+                    ORDER BY o.timestamp DESC
                     LIMIT ?
                     """,
                     (symbol, limit),
@@ -567,12 +563,20 @@ class SqliteDecisionRepository:
             logger.warning(f"Failed to load asset history for '{symbol}': {e}")
             return []
 
-    def save_stock_fundamentals(self, asset_id: int, details: StockDetails) -> None:
+    def save_stock_fundamentals(
+        self,
+        asset_id: int,
+        details: StockDetails,
+        quality_tier: str | None = None,
+        quality_score: int | None = None,
+    ) -> None:
         """Inserts a historical fundamental data snapshot for a specific stock asset.
 
         Args:
             asset_id: Database primary key of the asset in the assets table.
             details: Stock details object containing fundamental metrics.
+            quality_tier: Evaluated absolute quality tier (e.g., Tier A).
+            quality_score: Evaluated absolute quality score (0-100).
         """
         query: str = """
             INSERT INTO stock_fundamental_history (
@@ -585,8 +589,10 @@ class SqliteDecisionRepository:
                 fifty_two_week_high,
                 fifty_two_week_low,
                 sector,
-                industry
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                industry,
+                quality_tier,
+                quality_score
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         fetched_at_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         params: tuple[
@@ -600,6 +606,8 @@ class SqliteDecisionRepository:
             float | None,
             str | None,
             str | None,
+            str | None,
+            int | None,
         ] = (
             asset_id,
             fetched_at_str,
@@ -611,6 +619,8 @@ class SqliteDecisionRepository:
             details.fifty_two_week_low,
             details.sector,
             details.industry,
+            quality_tier,
+            quality_score,
         )
 
         try:
@@ -621,19 +631,27 @@ class SqliteDecisionRepository:
 
             logger.info(
                 "Successfully saved fundamental history snapshot for "
-                f"asset_id={asset_id}."
+                f"asset_id={asset_id} with quality tier {quality_tier}."
             )
         except Exception as e:
             raise StorageWriteError(
                 f"Failed to save stock fundamentals to '{self.db_path}': {e}"
             ) from e
 
-    def save_etf_fundamentals(self, asset_id: int, details: ETFDetails) -> None:
+    def save_etf_fundamentals(
+        self,
+        asset_id: int,
+        details: ETFDetails,
+        quality_tier: str | None = None,
+        quality_score: int | None = None,
+    ) -> None:
         """Persists an ETF fundamental snapshot record into SQLite history.
 
         Args:
             asset_id: Database identifier of the ETF asset.
             details: ETF details containing TER, holdings, and breakdowns.
+            quality_tier: Evaluated absolute quality tier (e.g., Tier A).
+            quality_score: Evaluated absolute quality score (0-100).
         """
         query: str = """
             INSERT INTO etf_fundamental_history (
@@ -642,32 +660,45 @@ class SqliteDecisionRepository:
                 ter_pct,
                 holdings_json,
                 sector_breakdown_json,
-                country_breakdown_json
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                country_breakdown_json,
+                quality_tier,
+                quality_score
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         fetched_at_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        holdings_data = (
+        holdings_data: list[dict[str, Any]] = (
             [h.to_dict() for h in details.holdings] if details.holdings else []
         )
-        sector_data = (
+        sector_data: list[dict[str, Any]] = (
             [s.to_dict() for s in details.sector_breakdown]
             if details.sector_breakdown
             else []
         )
-        country_data = (
+        country_data: list[dict[str, Any]] = (
             [c.to_dict() for c in details.country_breakdown]
             if details.country_breakdown
             else []
         )
 
-        params = (
+        params: tuple[
+            int,
+            str,
+            float | None,
+            str,
+            str,
+            str,
+            str | None,
+            int | None,
+        ] = (
             asset_id,
             fetched_at_str,
             details.ter_pct,
             json.dumps(holdings_data),
             json.dumps(sector_data),
             json.dumps(country_data),
+            quality_tier,
+            quality_score,
         )
 
         try:
@@ -678,7 +709,7 @@ class SqliteDecisionRepository:
 
             logger.info(
                 "Successfully saved ETF fundamental history snapshot for "
-                f"asset_id={asset_id}."
+                f"asset_id={asset_id} with quality tier {quality_tier}."
             )
         except Exception as e:
             raise StorageWriteError(
