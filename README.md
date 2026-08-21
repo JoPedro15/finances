@@ -34,11 +34,11 @@ graph TD
     Report -->|Auto Backup| GDrive
 ```
 
-
 | Layer | Path                    | Description |
 | :--- |:------------------------| :--- |
 | **Core Domain** | `src/core/`             | Business logic, quotation retrieval, multi-currency exchange, snapshot management, performance analysis, and repository protocols. |
-| **Opportunity Engine** | `src/core/opportunity/` | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) for stocks and ETFs. |
+| **Opportunity Engine** | `src/core/opportunity/` | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) with active exposure constraint penalties.|
+| **Quality Evaluation** | `src/cli/quality.py`    | Independent fundamental health analysis, absolute quality tiers (Tier A/B/C), diagnostic terminal cards, and Markdown report export. |
 | **AI Infrastructure** | `src/infra/ai/`         | Google Gemini API client (`gemini-2.0-flash`) executing robust batch structured JSON portfolio rebalancing analysis with Pydantic validation. |
 | **Database & Schema** | `src/infra/database/`   | SQLite connection management, foreign key enforcement, transactional contexts, and relational schema DDL. |
 | **Cloud SSoT Engine** | `src/infra/gdrive/`     | Google Drive service wrapper handling bidirectional synchronization of `finances.db` and configuration JSON files. |
@@ -49,22 +49,27 @@ graph TD
 
 ## Core Modules & Technical Highlights
 
-### 1. Deterministic Opportunity Engine (`src/core/opportunity/`)
+### 1. Deterministic Opportunity Engine & Exposure Policies (`src/core/opportunity/` & `src/core/exposure.py`)
 Rather than relying purely on opaque LLM predictions, the engine uses explicit quantitative models implementing the Strategy Pattern:
 * **Stock Scoring Strategy (`stock_strategy.py`)**: Evaluates price pullbacks from 52-week highs (with *falling knife* protection), forward vs. trailing P/E growth ratios, and 52-week range positioning.
 * **ETF Scoring Strategy (`etf_strategy.py`)**: Combines technical discount sweet-spots, cost efficiency via Total Expense Ratio (TER), and target allocation gaps.
-* **Composite Priority**: Combines weighted sub-scores into a normalized total score (`total_score`) to rank target wishlist assets objectively.
+* **Exposure Constraint Enforcement**: Actively penalizes the composite priority score (`total_score`) when candidate assets belong to geographic regions, sectors, or individual companies that exceed defined portfolio concentration limits.
 
-### 2. Gemini AI Batch Advisory (`src/infra/ai/`)
+### 2. Independent Fundamental Health & Quality Engine (`src/cli/quality.py` & `src/core/analysis.py`)
+* **Absolute Quality Tiers**: Classifies portfolio assets into **Tier A**, **Tier B**, or **Tier C** based on deterministic fundamental criteria (profit margins, revenue growth, debt-to-equity ratios, and dividend stability).
+* **Diagnostic Terminal Cards**: Renders rich visual cards using `rich` featuring **Bull Case** catalysts, **Bear Case** risks, and explicit **Valuation Status** (`Undervalued`, `Fair Value`, `Overvalued`).
+* **Automated Reporting & Persistence**: Exports comprehensive evaluation summaries to Markdown (`output/quality_report.md`) and records historical fundamental snapshots in SQLite (`stock_fundamental_history`, `etf_fundamental_history`).
+
+### 3. Gemini AI Batch Advisory (`src/infra/ai/`)
 * **Enterprise Client (`GeminiClient`)**: Powered by `gemini-2.0-flash` via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
 * **Batch Portfolio Analysis**: Processes the entire target asset wishlist in a single API call, returning strict structured JSON validated through Pydantic (`BatchRebalanceRecommendations`).
 * **Graceful Fallback**: Automatically falls back to the quantitative opportunity matrix if AI quotas are exhausted or credentials are unconfigured.
 
-### 3. Data Providers & Web Scraping (`src/core/providers.py` & `src/infra/justetf/`)
+### 4. Data Providers & Web Scraping (`src/core/providers.py` & `src/infra/justetf/`)
 * **`StockProvider`**: Fetches real-time equity quotations, currency conversions, and fundamental metrics (`StockDetails`) via `yfinance`.
 * **`ETFProvider`**: Combines real-time price feeds with structured composition data extracted by `JustETFClient`, leveraging local TTL-based caching (`etf_cache.json`) to minimize network overhead.
 
-### 4. Cloud SSoT Architecture (`src/infra/gdrive/`)
+### 5. Cloud SSoT Architecture (`src/infra/gdrive/`)
 * **Stateless Local Environment**: The local `data/` directory is ephemeral and strictly ignored by Git (`.gitignore`).
 * **Automated Bidirectional Sync**: At application startup, all required operational files (`finances.db`, `portfolio.json`, `portfolio_targets.json`, `etf_cache.json`, `system_instruction.json`) are automatically pulled from Google Drive.
 * **Automated Persistence**: Any command generating or modifying data immediately pushes the updated state back to Google Drive upon process completion.
@@ -127,7 +132,7 @@ ETF_WEIGHT_ALLOCATION=0.40
 
 The application is controlled via a rich Typer CLI interface defined in `main.py` and GNU Make shortcuts. All operational workflows are accessible directly through the main entrypoint.
 
-### Portfolio Monitoring & =pportunity Execution
+### Portfolio Monitoring & Opportunity Execution
 
 ```bash
 # Full Rebalancing Opportunity Pipeline (Quantitative + Gemini AI Batch Analysis)
@@ -148,8 +153,9 @@ python main.py save-snapshot
 # Analyze consolidated portfolio sector and country exposure across active ETFs
 python main.py analyze-exposure
 
-# Qualitative CLI asset metric evaluator
+# Execute independent fundamental health & quality tier evaluation (all or specific ticker)[cite: 32]
 python main.py analyze-quality
+python main.py analyze-quality AAPL
 ```
 
 ### Asset Inspection & Data Sync
@@ -182,13 +188,14 @@ The application relies on SQLite for structured relational persistence, enforcin
 Database tables and indexes are managed automatically via `src/infra/database/schema.py`. Upon establishing a database connection context (`get_db_context`), the system executes `initialize_database(conn)` to ensure all required relational structures exist:
 
 * **`assets`**: Stores active portfolio equities and ETFs, ISINs, tickers, quantities, and average buy prices.
-* **`portfolio_snapshots`**: Persists timestamped portfolio valuations, total returns, and asset weight distributions.
-* **`stock_fundamental_history`**: Records historical equity metrics (P/E ratios, market cap, sector, industry, margins).
-* **`etf_fundamental_history`**: Stores TER, top holdings, sector allocations, and geographic distributions in structured JSON columns.
+* **`snapshots` & `asset_snapshots`**: Persists timestamped portfolio valuations, total returns, and asset weight distributions.
+* **`stock_fundamental_history`**: Records historical equity metrics, fundamental scores, quality tiers, and valuation diagnostics.
+* **`etf_fundamental_history`**: Stores TER, top holdings, sector allocations, geographic distributions, and quality tiers in structured JSON columns[cite: 30].
+* **`opportunities` & `opportunity_asset_metrics`**: Persists multi-factor rebalancing runs and AI-driven recommendations[cite: 30].
 
 ### Migrating Legacy JSON Storage to SQLite
 
-When upgrading from legacy file-based setups (`portfolio.json` and `portfolio_targets.json`), execute the standalone migration utility to populate `finances.db`:
+When upgrading from legacy file-based setups (`portfolio.json` and `portfolio_targets.json`), execute the standalone migration utility to populate `finances.db`[cite: 30]:
 
 ```bash
 # Run migration script to transform legacy JSON files into relational SQLite records
