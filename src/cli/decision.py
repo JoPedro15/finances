@@ -868,6 +868,13 @@ def recommend_rebalance(
         ),
     ] = DATA_DIR
     / "portfolio.json",
+    db_path: Annotated[
+        Path,
+        typer.Option(
+            "--db-path",
+            help="Path to SQLite database file.",
+        ),
+    ] = DEFAULT_DB_PATH,
     skip_ai: Annotated[
         bool,
         typer.Option(
@@ -894,7 +901,7 @@ def recommend_rebalance(
 
     stock_provider: StockProvider = StockProvider()
     etf_provider: ETFProvider = ETFProvider()
-    decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(DEFAULT_DB_PATH)
+    decision_repo: SqliteDecisionRepository = SqliteDecisionRepository(db_path)
 
     with console.status("[bold cyan]Fetching market data and evaluating portfolio..."):
         current_alloc_map: dict[str, float]
@@ -975,27 +982,19 @@ def recommend_rebalance(
     )
 
     if "pytest" not in sys.modules:
-        export_outputs(
-            ranked_scores=ranked_scores,
-            asset_dict_map=asset_dict_map,
-            recommendations_map=recommendations_map,
-            total_val=total_val,
-            has_ai=has_ai_active,
-        )
-
-    try:
-        timestamp_key: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        decision_repo.save_decision_report(
-            timestamp=timestamp_key,
-            total_value_eur=total_val,
-            has_ai=has_ai_active,
-            ranked_scores=ranked_scores,
-            asset_dict_map=asset_dict_map,
-            recommendations_map=recommendations_map,
-        )
-        logger.info("Successfully persisted decision report into SQLite database.")
-    except Exception as err:
-        logger.error(f"Failed to save decision report to database: {err}")
+        try:
+            timestamp_key: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            decision_repo.save_decision_report(
+                timestamp=timestamp_key,
+                total_value_eur=total_val,
+                has_ai=has_ai_active,
+                ranked_scores=ranked_scores,
+                asset_dict_map=asset_dict_map,
+                recommendations_map=recommendations_map,
+            )
+            logger.info("Successfully persisted decision report into SQLite database.")
+        except Exception as err:
+            logger.error(f"Failed to save decision report to database: {err}")
 
 
 if __name__ == "__main__":
