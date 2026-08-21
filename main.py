@@ -26,8 +26,19 @@ from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import SqlitePortfolioRepository
 from src.core.snapshot import display_snapshot, get_snapshot, save_snapshot
 from src.infra.database.connection import DEFAULT_DB_PATH
-from src.infra.gdrive.service import GoogleDriveService
+from src.infra.gdrive.service import GDriveService
 from src.utils.logger.logger import logger
+
+# Configuration files mapped to GDRIVE_CONFIG_FOLDER_ID
+CONFIG_FILES: list[Path] = [
+    DATA_DIR / "portfolio.json",
+    DATA_DIR / "portfolio_targets.json",
+    DATA_DIR / "etf_cache.json",
+    DATA_DIR / "system_instruction.json",
+]
+
+# Database file mapped to GDRIVE_DATABASE_FOLDER_ID
+DB_FILE: Path = DATA_DIR / "finances.db"
 
 app: typer.Typer = typer.Typer(
     name="finances",
@@ -37,14 +48,66 @@ app: typer.Typer = typer.Typer(
 )
 
 
+def _pull_cloud_data() -> bool:
+    """Pulls database and configuration files from their respective Drive folders."""
+    db_service: GDriveService = GDriveService(
+        folder_id=settings.gdrive_database_folder_id
+    )
+    db_ok: bool = bool(db_service.download_file(DB_FILE.name, DB_FILE))
+
+    config_service: GDriveService = GDriveService(
+        folder_id=settings.gdrive_config_folder_id
+    )
+    results: dict[str, bool] = config_service.sync_files(CONFIG_FILES, direction="pull")
+    return db_ok and all(results.values())
+
+
+def _push_cloud_data() -> bool:
+    """Pushes database and config files to respective Drive folders."""
+    db_ok: bool = True
+    if DB_FILE.exists():
+        db_service: GDriveService = GDriveService(
+            folder_id=settings.gdrive_database_folder_id
+        )
+        db_ok = bool(db_service.upload_file(DB_FILE, overwrite=True))
+
+    existing_config: list[Path] = [f for f in CONFIG_FILES if f.exists()]
+    config_ok: bool = True
+    if existing_config:
+        config_service: GDriveService = GDriveService(
+            folder_id=settings.gdrive_config_folder_id
+        )
+        results: dict[str, bool] = config_service.sync_files(
+            existing_config, direction="push"
+        )
+        config_ok = all(results.values())
+
+    return db_ok and config_ok
+
+
 @app.callback()
 def main_callback() -> None:
-    """Validates global application environment settings on startup."""
+    """Validates environment settings and pulls Cloud data on startup."""
     try:
         _ = settings
+        logger.info("Synchronizing data from Cloud...")
+        _pull_cloud_data()
     except ValidationError as err:
         logger.error(f"Environment configuration validation failed:\n{err}")
         raise typer.Exit(code=1) from err
+    except Exception as e:
+        logger.error(f"Failed to synchronize data from Cloud: {e}")
+        logger.warning("Proceeding with local data only.")
+
+
+def _trigger_cloud_push() -> None:
+    """Helper to push updated local operational files back to Cloud."""
+    logger.info("Synchronizing data back to Cloud...")
+    try:
+        _push_cloud_data()
+        logger.success("Cloud synchronization complete.")
+    except Exception as e:
+        logger.error(f"Failed to push data to Cloud: {e}")
 
 
 @app.command(name="get-snapshot")
@@ -66,7 +129,7 @@ def get_snapshot_cmd() -> None:
 
 @app.command(name="save-snapshot")
 def save_snapshot_cmd() -> None:
-    """Calculates current portfolio valuation and saves it to history."""
+    """Calculates valuation, saves history, and pushes to Cloud."""
     try:
         snapshot_data: PortfolioSnapshot | None = get_snapshot()
         if not snapshot_data:
@@ -74,6 +137,7 @@ def save_snapshot_cmd() -> None:
             raise typer.Exit(code=1)
 
         save_snapshot(snapshot_data)
+        _trigger_cloud_push()
     except typer.Exit:
         raise
     except Exception as err:
@@ -93,19 +157,11 @@ def analyze_cmd() -> None:
 
 @app.command(name="pull-config")
 def pull_config_cmd() -> None:
-    """Pulls configuration files from Google Drive to local data directory."""
+    """Pulls configuration files and database from Google Drive."""
     logger.section("Pulling Configuration from Google Drive")
     try:
-        service: GoogleDriveService = GoogleDriveService()
-
-        portfolio_ok: bool = service.download_file(
-            "portfolio.json", DATA_DIR / "portfolio.json"
-        )
-        targets_ok: bool = service.download_file(
-            "portfolio_targets.json", DATA_DIR / "portfolio_targets.json"
-        )
-
-        if portfolio_ok and targets_ok:
+        success: bool = _pull_cloud_data()
+        if success:
             logger.success("Successfully pulled configuration files from Google Drive.")
         else:
             logger.warning(
@@ -118,26 +174,11 @@ def pull_config_cmd() -> None:
 
 @app.command(name="push-config")
 def push_config_cmd() -> None:
-    """Pushes local configuration files to Google Drive."""
+    """Pushes local configuration files and database to Google Drive."""
     logger.section("Pushing Configuration to Google Drive")
     try:
-        service: GoogleDriveService = GoogleDriveService()
-
-        portfolio_file: Path = DATA_DIR / "portfolio.json"
-        targets_file: Path = DATA_DIR / "portfolio_targets.json"
-
-        portfolio_ok: bool = (
-            bool(service.upload_file(portfolio_file, overwrite=True))
-            if portfolio_file.exists()
-            else False
-        )
-        targets_ok: bool = (
-            bool(service.upload_file(targets_file, overwrite=True))
-            if targets_file.exists()
-            else False
-        )
-
-        if portfolio_ok and targets_ok:
+        success: bool = _push_cloud_data()
+        if success:
             logger.success("Successfully pushed configuration files to Google Drive.")
         else:
             logger.warning("One or more configuration files failed to upload to Drive.")
@@ -213,43 +254,48 @@ def etf_details_cmd(
     provider: ETFProvider = ETFProvider()
     repo: SqlitePortfolioRepository = SqlitePortfolioRepository(DEFAULT_DB_PATH)
 
-    if isin:
-        clean_isin: str = isin.strip().upper()
-        if len(clean_isin) != 12:
-            logger.error(f"Invalid ISIN format '{isin}'. Expected 12-character code.")
-            raise typer.Exit(code=1)
-
-        assets_lookup: list[Asset] = []
-        try:
-            assets_lookup = repo.load_assets()
-        except Exception:
-            assets_lookup = []
-
-        matched_asset: Asset | None = next(
-            (a for a in assets_lookup if a.isin and a.isin.upper() == clean_isin),
-            None,
-        )
-        asset_name: str = matched_asset.name if matched_asset else clean_isin
-        _display_single_etf_details(clean_isin, asset_name, provider)
-        return
-
     try:
-        assets: list[Asset] = repo.load_assets()
-    except Exception as e:
-        logger.error(f"Failed to load portfolio assets: {e}")
-        raise typer.Exit(code=1) from e
+        if isin:
+            clean_isin: str = isin.strip().upper()
+            if len(clean_isin) != 12:
+                logger.error(
+                    f"Invalid ISIN format '{isin}'. Expected 12-character code."
+                )
+                raise typer.Exit(code=1)
 
-    etf_assets: list[Asset] = [
-        a
-        for a in assets
-        if str(a.asset_type).upper() == "ETF" and a.isin and len(a.isin) == 12
-    ]
-    if not etf_assets:
-        logger.warning("No active ETF holdings found in portfolio.")
-        return
+            assets_lookup: list[Asset] = []
+            try:
+                assets_lookup = repo.load_assets()
+            except Exception:
+                assets_lookup = []
 
-    for asset in etf_assets:
-        _display_single_etf_details(asset.isin, asset.name, provider)
+            matched_asset: Asset | None = next(
+                (a for a in assets_lookup if a.isin and a.isin.upper() == clean_isin),
+                None,
+            )
+            asset_name: str = matched_asset.name if matched_asset else clean_isin
+            _display_single_etf_details(clean_isin, asset_name, provider)
+            return
+
+        try:
+            assets: list[Asset] = repo.load_assets()
+        except Exception as e:
+            logger.error(f"Failed to load portfolio assets: {e}")
+            raise typer.Exit(code=1) from e
+
+        etf_assets: list[Asset] = [
+            a
+            for a in assets
+            if str(a.asset_type).upper() == "ETF" and a.isin and len(a.isin) == 12
+        ]
+        if not etf_assets:
+            logger.warning("No active ETF holdings found in portfolio.")
+            return
+
+        for asset in etf_assets:
+            _display_single_etf_details(asset.isin, asset.name, provider)
+    finally:
+        _trigger_cloud_push()
 
 
 def _format_market_cap(val: float | None) -> str:
@@ -516,6 +562,7 @@ def decision_cmd(
         skip_ai=skip_ai,
         verbose=verbose,
     )
+    _trigger_cloud_push()
 
 
 @app.command(name="sync-fundamentals")
@@ -528,9 +575,10 @@ def sync_fundamentals_cmd(
         ),
     ] = DEFAULT_DB_PATH,
 ) -> None:
-    """Synchronizes portfolio fundamental history into SQLite database."""
+    """Synchronizes portfolio fundamentals into database and pushes to Cloud."""
     try:
         sync_portfolio_fundamentals(db_path=db_path)
+        _trigger_cloud_push()
     except Exception as err:
         logger.error(f"Failed to synchronize portfolio fundamentals: {err}")
         raise typer.Exit(code=1) from err

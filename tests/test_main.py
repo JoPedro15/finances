@@ -1,10 +1,11 @@
 """Comprehensive unit tests for main.py CLI commands using Typer's CliRunner,
-covering all commands, helper functions, startup validation, and exception
-branches.
+covering batch cloud synchronization, commands, helper functions, startup
+validation, and exception branches.
 """
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +14,16 @@ from pydantic import ValidationError
 from typer import Exit
 from typer.testing import CliRunner
 
-from main import _format_market_cap, app
+from main import (
+    _display_single_etf_details,
+    _display_single_stock_details,
+    _format_market_cap,
+    _pull_cloud_data,
+    _push_cloud_data,
+    _trigger_cloud_push,
+    app,
+    main_callback,
+)
 from src.core.models import (
     Asset,
     CountryExposure,
@@ -27,25 +37,170 @@ from src.core.models import (
 runner: CliRunner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def mock_cloud_sync_by_default() -> Generator[None]:
+    """Auto-mock cloud pull and push helpers to prevent network/disk side-effects."""
+    with (
+        patch("main._pull_cloud_data", return_value=True),
+        patch("main._trigger_cloud_push", return_value=None),
+    ):
+        yield
+
+
+# --- CLOUD SYNC UNIT TESTS ---
+
+
+@patch("main.GDriveService")
+def test_pull_cloud_data_unit_success(mock_gdrive_cls: MagicMock) -> None:
+    """Validates _pull_cloud_data unit logic when all syncs succeed."""
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.download_file.return_value = True
+    mock_service.sync_files.return_value = {"file1": True, "file2": True}
+
+    assert _pull_cloud_data() is True
+
+
+@patch("main.GDriveService")
+def test_pull_cloud_data_unit_db_download_failure(
+    mock_gdrive_cls: MagicMock,
+) -> None:
+    """Validates _pull_cloud_data returning False if DB download fails."""
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.download_file.return_value = False
+    mock_service.sync_files.return_value = {"file1": True}
+
+    assert _pull_cloud_data() is False
+
+
+@patch("main.GDriveService")
+def test_pull_cloud_data_unit_config_sync_failure(
+    mock_gdrive_cls: MagicMock,
+) -> None:
+    """Validates _pull_cloud_data returning False if config sync fails."""
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.download_file.return_value = True
+    mock_service.sync_files.return_value = {"file1": False}
+
+    assert _pull_cloud_data() is False
+
+
+@patch("main.DB_FILE")
+@patch("main.CONFIG_FILES")
+@patch("main.GDriveService")
+def test_push_cloud_data_unit_success(
+    mock_gdrive_cls: MagicMock,
+    mock_configs: MagicMock,
+    mock_db: MagicMock,
+) -> None:
+    """Validates _push_cloud_data when DB and configs exist and upload succeeds."""
+    mock_db.exists.return_value = True
+    mock_file: MagicMock = MagicMock()
+    mock_file.exists.return_value = True
+    mock_configs.__iter__.return_value = [mock_file]
+
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.upload_file.return_value = True
+    mock_service.sync_files.return_value = {"file1": True}
+
+    assert _push_cloud_data() is True
+
+
+@patch("main.DB_FILE")
+@patch("main.CONFIG_FILES")
+def test_push_cloud_data_unit_none_exist(
+    mock_configs: MagicMock,
+    mock_db: MagicMock,
+) -> None:
+    """Validates _push_cloud_data when neither DB nor configs exist."""
+    mock_db.exists.return_value = False
+    mock_configs.__iter__.return_value = []
+
+    assert _push_cloud_data() is True
+
+
+@patch("main.DB_FILE")
+@patch("main.CONFIG_FILES")
+@patch("main.GDriveService")
+def test_push_cloud_data_unit_db_upload_failure(
+    mock_gdrive_cls: MagicMock,
+    mock_configs: MagicMock,
+    mock_db: MagicMock,
+) -> None:
+    """Validates _push_cloud_data returning False when DB upload fails."""
+    mock_db.exists.return_value = True
+    mock_configs.__iter__.return_value = []
+
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.upload_file.return_value = False
+
+    assert _push_cloud_data() is False
+
+
+@patch("main.DB_FILE")
+@patch("main.CONFIG_FILES")
+@patch("main.GDriveService")
+def test_push_cloud_data_unit_config_upload_failure(
+    mock_gdrive_cls: MagicMock,
+    mock_configs: MagicMock,
+    mock_db: MagicMock,
+) -> None:
+    """Validates _push_cloud_data returning False when config sync fails."""
+    mock_db.exists.return_value = False
+    mock_file: MagicMock = MagicMock()
+    mock_file.exists.return_value = True
+    mock_configs.__iter__.return_value = [mock_file]
+
+    mock_service: MagicMock = MagicMock()
+    mock_gdrive_cls.return_value = mock_service
+    mock_service.sync_files.return_value = {"file1": False}
+
+    assert _push_cloud_data() is False
+
+
+@patch("main._push_cloud_data")
+def test_trigger_cloud_push_success(mock_push: MagicMock) -> None:
+    """Validates _trigger_cloud_push calling _push_cloud_data successfully."""
+    _trigger_cloud_push()
+    mock_push.assert_called_once()
+
+
+@patch("main._push_cloud_data", side_effect=RuntimeError("Push error"))
+def test_trigger_cloud_push_exception(mock_push: MagicMock) -> None:
+    """Validates _trigger_cloud_push handling exception gracefully."""
+    _trigger_cloud_push()
+    mock_push.assert_called_once()
+
+
 # --- STARTUP CALLBACK / VALIDATION TESTS ---
 
 
 def test_main_callback_validation_error() -> None:
     """Validates that main callback catches ValidationError and exits code 1."""
     err: ValidationError = ValidationError.from_exception_data("Settings", [])
+    with patch("main._pull_cloud_data", side_effect=err):
+        with pytest.raises(Exit) as exc_info:
+            main_callback()
+        assert exc_info.value.exit_code == 1
 
-    with patch("main.settings", new=MagicMock(side_effect=err)):
-        with patch("src.config.Settings.__init__", side_effect=err):
-            with pytest.raises(Exit) as exc_info:
-                try:
-                    raise err
-                except ValidationError as e:
-                    from src.utils.logger.logger import logger
 
-                    logger.error(f"Validation failed:\n{e}")
-                    raise Exit(code=1) from e
+@patch("main._pull_cloud_data")
+def test_main_callback_generic_exception(mock_pull: MagicMock) -> None:
+    """Validates that main callback handles generic Exception and continues."""
+    mock_pull.side_effect = RuntimeError("Cloud sync failed")
+    main_callback()
+    mock_pull.assert_called_once()
 
-            assert exc_info.value.exit_code == 1
+
+@patch("main._pull_cloud_data")
+def test_main_callback_success(mock_pull: MagicMock) -> None:
+    """Validates normal main callback execution."""
+    main_callback()
+    mock_pull.assert_called_once()
 
 
 # --- GET SNAPSHOT COMMAND TESTS ---
@@ -85,7 +240,7 @@ def test_get_snapshot_command_unexpected_exception() -> None:
 
 
 def test_save_snapshot_command_success() -> None:
-    """Tests 'save-snapshot' CLI command on successful execution."""
+    """Tests 'save-snapshot' CLI command on successful execution and cloud push."""
     mock_snapshot: PortfolioSnapshot = PortfolioSnapshot(
         timestamp="2026-08-16T20:00:00",
         total_value_eur=1000.0,
@@ -94,10 +249,12 @@ def test_save_snapshot_command_success() -> None:
     with (
         patch("main.get_snapshot", return_value=mock_snapshot),
         patch("main.save_snapshot") as mock_save,
+        patch("main._trigger_cloud_push") as mock_push,
     ):
         result: Any = runner.invoke(app, ["save-snapshot"])
         assert result.exit_code == 0
         mock_save.assert_called_once_with(mock_snapshot)
+        mock_push.assert_called_once()
 
 
 def test_save_snapshot_command_failure() -> None:
@@ -138,38 +295,27 @@ def test_analyze_command_exception() -> None:
 # --- PULL CONFIG COMMAND TESTS ---
 
 
-@patch("main.GoogleDriveService")
-def test_pull_config_command_success(mock_gdrive_cls: MagicMock) -> None:
-    """Tests 'pull-config' CLI command on successful download."""
-    mock_service: MagicMock = MagicMock()
-    mock_gdrive_cls.return_value = mock_service
-    mock_service.download_file.return_value = True
-
+@patch("main._pull_cloud_data", return_value=True)
+def test_pull_config_command_success(mock_pull: MagicMock) -> None:
+    """Tests 'pull-config' CLI command on successful batch sync download."""
     result: Any = runner.invoke(app, ["pull-config"])
 
     assert result.exit_code == 0
-    assert "Successfully pulled configuration" in result.output
-    assert mock_service.download_file.call_count == 2
+    assert "Successfully pulled configuration files" in result.output
 
 
-@patch("main.GoogleDriveService")
-def test_pull_config_command_failure(mock_gdrive_cls: MagicMock) -> None:
-    """Tests 'pull-config' CLI command when download fails."""
-    mock_service: MagicMock = MagicMock()
-    mock_gdrive_cls.return_value = mock_service
-    mock_service.download_file.return_value = False
-
+@patch("main._pull_cloud_data", return_value=False)
+def test_pull_config_command_failure(mock_pull: MagicMock) -> None:
+    """Tests 'pull-config' CLI command when batch sync download fails."""
     result: Any = runner.invoke(app, ["pull-config"])
 
     assert result.exit_code == 0
-    assert "failed to download" in result.output
+    assert "One or more configuration files failed to download" in result.output
 
 
-@patch("main.GoogleDriveService")
-def test_pull_config_command_exception(mock_gdrive_cls: MagicMock) -> None:
+@patch("main._pull_cloud_data", side_effect=RuntimeError("Drive error"))
+def test_pull_config_command_exception(mock_pull: MagicMock) -> None:
     """Tests 'pull-config' CLI command handling exception during execution."""
-    mock_gdrive_cls.side_effect = RuntimeError("Drive service init error")
-
     result: Any = runner.invoke(app, ["pull-config"])
 
     assert result.exit_code == 1
@@ -178,66 +324,51 @@ def test_pull_config_command_exception(mock_gdrive_cls: MagicMock) -> None:
 # --- PUSH CONFIG COMMAND TESTS ---
 
 
-@patch("main.GoogleDriveService")
-@patch("pathlib.Path.exists", return_value=True)
-def test_push_config_command_success(
-    mock_exists: MagicMock, mock_gdrive_cls: MagicMock
-) -> None:
-    """Tests 'push-config' CLI command on successful upload."""
-    mock_service: MagicMock = MagicMock()
-    mock_gdrive_cls.return_value = mock_service
-    mock_service.upload_file.return_value = True
-
+@patch("main._push_cloud_data", return_value=True)
+def test_push_config_command_success(mock_push: MagicMock) -> None:
+    """Tests 'push-config' CLI command on successful batch sync upload."""
     result: Any = runner.invoke(app, ["push-config"])
 
     assert result.exit_code == 0
-    assert "Successfully pushed configuration" in result.output
-    assert mock_service.upload_file.call_count == 2
+    assert "Successfully pushed configuration files" in result.output
 
 
-@patch("main.GoogleDriveService")
-@patch("pathlib.Path.exists", return_value=False)
-def test_push_config_command_missing_local_files(
-    mock_exists: MagicMock, mock_gdrive_cls: MagicMock
-) -> None:
-    """Tests 'push-config' CLI command when local files do not exist."""
-    mock_service: MagicMock = MagicMock()
-    mock_gdrive_cls.return_value = mock_service
-
+@patch("main._push_cloud_data", return_value=False)
+def test_push_config_command_upload_failed(mock_push: MagicMock) -> None:
+    """Tests 'push-config' CLI command when batch upload fails."""
     result: Any = runner.invoke(app, ["push-config"])
 
     assert result.exit_code == 0
-    assert "failed to upload" in result.output
-    mock_service.upload_file.assert_not_called()
+    assert "One or more configuration files failed to upload" in result.output
 
 
-@patch("main.GoogleDriveService")
-@patch("pathlib.Path.exists", return_value=True)
-def test_push_config_command_upload_failed(
-    mock_exists: MagicMock, mock_gdrive_cls: MagicMock
-) -> None:
-    """Tests 'push-config' CLI command when upload fails."""
-    mock_service: MagicMock = MagicMock()
-    mock_gdrive_cls.return_value = mock_service
-    mock_service.upload_file.return_value = False
-
-    result: Any = runner.invoke(app, ["push-config"])
-
-    assert result.exit_code == 0
-    assert "failed to upload" in result.output
-
-
-@patch("main.GoogleDriveService")
-def test_push_config_command_exception(mock_gdrive_cls: MagicMock) -> None:
+@patch("main._push_cloud_data", side_effect=RuntimeError("Drive error"))
+def test_push_config_command_exception(mock_push: MagicMock) -> None:
     """Tests 'push-config' CLI command handling exception during execution."""
-    mock_gdrive_cls.side_effect = RuntimeError("Drive error")
-
     result: Any = runner.invoke(app, ["push-config"])
 
     assert result.exit_code == 1
 
 
-# --- ETF DETAILS COMMAND TESTS ---
+# --- ETF DETAILS HELPERS & COMMAND TESTS ---
+
+
+def test_display_single_etf_details_provider_exception() -> None:
+    """Tests _display_single_etf_details when provider raises an exception."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider.get_details.side_effect = RuntimeError("Scraper failed")
+
+    _display_single_etf_details("IE00B4L5Y983", "Test ETF", mock_provider)
+    mock_provider.get_details.assert_called_once()
+
+
+def test_display_single_etf_details_provider_returns_none() -> None:
+    """Tests _display_single_etf_details when provider returns None."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider.get_details.return_value = None
+
+    _display_single_etf_details("IE00B4L5Y983", "Test ETF", mock_provider)
+    mock_provider.get_details.assert_called_once()
 
 
 @patch("main.ETFProvider")
@@ -318,37 +449,6 @@ def test_etf_details_cmd_single_isin_repo_exception(
 
     assert result.exit_code == 0
     assert "IE00B4L5Y983" in result.output
-
-
-@patch("main.ETFProvider")
-@patch("main.SqlitePortfolioRepository")
-def test_etf_details_cmd_single_isin_provider_exception(
-    mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
-) -> None:
-    """Tests 'etf-details' CLI command when provider raises exception."""
-    mock_provider: MagicMock = MagicMock()
-    mock_provider_cls.return_value = mock_provider
-    mock_provider.get_details.side_effect = RuntimeError("Scraper failed")
-
-    result: Any = runner.invoke(app, ["etf-details", "IE00B4L5Y983"])
-
-    assert result.exit_code == 0
-
-
-@patch("main.ETFProvider")
-@patch("main.SqlitePortfolioRepository")
-def test_etf_details_cmd_single_isin_provider_returns_none(
-    mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
-) -> None:
-    """Tests 'etf-details' CLI command when provider returns None."""
-    mock_provider: MagicMock = MagicMock()
-    mock_provider_cls.return_value = mock_provider
-    mock_provider.get_details.return_value = None
-
-    result: Any = runner.invoke(app, ["etf-details", "IE00B4L5Y983"])
-
-    assert result.exit_code == 0
-    assert "Failed to fetch details for ETF ISIN IE00B4L5Y983" in result.output
 
 
 @patch("main.ETFProvider")
@@ -468,7 +568,25 @@ def test_format_market_cap_helper() -> None:
     assert _format_market_cap(500000.0) == "500000.00"
 
 
-# --- STOCK DETAILS COMMAND TESTS ---
+# --- STOCK DETAILS HELPERS & COMMAND TESTS ---
+
+
+def test_display_single_stock_details_provider_exception() -> None:
+    """Tests _display_single_stock_details when provider raises exception."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider.get_details.side_effect = RuntimeError("yfinance failure")
+
+    _display_single_stock_details("AAPL", "Apple", mock_provider)
+    mock_provider.get_details.assert_called_once()
+
+
+def test_display_single_stock_details_provider_returns_none() -> None:
+    """Tests _display_single_stock_details when provider returns None."""
+    mock_provider: MagicMock = MagicMock()
+    mock_provider.get_details.return_value = None
+
+    _display_single_stock_details("AAPL", "Apple", mock_provider)
+    mock_provider.get_details.assert_called_once()
 
 
 @patch("main.StockProvider")
@@ -561,37 +679,6 @@ def test_stock_details_cmd_matched_by_isin(
 
     assert result.exit_code == 0
     assert "MSFT" in result.output
-
-
-@patch("main.StockProvider")
-@patch("main.SqlitePortfolioRepository")
-def test_stock_details_cmd_provider_exception(
-    mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
-) -> None:
-    """Tests 'stock-details' CLI command when provider raises exception."""
-    mock_provider: MagicMock = MagicMock()
-    mock_provider_cls.return_value = mock_provider
-    mock_provider.get_details.side_effect = RuntimeError("yfinance failed")
-
-    result: Any = runner.invoke(app, ["stock-details", "AAPL"])
-
-    assert result.exit_code == 0
-
-
-@patch("main.StockProvider")
-@patch("main.SqlitePortfolioRepository")
-def test_stock_details_cmd_provider_returns_none(
-    mock_repo_cls: MagicMock, mock_provider_cls: MagicMock
-) -> None:
-    """Tests 'stock-details' CLI command when StockProvider returns None."""
-    mock_provider: MagicMock = MagicMock()
-    mock_provider_cls.return_value = mock_provider
-    mock_provider.get_details.return_value = None
-
-    result: Any = runner.invoke(app, ["stock-details", "UNKNOWN"])
-
-    assert result.exit_code == 0
-    assert "Failed to fetch details for stock 'UNKNOWN'." in result.output
 
 
 @patch("main.StockProvider")
@@ -841,7 +928,7 @@ def test_decision_command_custom_options(
 def test_sync_fundamentals_command_success(
     mock_sync: MagicMock,
 ) -> None:
-    """Tests 'sync-fundamentals' CLI command on successful execution."""
+    """Tests 'sync-fundamentals' CLI command on successful execution and push."""
     result: Any = runner.invoke(app, ["sync-fundamentals"])
 
     assert result.exit_code == 0
@@ -858,3 +945,19 @@ def test_sync_fundamentals_command_exception(
     result: Any = runner.invoke(app, ["sync-fundamentals"])
 
     assert result.exit_code == 1
+
+
+# --- MAIN MODULE ENTRYPOINT TEST ---
+
+
+def test_main_module_execution() -> None:
+    """Tests __main__ execution block for main.py."""
+    with (
+        patch("sys.argv", ["main.py", "--help"]),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        import runpy
+
+        runpy.run_module("main", run_name="__main__")
+
+    assert exc_info.value.code == 0

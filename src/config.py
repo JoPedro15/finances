@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     gdrive_config_folder_id: str | None = Field(
         default=None, alias="GDRIVE_CONFIG_FOLDER_ID"
     )
+    gdrive_database_folder_id: str | None = Field(
+        default=None, alias="GDRIVE_DATABASE_FOLDER_ID"
+    )
     gdrive_snapshot_folder_id: str | None = Field(
         default=None, alias="GDRIVE_SNAPSHOT_FOLDER_ID"
     )
@@ -101,6 +104,7 @@ settings: Settings = Settings()
 CREDS_PATH_GDRIVE: Path = settings.gdrive_client_secret_file
 TOKEN_PATH_GDRIVE: Path = settings.gdrive_token_file
 GDRIVE_CONFIG_FOLDER_ID: str | None = settings.gdrive_config_folder_id
+GDRIVE_DATABASE_FOLDER_ID: str | None = settings.gdrive_database_folder_id
 GDRIVE_SNAPSHOT_FOLDER_ID: str | None = settings.gdrive_snapshot_folder_id
 GDRIVE_REPORTS_FOLDER_ID: str | None = settings.gdrive_reports_folder_id
 
