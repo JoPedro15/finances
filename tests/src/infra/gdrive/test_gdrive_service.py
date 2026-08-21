@@ -1,6 +1,6 @@
 """Unit tests for src/infra/gdrive/service.py covering Google Drive uploads,
-downloads, overwriting, file existence checks, directory listing, and error
-handling.
+downloads, batch synchronization, overwriting, file existence checks,
+directory listing, and error handling.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ def test_init_raises_file_not_found_when_creds_missing(tmp_path: Path) -> None:
     """Validates GDriveService init fails if credentials file is missing."""
     missing_creds: Path = tmp_path / "credentials.json"
 
-    with pytest.raises(FileNotFoundError, match="Missing Google credentials.json:"):
+    with pytest.raises(FileNotFoundError, match="Missing Google credentials file:"):
         GDriveService(
             credentials_path=str(missing_creds),
             token_path=str(tmp_path / "token.json"),
@@ -59,7 +59,7 @@ def test_get_service_build_exception(
 def test_operations_when_service_is_none(
     mock_get_service: MagicMock, tmp_path: Path
 ) -> None:
-    """Validates API methods return default empty/False when service is None."""
+    """Validates API methods return default empty/None when service is None."""
     creds_file: Path = tmp_path / "credentials.json"
     creds_file.touch()
 
@@ -68,7 +68,7 @@ def test_operations_when_service_is_none(
 
     assert service.file_exists("test.db") is False
     assert service.list_files() == []
-    assert service.upload_file(creds_file) is False
+    assert service.upload_file(creds_file) is None
     assert service.download_file("test.db", tmp_path / "out.db") is False
 
 
@@ -146,7 +146,7 @@ def test_upload_file_new_and_missing(
     service: GDriveService = GDriveService(credentials_path=str(creds_file))
 
     # 1. Non-existent local file
-    assert service.upload_file(tmp_path / "missing.txt") is False
+    assert service.upload_file(tmp_path / "missing.txt") is None
 
     # 2. Upload new local file (overwrite=False)
     sample_file: Path = tmp_path / "sample.txt"
@@ -222,7 +222,7 @@ def test_upload_file_api_exception(
     mock_files.create.side_effect = Exception("API Upload Error")
 
     service: GDriveService = GDriveService(credentials_path=str(creds_file))
-    assert service.upload_file(sample_file) is False
+    assert service.upload_file(sample_file) is None
 
 
 @patch("src.infra.gdrive.service.MediaIoBaseDownload")
@@ -311,32 +311,46 @@ def test_download_file_downloader_exception(
     assert service.download_file("data.db", dest_path) is False
 
 
+@patch("src.infra.gdrive.service.GDriveService.download_file")
+def test_sync_files_pull_success(mock_download: MagicMock, tmp_path: Path) -> None:
+    """Validates sync_files in 'pull' direction calls download_file for each path."""
+    creds_file: Path = tmp_path / "credentials.json"
+    creds_file.touch()
+
+    mock_download.return_value = True
+    service: GDriveService = GDriveService(credentials_path=str(creds_file))
+
+    file_paths: list[Path] = [tmp_path / "portfolio.json", tmp_path / "finances.db"]
+    results: dict[str, bool] = service.sync_files(file_paths, direction="pull")
+
+    assert results["portfolio.json"] is True
+    assert results["finances.db"] is True
+
+
 @patch("src.infra.gdrive.service.GDriveService.upload_file")
-def test_backup_file_convenience_method(mock_upload: MagicMock, tmp_path: Path) -> None:
-    """Validates backup_file delegates to upload_file with overwrite=True."""
+def test_sync_files_push_success(mock_upload: MagicMock, tmp_path: Path) -> None:
+    """Validates sync_files in 'push' direction uploads each file with overwrite."""
     creds_file: Path = tmp_path / "credentials.json"
     creds_file.touch()
 
     mock_upload.return_value = "file_id"
     service: GDriveService = GDriveService(credentials_path=str(creds_file))
 
-    result: bool = service.backup_file(tmp_path / "finances.db", folder_id="f1")
+    file_paths: list[Path] = [tmp_path / "portfolio.json"]
+    results: dict[str, bool] = service.sync_files(file_paths, direction="push")
 
-    assert result is True
-    mock_upload.assert_called_once_with(
-        tmp_path / "finances.db", folder_id="f1", overwrite=True
-    )
+    assert results["portfolio.json"] is True
+    mock_upload.assert_called_once_with(file_paths[0], overwrite=True)
 
 
-@patch("src.infra.gdrive.service.GDriveService.upload_file")
-def test_backup_file_returns_false_on_upload_failure(
-    mock_upload: MagicMock, tmp_path: Path
-) -> None:
-    """Validates backup_file returns False when upload_file fails."""
+def test_sync_files_invalid_direction(tmp_path: Path) -> None:
+    """Validates sync_files handles invalid direction gracefully."""
     creds_file: Path = tmp_path / "credentials.json"
     creds_file.touch()
 
-    mock_upload.return_value = False
     service: GDriveService = GDriveService(credentials_path=str(creds_file))
+    results: dict[str, bool] = service.sync_files(
+        [tmp_path / "portfolio.json"], direction="invalid"
+    )
 
-    assert service.backup_file(tmp_path / "finances.db") is False
+    assert results["portfolio.json"] is False

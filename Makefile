@@ -149,4 +149,4 @@ sync-fundamentals:
 #   -v, --verbose           : Display granular factor score breakdowns (Dip Sc, Cost Sc, Gap Sc)
 #   -o, --output-csv PATH   : CSV export destination path (default: output/decision_output.csv)
 decision:
-	PYTHONPATH=src $(PYTHON) -m cli.decision --skip-ai
+	PYTHONPATH=src $(PYTHON) -m cli.decision
