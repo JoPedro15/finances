@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Base Paths
@@ -90,6 +91,15 @@ class Settings(BaseSettings):
     etf_ter_high_pct: float = Field(default=0.50, alias="ETF_TER_HIGH_PCT")
     etf_alloc_gap_max_pct: float = Field(default=10.0, alias="ETF_ALLOC_GAP_MAX_PCT")
 
+    # Exposure Penalty Settings
+    exposure_sector_penalty_weight: float = Field(
+        default=0.30, alias="EXPOSURE_SECTOR_PENALTY_WEIGHT"
+    )
+    exposure_country_penalty_weight: float = Field(
+        default=0.20, alias="EXPOSURE_COUNTRY_PENALTY_WEIGHT"
+    )
+
+    # Exposure Policy Limits
     max_country_allocation_pct: float = Field(
         default=60.0, alias="MAX_COUNTRY_ALLOCATION_PCT"
     )
@@ -109,6 +119,14 @@ class Settings(BaseSettings):
     smtp_username: str = Field(default="", alias="SMTP_USERNAME")
     smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
     alert_email_recipient: str = Field(default="", alias="ALERT_EMAIL_RECIPIENT")
+
+    @field_validator("smtp_port", mode="before")
+    @classmethod
+    def parse_smtp_port(cls, v: Any) -> int:
+        """Converts empty string to default SMTP port."""
+        if isinstance(v, str) and not v.strip():
+            return 587
+        return int(v) if v is not None else 587
 
 
 settings: Settings = Settings()

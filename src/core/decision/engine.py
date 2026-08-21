@@ -41,10 +41,14 @@ class PortfolioDecisionEngine:
             exposure_engine: Optional exposure engine for
             look-through allocation checks.
         """
-        self._strategies: dict[AssetType, ScoringStrategy] = strategies or {
-            AssetType.ETF: EtfScoringStrategy(),
-            AssetType.STOCK: StockScoringStrategy(),
-        }
+        self._strategies: dict[AssetType, ScoringStrategy] = (
+            strategies
+            if strategies is not None
+            else {
+                AssetType.ETF: EtfScoringStrategy(),
+                AssetType.STOCK: StockScoringStrategy(),
+            }
+        )
         self._exposure_engine: ExposureEngine = exposure_engine or ExposureEngine()
 
     def _validate_required_keys(self, asset: dict[str, Any]) -> None:
@@ -135,10 +139,20 @@ class PortfolioDecisionEngine:
         for asset in assets_data:
             self._validate_required_keys(asset)
 
-        # Calculate company look-through exposures if snapshot is provided
+        # Calculate sector, country, and company look-through exposures
+        # if snapshot is provided
+        sector_percentages: dict[str, float] = {}
+        country_percentages: dict[str, float] = {}
         company_exposures: dict[str, float] = {}
+
         if portfolio_snapshot and portfolio_snapshot.total_value_eur > 0.0:
             company_exposures = self._exposure_engine.calculate_company_exposure(
+                portfolio_snapshot
+            )
+            (
+                sector_percentages,
+                country_percentages,
+            ) = self._exposure_engine.calculate_consolidated_exposure(
                 portfolio_snapshot
             )
 
@@ -189,7 +203,37 @@ class PortfolioDecisionEngine:
                 high_52w=row.get("high_52w") if pd.notna(row.get("high_52w")) else None,
             )
 
-            # Evaluate exposure policy limits using robust resolution helper
+            # Evaluate sector and country exposure penalty factor
+            sector_str: str | None = (
+                str(row["sector"]) if pd.notna(row.get("sector")) else None
+            )
+            country_str: str | None = (
+                str(row["country"]) if pd.notna(row.get("country")) else None
+            )
+
+            penalty_factor: float = self._exposure_engine.calculate_penalty_factor(
+                sector=sector_str,
+                country=country_str,
+                sector_percentages=sector_percentages,
+                country_percentages=country_percentages,
+            )
+
+            if penalty_factor < 1.0:
+                logger.warning(
+                    f"Asset '{symbol_str}' penalized in ranking: "
+                    f"Consolidated sector/country exposure limits breached "
+                    f"(penalty factor: {penalty_factor:.2f})."
+                )
+                score = AssetScore(
+                    symbol=score.symbol,
+                    asset_type=score.asset_type,
+                    dip_score=score.dip_score,
+                    cost_score=score.cost_score,
+                    allocation_score=score.allocation_score,
+                    total_score=max(0.0, round(score.total_score * penalty_factor, 3)),
+                )
+
+            # Evaluate company policy limits using robust resolution helper
             current_company_exposure: float = self._resolve_company_exposure(
                 symbol=symbol_str,
                 asset_name=asset_name_str,

@@ -12,9 +12,7 @@ from rich.console import Console
 from src.cli.decision import recommend_rebalance
 from src.cli.fundamentals import sync_portfolio_fundamentals
 from src.config import DATA_DIR, settings
-from src.core.analysis import (
-    analyze_overall_performance,
-)
+from src.core.analysis import analyze_overall_performance
 from src.core.exposure import ExposureEngine
 from src.core.models import (
     Asset,
@@ -493,6 +491,13 @@ def decision_cmd(
         ),
     ] = DATA_DIR
     / "portfolio.json",
+    db_path: Annotated[
+        Path,
+        typer.Option(
+            "--db-path",
+            help="Path to SQLite database file.",
+        ),
+    ] = DEFAULT_DB_PATH,
     skip_ai: Annotated[
         bool,
         typer.Option(
@@ -513,6 +518,7 @@ def decision_cmd(
     recommend_rebalance(
         targets_file=targets_file,
         portfolio_file=portfolio_file,
+        db_path=db_path,
         skip_ai=skip_ai,
         verbose=verbose,
     )
