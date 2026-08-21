@@ -37,6 +37,6 @@ Thumbs.db
 # Project-specific Data & Logs
 data/history.json
 data/portfolio.json
-data/watchlist.json
 *.db
+!data/finances.db
 *.log
