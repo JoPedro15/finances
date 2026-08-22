@@ -75,8 +75,8 @@ jobs:
 
       - name: Generate Coverage Badge
         run: |
-          python3 -m pip install "setuptools<74" coverage-badge
-          coverage-badge -o coverage.svg -f
+          python3 -m pip install genbadge[coverage]
+          genbadge coverage -i coverage.xml -o coverage.svg
 
       - name: Commit Updated Badge
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
