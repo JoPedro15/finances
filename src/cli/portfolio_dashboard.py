@@ -46,6 +46,14 @@ class PortfolioDashboardPresenter:
             f"{roi_sign}{total_roi_eur:,.2f} € " f"({roi_sign}{total_roi_pct:.2f}%)\n"
         )
 
+        # Aggregate values and percentages by asset class type
+        class_totals: dict[str, float] = {}
+        for summary in overview.asset_summaries:
+            a_type: str = summary.asset_type.upper()
+            class_totals[a_type] = (
+                class_totals.get(a_type, 0.0) + summary.latest_value_eur
+            )
+
         metrics_text: Text = Text()
         metrics_text.append("Total Portfolio Value: ", style="bold")
         metrics_text.append(f"{latest_val:,.2f} €\n", style="bold yellow")
@@ -53,6 +61,15 @@ class PortfolioDashboardPresenter:
         metrics_text.append(f"{total_cost:,.2f} €\n", style="bold blue")
         metrics_text.append("Total Un-realized ROI: ", style="bold")
         metrics_text.append(roi_formatted, style=roi_style)
+
+        metrics_text.append("\n", style="dim")
+        metrics_text.append("Portfolio Composition Split:\n", style="bold underline")
+        for a_type, val in sorted(class_totals.items()):
+            pct: float = (val / latest_val * 100.0) if latest_val > 0 else 0.0
+            metrics_text.append(f"  • {a_type}: ", style="bold")
+            metrics_text.append(f"{val:,.2f} € ({pct:.2f}%)\n", style="bold blue")
+
+        metrics_text.append("\n", style="dim")
         metrics_text.append("Max Historical Drawdown: ", style="bold")
         metrics_text.append(
             f"{overview.max_drawdown_percent:.2f}%\n",
