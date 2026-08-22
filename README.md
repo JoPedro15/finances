@@ -39,7 +39,7 @@ graph TD
 | **Core Domain** | `src/core/`             | Business logic, quotation retrieval, multi-currency exchange, snapshot management, performance analysis, and repository protocols. |
 | **Opportunity Engine** | `src/core/opportunity/` | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) with active exposure constraint penalties.|
 | **Quality Evaluation** | `src/cli/quality.py`    | Independent fundamental health analysis, absolute quality tiers (Tier A/B/C), diagnostic terminal cards, and Markdown report export. |
-| **AI Infrastructure** | `src/infra/ai/`         | Google Gemini API client (`gemini-2.0-flash`) executing robust batch structured JSON portfolio rebalancing analysis with Pydantic validation. |
+| **AI Infrastructure** | `src/infra/ai/`         | Google Gemini API client (`gemini-3.6-flash`) executing robust batch structured JSON portfolio rebalancing analysis with Pydantic validation. |
 | **Database & Schema** | `src/infra/database/`   | SQLite connection management, foreign key enforcement, transactional contexts, and relational schema DDL. |
 | **Cloud SSoT Engine** | `src/infra/gdrive/`     | Google Drive service wrapper handling bidirectional synchronization of `finances.db` and configuration JSON files. |
 | **JustETF Scraper** | `src/infra/justetf/`    | Scraper client extracting ETF composition, sector weights, geographic allocation, and TER directly from JustETF profile pages. |
@@ -61,7 +61,7 @@ Rather than relying purely on opaque LLM predictions, the engine uses explicit q
 * **Automated Reporting & Persistence**: Exports comprehensive evaluation summaries to Markdown (`output/quality_report.md`) and records historical fundamental snapshots in SQLite (`stock_fundamental_history`, `etf_fundamental_history`).
 
 ### 3. Gemini AI Batch Advisory (`src/infra/ai/`)
-* **Enterprise Client (`GeminiClient`)**: Powered by `gemini-2.0-flash` via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
+* **Enterprise Client (`GeminiClient`)**: Powered by `gemini-3.6-flash` via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
 * **Batch Portfolio Analysis**: Processes the entire target asset wishlist in a single API call, returning strict structured JSON validated through Pydantic (`BatchRebalanceRecommendations`).
 * **Graceful Fallback**: Automatically falls back to the quantitative opportunity matrix if AI quotas are exhausted or credentials are unconfigured.
 
@@ -105,7 +105,7 @@ Key configuration parameters in `.env`:
 ```ini
 # Gemini AI Configuration
 GEMINI_API_KEY=your_api_key_here
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-3.6-flash
 
 # Google Drive Folders (Cloud SSoT)
 GDRIVE_CLIENT_SECRET_FILE=secrets/credentials.json

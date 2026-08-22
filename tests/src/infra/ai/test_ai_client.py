@@ -456,7 +456,7 @@ def test_analyze_asset_ticker_resolution_and_custom_options(
     client.analyze_asset(
         {"ticker": "MSFT"},
         valid_portfolio_context,
-        model_name="gemini-2.0-flash",
+        model_name="gemini-3.6-flash",
         temperature=0.2,
     )
 
