@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Gemini AI
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
-    gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field(default="gemini-3.6-flash", alias="GEMINI_MODEL")
 
     # Discord Notifications
     discord_webhook_url: str = Field(default="", alias="DISCORD_WEBHOOK_URL")
