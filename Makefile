@@ -6,36 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config get-snapshot save-snapshot analyze etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality
-
-# ==============================================================================
-# 📖 Help & Documentation
-# ==============================================================================
-# Displays the list of available CLI make commands and descriptions.
-help:
-	@echo "Available commands:"
-	@echo "  --- Setup, Maintenance & Quality ---"
-	@echo "  make install          - Installs project and dev dependencies."
-	@echo "  make format           - Formats code automatically (black) and fixes lint issues (ruff)."
-	@echo "  make lint             - Runs formatter check (black), linter (ruff) and type checker (mypy)."
-	@echo "  make security-check   - Runs security analysis (bandit & pip-audit)."
-	@echo "  make test             - Runs unit tests (pytest)."
-	@echo "  make quality          - Runs full quality gate (lint + security-check + test)."
-	@echo "  make clean            - Cleans Python temporary cache files and coverage reports."
-	@echo "  --- Project Utils & Opportunity Engine ---"
-	@echo "  make sync-portfolio   - Migrates JSON portfolio to SQLite DB and pushes config to Google Drive."
-	@echo "  make push-config      - Pushes local config files to Google Drive."
-	@echo "  make pull-config      - Pulls config files from Google Drive."
-	@echo "  make migrate          - Migrates existing JSON data to SQLite database."
-	@echo "  make get-snapshot     - Displays the current portfolio value."
-	@echo "  make save-snapshot    - Saves the current portfolio value to history."
-	@echo "  make analyze          - Analyzes overall portfolio performance."
-	@echo "  make etf-details ISIN= - Inspects composition and details for an ETF ISIN."
-	@echo "  make stock-details TICKER= - Inspects fundamental metrics for a stock ticker or ISIN."
-	@echo "  make exposure         - Runs consolidated look-through exposure check (sectors, countries, companies)."
-	@echo "  make sync-fundamentals - Synchronizes stock and ETF fundamental metrics into SQLite database."
-	@echo "  make analyze-opportunity [FLAGS=...] - Ranks investment target opportunities using live market data."
-	@echo "  make analyze-quality TICKER= - Evaluates absolute quality tiers, fundamental metrics, and Bull/Bear cases."
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config save-snapshot etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality dashboard
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality Gates
@@ -107,17 +78,9 @@ sync-portfolio:
 	PYTHONPATH=. $(PYTHON) src/migrate_json_to_sqlite.py
 	PYTHONPATH=src $(PYTHON) main.py push-config
 
-# Calculates and displays the current real-time valuation of the portfolio.
-get-snapshot:
-	PYTHONPATH=src $(PYTHON) main.py get-snapshot
-
 # Computes portfolio valuation, records a historical snapshot in SQLite, and backs up to Google Drive.
 save-snapshot:
 	PYTHONPATH=src $(PYTHON) main.py save-snapshot
-
-# Analyzes individual asset performance, absolute gains, and global Return on Investment (ROI).
-analyze:
-	PYTHONPATH=src $(PYTHON) main.py analyze
 
 # Inspects detailed composition, TER, holdings, and sector/country breakdowns for an ETF.
 etf-details:
@@ -143,8 +106,13 @@ sync-fundamentals:
 #   -v, --verbose           : Display granular factor score breakdowns (Dip Sc, Cost Sc, Gap Sc)
 #   -o, --output-csv PATH   : CSV export destination path (default: output/opportunity_output_22_08_2026.csv)
 analyze-opportunity:
-	PYTHONPATH=src $(PYTHON) -m cli.opportunity
+	PYTHONPATH=src $(PYTHON) -m cli.opportunity --skip-ai
 
 # Evaluates absolute quality tiers, comprehensive fundamental metrics, and diagnostic Bull/Bear cases.
 analyze-quality:
 	PYTHONPATH=src $(PYTHON) main.py analyze-quality $(TICKER)
+
+# Displays historical performance dashboard and analytics executive summary.
+# Accepts optional CLI flags via FLAGS variable (e.g., make dashboard FLAGS="--export-plots" or FLAGS="-t AAPL"):
+dashboard:
+	PYTHONPATH=src $(PYTHON) main.py dashboard show $(if $(TICKER),-t $(TICKER)) $(FLAGS)
