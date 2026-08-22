@@ -356,7 +356,7 @@ def export_outputs(
     md_lines: list[str] = [
         "# Portfolio Opportunity Evaluation & Rebalancing Report",
         f"*Generated on: {formatted_date_str}*\n",
-        "## Portfolio & Strategy Summary\n",
+        "## portfolio & Strategy Summary\n",
         f"- **Total Portfolio Value:** {total_val:,.2f} EUR",
         f"- **Target Assets Evaluated:** {len(ranked_scores)}\n",
         "### Active Strategy Weights",
@@ -571,26 +571,28 @@ def _display_rebalance_results(
     console.print()
 
     stock_weights: str = (
-        f"Dip: [cyan]{settings.stock_weight_dip:.2f}[/cyan] | "
-        f"Fwd P/E: [cyan]{settings.stock_weight_forward_pe:.2f}[/cyan] | "
-        f"52w Range: [cyan]{settings.stock_weight_52w_range:.2f}[/cyan] | "
-        f"Gap: [cyan]{settings.stock_weight_allocation:.2f}[/cyan]"
+        f"Dip: [white]{settings.stock_weight_dip:.2f}[/white] | "
+        f"Fwd P/E: [white]{settings.stock_weight_forward_pe:.2f}[/white] | "
+        f"52w Range: [white]{settings.stock_weight_52w_range:.2f}[/white] | "
+        f"Gap: [white]{settings.stock_weight_allocation:.2f}[/white]"
     )
     etf_weights: str = (
-        f"Dip: [cyan]{settings.etf_weight_dip:.2f}[/cyan] | "
-        f"TER/Cost: [cyan]{settings.etf_weight_ter:.2f}[/cyan] | "
-        f"Gap: [cyan]{settings.etf_weight_allocation:.2f}[/cyan]"
+        f"Dip: [white]{settings.etf_weight_dip:.2f}[/white] | "
+        f"TER/Cost: [white]{settings.etf_weight_ter:.2f}[/white] | "
+        f"Gap: [white]{settings.etf_weight_allocation:.2f}[/white]"
     )
+    sec_pen: float = settings.exposure_sector_penalty_weight
+    cnt_pen: float = settings.exposure_country_penalty_weight
     penalty_weights: str = (
-        f"Sector Penalty: [cyan]{settings.exposure_sector_penalty_weight:.2f}[/cyan] | "
-        f"Country Penalty: [cyan]{settings.exposure_country_penalty_weight:.2f}[/cyan]"
+        f"Sector Penalty: [white]{sec_pen:.2f}[/white] | "
+        f"Country Penalty: [white]{cnt_pen:.2f}[/white]"
     )
 
     summary_text: str = (
-        f"[bold white]Total Portfolio Value:[/bold white] "
+        f"[bold]Total Portfolio Value:[/bold] "
         f"[green]{total_val:,.2f} EUR[/green]  │  "
-        f"[bold white]Target Assets Evaluated:[/bold white] "
-        f"[cyan]{len(ranked_scores)}[/cyan]\n\n"
+        f"[bold]Target Assets Evaluated:[/bold] "
+        f"{len(ranked_scores)}\n\n"
         f"[bold yellow]Active Strategy Weights:[/bold yellow]\n"
         f"  • [bold]Stocks Formula:[/bold] {stock_weights}\n"
         f"  • [bold]ETFs Formula:[/bold]   {etf_weights}\n"
@@ -599,22 +601,23 @@ def _display_rebalance_results(
 
     summary_panel: Panel = Panel(
         summary_text,
-        title="[bold yellow]Portfolio & Strategy Summary[/bold yellow]",
-        border_style="blue",
+        title="[bold cyan]PORTFOLIO & STATEGY SUMMARY[/bold cyan]",
         expand=True,
     )
     console.print(summary_panel, soft_wrap=True)
     console.print()
 
     table: Table = Table(
-        title="PORTFOLIO REBALANCING & OPPORTUNITY MATRIX",
-        header_style="bold magenta",
+        title="[bold cyan]PORTFOLIO REBALANCING & OPPORTUNITY MATRIX[/bold cyan]",
+        header_style="bold",
         show_header=True,
         pad_edge=True,
         expand=False,
     )
 
-    table.add_column("Rank", justify="center", style="cyan", no_wrap=True, min_width=4)
+    table.add_column(
+        "Rank", justify="center", style="yellow", no_wrap=True, min_width=4
+    )
     table.add_column(
         "Symbol",
         justify="center",

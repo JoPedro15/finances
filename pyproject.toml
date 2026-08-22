@@ -52,7 +52,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.coverage.run]
-source = ["src"]
+source = ["src", "main.py"]
 branch = true
 omit = [
     "tests/*",

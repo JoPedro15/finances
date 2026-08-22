@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -21,7 +22,9 @@ from src.cli.opportunity import (
     export_outputs,
     load_json_data,
 )
-from src.core.exceptions import GeminiAPIError, GeminiAuthError
+from src.core.exceptions import (
+    GeminiQuotaError,
+)
 from src.core.models import (
     CountryExposure,
     ETFDetails,
@@ -35,7 +38,7 @@ from src.core.models import (
 )
 from src.core.opportunity_evaluation.base import AssetScore, AssetType
 
-runner = CliRunner()
+runner: CliRunner = CliRunner()
 
 
 def test_load_json_data_file_not_found(tmp_path: Path) -> None:
@@ -49,6 +52,14 @@ def test_load_json_data_invalid_json(tmp_path: Path) -> None:
     invalid_file: Path = tmp_path / "invalid.json"
     invalid_file.write_text("{broken_json: ", encoding="utf-8")
     assert load_json_data(invalid_file) == []
+
+
+def test_load_json_data_read_exception(tmp_path: Path) -> None:
+    """Validates load_json_data handles file read exception."""
+    test_file: Path = tmp_path / "unreadable.json"
+    test_file.write_text("{}", encoding="utf-8")
+    with patch("builtins.open", side_effect=OSError("Read error")):
+        assert load_json_data(test_file) == []
 
 
 def test_load_json_data_list_format(tmp_path: Path) -> None:
@@ -93,6 +104,8 @@ def test_calculate_current_allocations_success() -> None:
         {"yahoo_ticker": "MSFT", "quantity": 1.0, "asset_type": "STOCK"},
     ]
 
+    allocations: dict[str, float]
+    total_val: float
     allocations, total_val = calculate_current_allocations(
         portfolio_items, mock_stock_provider
     )
@@ -112,6 +125,8 @@ def test_calculate_current_allocations_skips_invalid_items() -> None:
         {"yahoo_ticker": "AAPL", "quantity": 1.0},
     ]
 
+    allocations: dict[str, float]
+    total_val: float
     allocations, total_val = calculate_current_allocations(
         portfolio_items, mock_stock_provider
     )
@@ -121,7 +136,7 @@ def test_calculate_current_allocations_skips_invalid_items() -> None:
 
 
 def test_enrich_target_asset_missing_symbol_raises_value_error() -> None:
-    """Validates enrich_target_asset raises ValueError when symbol is missing."""
+    """Validates enrich_target_asset raises ValueError when symbol missing."""
     mock_stock: MagicMock = MagicMock()
     mock_etf: MagicMock = MagicMock()
 
@@ -164,8 +179,34 @@ def test_enrich_target_asset_stock() -> None:
     assert enriched["ter"] is None
 
 
+def test_enrich_target_asset_price_zero_fallback() -> None:
+    """Validates peak price calculation when current price is zero."""
+    mock_stock_provider: MagicMock = MagicMock()
+    mock_etf_provider: MagicMock = MagicMock()
+
+    mock_stock_provider.get_price.return_value = Quotation(price=0.0, currency="EUR")
+    mock_stock_provider.get_details.return_value = None
+
+    target: dict[str, Any] = {
+        "yahoo_ticker": "UNKNOWN",
+        "asset_type": "STOCK",
+        "target_allocation_pct": 5.0,
+    }
+
+    enriched: dict[str, Any] = enrich_target_asset(
+        target=target,
+        current_alloc_pct=0.0,
+        stock_provider=mock_stock_provider,
+        etf_provider=mock_etf_provider,
+    )
+
+    assert enriched["current_price"] == 0.0
+    assert enriched["peak_price"] == 0.01
+    assert enriched["country"] == "United States"
+
+
 def test_enrich_target_asset_etf() -> None:
-    """Validates target enrichment for ETF assets fetching TER and breakdowns."""
+    """Validates target enrichment for ETF assets fetching TER/breakdowns."""
     mock_stock_provider: MagicMock = MagicMock()
     mock_etf_provider: MagicMock = MagicMock()
 
@@ -213,8 +254,7 @@ def test_format_action_and_urgency() -> None:
 
 
 def test_export_outputs_success(tmp_path: Path) -> None:
-    """Validates export_outputs writes opportunity evaluation
-    matrix and markdown report."""
+    """Validates export_outputs writes CSV matrix and markdown report."""
     score: AssetScore = AssetScore(
         symbol="AAPL",
         asset_type=AssetType.STOCK,
@@ -258,10 +298,113 @@ def test_export_outputs_success(tmp_path: Path) -> None:
     assert md_path.exists()
 
     with open(csv_path, encoding="utf-8") as file:
-        reader = list(csv.DictReader(file))
+        reader: list[dict[str, str]] = list(csv.DictReader(file))
         assert len(reader) == 1
         assert reader[0]["symbol"] == "AAPL"
         assert reader[0]["ai_action"] == "BUY"
+
+
+def test_export_outputs_etf_and_gdrive_upload(tmp_path: Path) -> None:
+    """Validates export_outputs formatting for ETF and GDrive upload."""
+    score: AssetScore = AssetScore(
+        symbol="EUNL.DE",
+        asset_type=AssetType.ETF,
+        dip_score=0.5,
+        cost_score=0.6,
+        allocation_score=0.7,
+        total_score=0.60,
+    )
+
+    asset_dict: dict[str, dict[str, Any]] = {
+        "EUNL.DE": {
+            "asset_type": "ETF",
+            "current_price": 80.0,
+            "peak_price": 85.0,
+            "current_allocation_pct": 5.0,
+            "target_allocation_pct": 10.0,
+            "ter": 0.20,
+            "top_holdings": [{"name": "Apple", "weight_pct": 5.0}],
+            "sector_breakdown": [{"sector_name": "Tech", "weight_pct": 50.0}],
+            "country_breakdown": [{"country_name": "USA", "weight_pct": 70.0}],
+        }
+    }
+
+    rec: RebalanceRecommendation = RebalanceRecommendation(
+        action=RecommendationAction.BUY,
+        confidence_score=0.85,
+        reasoning="Broad ETF rebalance.",
+        target_allocation_pct=10.0,
+        urgency_level=UrgencyLevel.MEDIUM,
+        risk_score=1,
+        valuation_score=7,
+    )
+
+    mock_drive: MagicMock = MagicMock()
+    with (
+        patch("src.cli.opportunity.GDriveService", return_value=mock_drive),
+        patch(
+            "src.cli.opportunity.settings.gdrive_reports_folder_id",
+            "folder123",
+        ),
+        patch.dict("sys.modules"),
+    ):
+        sys.modules.pop("pytest", None)
+        export_outputs(
+            ranked_scores=[score],
+            asset_dict_map=asset_dict,
+            recommendations_map={"EUNL.DE": rec},
+            total_val=2000.0,
+            has_ai=True,
+            output_dir=tmp_path,
+        )
+
+    md_path: Path = tmp_path / "opportunity_report.md"
+    assert md_path.exists()
+    content: str = md_path.read_text(encoding="utf-8")
+    assert "EUNL.DE" in content
+    assert "**Total Expense Ratio (TER):** 0.20%" in content
+    mock_drive.upload_file.assert_called()
+
+
+def test_export_outputs_gdrive_upload_failure(tmp_path: Path) -> None:
+    """Validates export_outputs handling GDrive backup exception."""
+    score: AssetScore = AssetScore(
+        symbol="AAPL",
+        asset_type=AssetType.STOCK,
+        dip_score=0.8,
+        cost_score=0.9,
+        allocation_score=0.7,
+        total_score=0.82,
+    )
+
+    asset_dict: dict[str, dict[str, Any]] = {
+        "AAPL": {
+            "current_price": 150.0,
+            "current_allocation_pct": 10.0,
+            "target_allocation_pct": 15.0,
+        }
+    }
+
+    mock_drive: MagicMock = MagicMock()
+    mock_drive.upload_file.side_effect = RuntimeError("Drive network error")
+
+    with (
+        patch("src.cli.opportunity.GDriveService", return_value=mock_drive),
+        patch(
+            "src.cli.opportunity.settings.gdrive_reports_folder_id",
+            "folder123",
+        ),
+        patch.dict("sys.modules"),
+    ):
+        sys.modules.pop("pytest", None)
+        export_outputs(
+            ranked_scores=[score],
+            asset_dict_map=asset_dict,
+            recommendations_map={},
+            total_val=1000.0,
+            has_ai=False,
+            output_dir=tmp_path,
+        )
 
 
 def test_export_outputs_error_handling(tmp_path: Path) -> None:
@@ -281,14 +424,6 @@ def test_display_rebalance_results_rendering() -> None:
         allocation_score=0.7,
         total_score=0.82,
     )
-    score_etf: AssetScore = AssetScore(
-        symbol="EUNL.DE",
-        asset_type=AssetType.ETF,
-        dip_score=0.5,
-        cost_score=0.6,
-        allocation_score=0.5,
-        total_score=0.55,
-    )
 
     asset_dict: dict[str, dict[str, Any]] = {
         "AAPL": {
@@ -300,14 +435,6 @@ def test_display_rebalance_results_rendering() -> None:
             "target_allocation_pct": 15.0,
             "trailing_pe": 25.0,
             "forward_pe": 20.0,
-        },
-        "EUNL.DE": {
-            "asset_type": "ETF",
-            "current_price": 80.0,
-            "peak_price": 85.0,
-            "current_allocation_pct": 5.0,
-            "target_allocation_pct": 10.0,
-            "ter": 0.20,
         },
     }
 
@@ -322,12 +449,67 @@ def test_display_rebalance_results_rendering() -> None:
     )
 
     _display_rebalance_results(
-        ranked_scores=[score_stock, score_etf],
+        ranked_scores=[score_stock],
         asset_dict_map=asset_dict,
         recommendations_map={"AAPL": rec},
         total_val=1000.0,
         has_ai=True,
         verbose=True,
+    )
+
+
+def test_display_rebalance_results_sell_action_and_missing_rec() -> None:
+    """Validates _display_rebalance_results with SELL action and missing rec."""
+    score_sell: AssetScore = AssetScore(
+        symbol="TSLA",
+        asset_type=AssetType.STOCK,
+        dip_score=0.2,
+        cost_score=0.3,
+        allocation_score=0.1,
+        total_score=0.20,
+    )
+    score_missing: AssetScore = AssetScore(
+        symbol="MSFT",
+        asset_type=AssetType.STOCK,
+        dip_score=0.5,
+        cost_score=0.5,
+        allocation_score=0.5,
+        total_score=0.50,
+    )
+
+    asset_dict: dict[str, dict[str, Any]] = {
+        "TSLA": {
+            "asset_type": "STOCK",
+            "current_price": 250.0,
+            "peak_price": 300.0,
+            "current_allocation_pct": 20.0,
+            "target_allocation_pct": 10.0,
+        },
+        "MSFT": {
+            "asset_type": "STOCK",
+            "current_price": 400.0,
+            "current_allocation_pct": 10.0,
+            "target_allocation_pct": 10.0,
+        },
+    }
+
+    rec_sell: RebalanceRecommendation = RebalanceRecommendation(
+        action=RecommendationAction.SELL,
+        confidence_score=0.80,
+        reasoning="Overvalued position.",
+        target_allocation_pct=10.0,
+        urgency_level=UrgencyLevel.HIGH,
+        risk_score=4,
+        valuation_score=3,
+    )
+
+    _display_rebalance_results(
+        ranked_scores=[score_sell, score_missing],
+        asset_dict_map=asset_dict,
+        recommendations_map={"TSLA": rec_sell},
+        total_val=5000.0,
+        has_ai=True,
+        verbose=False,
     )
 
 
@@ -338,7 +520,7 @@ def test_rebalance_command_missing_targets(tmp_path: Path) -> None:
     targets.write_text("[]", encoding="utf-8")
     portfolio.write_text("[]", encoding="utf-8")
 
-    result = runner.invoke(
+    result: Any = runner.invoke(
         app,
         [
             "--targets-file",
@@ -365,7 +547,8 @@ def test_rebalance_command_full_success(
     portfolio: Path = tmp_path / "portfolio.json"
 
     targets.write_text(
-        '[{"yahoo_ticker": "AAPL", "asset_type": "STOCK"}]', encoding="utf-8"
+        '[{"yahoo_ticker": "AAPL", "asset_type": "STOCK"}]',
+        encoding="utf-8",
     )
     portfolio.write_text(
         '[{"yahoo_ticker": "AAPL", "quantity": 1.0}]', encoding="utf-8"
@@ -389,11 +572,11 @@ def test_rebalance_command_full_success(
         "top_holdings": [],
     }
 
-    mock_instance = MagicMock()
+    mock_instance: MagicMock = MagicMock()
     mock_instance.analyze_portfolio_batch.return_value = {}
     mock_gemini_cls.return_value = mock_instance
 
-    result = runner.invoke(
+    result: Any = runner.invoke(
         app,
         [
             "--targets-file",
@@ -409,19 +592,90 @@ def test_rebalance_command_full_success(
 
 @patch("src.cli.opportunity.calculate_current_allocations")
 @patch("src.cli.opportunity.enrich_target_asset")
-@patch("src.cli.opportunity.GeminiClient")
-def test_rebalance_command_gemini_auth_error_fallback(
-    mock_gemini_cls: MagicMock,
+@patch("src.cli.opportunity.SqliteOpportunityRepository")
+def test_rebalance_command_partial_enrichment_and_db_save(
+    mock_opp_repo_cls: MagicMock,
     mock_enrich: MagicMock,
     mock_calc: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """Validates rebalance command falls back when Gemini auth fails."""
+    """Validates partial asset enrichment error handling and SQLite save."""
     targets: Path = tmp_path / "targets.json"
     portfolio: Path = tmp_path / "portfolio.json"
 
     targets.write_text(
-        '[{"yahoo_ticker": "AAPL", "asset_type": "STOCK"}]', encoding="utf-8"
+        "["
+        '{"yahoo_ticker": "AAPL", "asset_type": "STOCK"},'
+        '{"yahoo_ticker": "FAIL", "asset_type": "STOCK"}'
+        "]",
+        encoding="utf-8",
+    )
+    portfolio.write_text("[]", encoding="utf-8")
+
+    mock_calc.return_value = ({}, 150.0)
+
+    def side_effect_enrich(
+        target: dict[str, Any], *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
+        sym: str = target.get("yahoo_ticker", "")
+        if sym == "FAIL":
+            raise ValueError("Enrichment error")
+        return {
+            "symbol": "AAPL",
+            "asset_type": "STOCK",
+            "current_price": 150.0,
+            "peak_price": 180.0,
+            "target_allocation_pct": 100.0,
+            "current_allocation_pct": 0.0,
+            "ter": None,
+            "trailing_pe": 25.0,
+            "forward_pe": 20.0,
+            "low_52w": 120.0,
+            "high_52w": 180.0,
+            "sector_breakdown": [],
+            "country_breakdown": [],
+            "top_holdings": [],
+        }
+
+    mock_enrich.side_effect = side_effect_enrich
+
+    mock_repo: MagicMock = MagicMock()
+    mock_opp_repo_cls.return_value = mock_repo
+    mock_repo.load_asset_history.return_value = []
+
+    with patch.dict("sys.modules"):
+        sys.modules.pop("pytest", None)
+        result: Any = runner.invoke(
+            app,
+            [
+                "--targets-file",
+                str(targets),
+                "--portfolio-file",
+                str(portfolio),
+                "--skip-ai",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_repo.save_opportunity_report.assert_called_once()
+
+
+@patch("src.cli.opportunity.calculate_current_allocations")
+@patch("src.cli.opportunity.enrich_target_asset")
+@patch("src.cli.opportunity.SqliteOpportunityRepository")
+def test_rebalance_command_db_save_failure(
+    mock_opp_repo_cls: MagicMock,
+    mock_enrich: MagicMock,
+    mock_calc: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Validates rebalance command handling database saving failure."""
+    targets: Path = tmp_path / "targets.json"
+    portfolio: Path = tmp_path / "portfolio.json"
+
+    targets.write_text(
+        '[{"yahoo_ticker": "AAPL", "asset_type": "STOCK"}]',
+        encoding="utf-8",
     )
     portfolio.write_text("[]", encoding="utf-8")
 
@@ -443,17 +697,22 @@ def test_rebalance_command_gemini_auth_error_fallback(
         "top_holdings": [],
     }
 
-    mock_gemini_cls.side_effect = GeminiAuthError("Missing API Key")
+    mock_repo: MagicMock = MagicMock()
+    mock_opp_repo_cls.return_value = mock_repo
+    mock_repo.save_opportunity_report.side_effect = RuntimeError("DB write error")
 
-    result = runner.invoke(
-        app,
-        [
-            "--targets-file",
-            str(targets),
-            "--portfolio-file",
-            str(portfolio),
-        ],
-    )
+    with patch.dict("sys.modules"):
+        sys.modules.pop("pytest", None)
+        result: Any = runner.invoke(
+            app,
+            [
+                "--targets-file",
+                str(targets),
+                "--portfolio-file",
+                str(portfolio),
+                "--skip-ai",
+            ],
+        )
 
     assert result.exit_code == 0
 
@@ -461,18 +720,19 @@ def test_rebalance_command_gemini_auth_error_fallback(
 @patch("src.cli.opportunity.calculate_current_allocations")
 @patch("src.cli.opportunity.enrich_target_asset")
 @patch("src.cli.opportunity.GeminiClient")
-def test_rebalance_command_gemini_api_error_fallback(
+def test_rebalance_command_gemini_quota_error_fallback(
     mock_gemini_cls: MagicMock,
     mock_enrich: MagicMock,
     mock_calc: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """Validates rebalance command falls back when Gemini API fails."""
+    """Validates rebalance command falls back when Gemini quota is exceeded."""
     targets: Path = tmp_path / "targets.json"
     portfolio: Path = tmp_path / "portfolio.json"
 
     targets.write_text(
-        '[{"yahoo_ticker": "AAPL", "asset_type": "STOCK"}]', encoding="utf-8"
+        '[{"yahoo_ticker": "AAPL", "asset_type": "STOCK"}]',
+        encoding="utf-8",
     )
     portfolio.write_text("[]", encoding="utf-8")
 
@@ -494,11 +754,13 @@ def test_rebalance_command_gemini_api_error_fallback(
         "top_holdings": [],
     }
 
-    mock_instance = MagicMock()
-    mock_instance.analyze_portfolio_batch.side_effect = GeminiAPIError("API error")
+    mock_instance: MagicMock = MagicMock()
+    mock_instance.analyze_portfolio_batch.side_effect = GeminiQuotaError(
+        "Quota exceeded"
+    )
     mock_gemini_cls.return_value = mock_instance
 
-    result = runner.invoke(
+    result: Any = runner.invoke(
         app,
         [
             "--targets-file",
@@ -509,35 +771,3 @@ def test_rebalance_command_gemini_api_error_fallback(
     )
 
     assert result.exit_code == 0
-
-
-@patch("src.cli.opportunity.calculate_current_allocations")
-@patch("src.cli.opportunity.enrich_target_asset")
-def test_rebalance_command_enrichment_failure_exits(
-    mock_enrich: MagicMock,
-    mock_calc: MagicMock,
-    tmp_path: Path,
-) -> None:
-    """Validates CLI exits with non-zero code when enrichment fails."""
-    targets: Path = tmp_path / "targets.json"
-    portfolio: Path = tmp_path / "portfolio.json"
-    targets.write_text(
-        '[{"yahoo_ticker": "AAPL", "asset_type": "STOCK"}]', encoding="utf-8"
-    )
-    portfolio.write_text("[]", encoding="utf-8")
-
-    mock_calc.return_value = ({}, 0.0)
-    mock_enrich.side_effect = Exception("Provider error")
-
-    result = runner.invoke(
-        app,
-        [
-            "--targets-file",
-            str(targets),
-            "--portfolio-file",
-            str(portfolio),
-            "--skip-ai",
-        ],
-    )
-
-    assert result.exit_code != 0

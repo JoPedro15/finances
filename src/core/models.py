@@ -318,3 +318,67 @@ class RebalanceRecommendation(BaseModel):
     valuation_score: int = Field(ge=1, le=10)
     expected_dividend_yield_pct: float | None = Field(default=None, ge=0.0, le=100.0)
     ter_impact_assessment: str | None = Field(default=None, max_length=100)
+
+
+@dataclass(frozen=True, slots=True)
+class TimeSeriesPoint:
+    """Represents a single timestamped value point in a time series."""
+
+    date: str
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
+class AssetTimeSeries:
+    """Stores historical time series metrics for an individual asset."""
+
+    ticker: str
+    name: str
+    asset_type: str
+    value_history: list[TimeSeriesPoint] = field(default_factory=list)
+    quantity_history: list[TimeSeriesPoint] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class AssetClassTimeSeries:
+    """Stores historical valuation and composition split for an asset class."""
+
+    asset_type: str
+    value_history: list[TimeSeriesPoint] = field(default_factory=list)
+    share_history: list[TimeSeriesPoint] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioTimeSeries:
+    """Stores historical metrics for global portfolio valuation."""
+
+    value_history: list[TimeSeriesPoint] = field(default_factory=list)
+    ath_history: list[TimeSeriesPoint] = field(default_factory=list)
+    drawdown_history: list[TimeSeriesPoint] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class AssetPerformanceSummary:
+    """Summary snapshot metrics for an individual asset position."""
+
+    ticker: str
+    name: str
+    asset_type: str
+    latest_quantity: float
+    latest_value_eur: float
+    cost_basis_eur: float
+    roi_eur: float
+    roi_percent: float
+    portfolio_share_percent: float
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardOverview:
+    """Aggregated analytics dataset for terminal rendering and chart generation."""
+
+    portfolio_history: PortfolioTimeSeries
+    asset_series: list[AssetTimeSeries]
+    class_series: list[AssetClassTimeSeries]
+    asset_summaries: list[AssetPerformanceSummary]
+    top_growth_contributor: str | None = None
+    max_drawdown_percent: float = 0.0
