@@ -30,7 +30,7 @@ def generate_coverage_badge(
             print(f"Error parsing coverage.xml: {err}")
 
     pct_text: str = f"{coverage_pct:.2f}%"
-    badge_color: str = "#44cc11"
+    badge_color: str = "#2ea44f"
 
     svg_lines: list[str] = [
         '<svg xmlns="http://www.w3.org/2000/svg" width="104" '
