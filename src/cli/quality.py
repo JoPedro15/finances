@@ -73,7 +73,7 @@ def export_quality_report(
     for item in evaluated_assets:
         md_lines.extend(
             [
-                f"### 🏢 {item['name']} ({item['symbol']})",
+                f"### {item['name']} ({item['symbol']})",
                 f"- **Asset Type:** {item['asset_type']} | "
                 f"**Quality Tier:** {item['tier']} | **Score:** {item['score']}/100",
                 f"- **Valuation Status:** {item['valuation_status']}\n",
@@ -83,7 +83,7 @@ def export_quality_report(
         if item["asset_type"] == "ETF":
             md_lines.extend(
                 [
-                    "#### 📊 ETF Structure & Valuation Metrics",
+                    "#### ETF Structure & Valuation Metrics",
                     f"- **Total Expense Ratio (TER):** {item.get('ter_str', 'N/A')}",
                     f"- **Top Holdings:** {item.get('holdings_str', 'N/A')}",
                     f"- **Sector Breakdown:** {item.get('sectors_str', 'N/A')}",
@@ -93,7 +93,7 @@ def export_quality_report(
         else:
             md_lines.extend(
                 [
-                    "#### 📊 Valuation & Fundamental Metrics",
+                    "#### Valuation & Fundamental Metrics",
                     f"- **Trailing P/E:** {item.get('tr_str', 'N/A')} | "
                     f"**Forward P/E:** {item.get('fw_str', 'N/A')} | "
                     f"**PEG:** {item.get('peg_str', 'N/A')} | "
@@ -316,8 +316,8 @@ def analyze_quality_cmd(
             raise typer.Exit(code=1)
 
     console.print(
-        "\n[bold cyan]=== INDEPENDENT FUNDAMENTAL HEALTH & QUALITY ANALYSIS "
-        "===[/bold cyan]\n"
+        "\n[bold cyan]INDEPENDENT FUNDAMENTAL HEALTH & QUALITY ANALYSIS "
+        "[/bold cyan]\n"
     )
 
     evaluated_report_items: list[dict[str, Any]] = []
@@ -389,12 +389,15 @@ def analyze_quality_cmd(
                     }
                 )
 
+                ter_label: str = (
+                    "  [bold white]- Total Expense Ratio (TER):[/bold white]"
+                )
                 val_lines = (
                     f"• [bold]Valuation & ETF Structure Metrics:[/bold]\n"
-                    f"  - Total Expense Ratio (TER): [cyan]{ter_str}[/cyan]\n"
-                    f"  - Top Holdings: [cyan]{holdings_str}[/cyan]\n"
-                    f"  - Sector Breakdown: [cyan]{sectors_str}[/cyan]\n"
-                    f"  - Country Breakdown: [cyan]{countries_str}[/cyan]"
+                    f"{ter_label} {ter_str}\n"
+                    f"  [bold white]- Top Holdings:[/bold white] {holdings_str}\n"
+                    f"  [bold white]- Sector Breakdown:[/bold white] {sectors_str}\n"
+                    f"  [bold white]- Country Breakdown:[/bold white] {countries_str}"
                 )
             else:
                 diagnostic = {
@@ -457,18 +460,19 @@ def analyze_quality_cmd(
                 )
 
                 val_lines = (
-                    f"• [bold]Valuation & Fundamental Metrics:[/bold]\n"
-                    f"  - Trailing P/E: [cyan]{tr_str}[/cyan] | "
-                    f"Forward P/E: [cyan]{fw_str}[/cyan] | "
-                    f"PEG: [cyan]{peg_str}[/cyan] | P/B: [cyan]{pb_str}[/cyan]\n"
-                    f"  - Div Yield: [cyan]{div_str}[/cyan] | "
-                    f"Beta: [cyan]{beta_str}[/cyan] | "
-                    f"Profit Margin: [cyan]{margin_str}[/cyan]\n"
-                    f"  - Rev Growth: [cyan]{rev_str}[/cyan] | "
-                    f"Earn Growth: [cyan]{earn_str}[/cyan] | "
-                    f"Debt/Equity: [cyan]{debt_str}[/cyan]\n"
-                    f"  - 52w Range (Low / High): [cyan]{low_str}[/cyan] / "
-                    f"[cyan]{peak_str}[/cyan]"
+                    "• [bold underline]Valuation & Fundamental Metrics:"
+                    "[/bold underline]\n"
+                    f"  [bold white]- Trailing P/E:[/bold white] {tr_str} | "
+                    f"[bold white]Forward P/E:[/bold white] {fw_str} | "
+                    f"[bold white]PEG:[/bold white] {peg_str} | P/B: {pb_str}\n"
+                    f"  [bold white]- Div Yield:[/bold white] {div_str} | "
+                    f"[bold white]Beta:[/bold white] {beta_str} | "
+                    f"[bold white]Profit Margin:[/bold white] {margin_str}\n"
+                    f"  [bold white]- Rev Growth:[/bold white] {rev_str} | "
+                    f"[bold white]Earn Growth:[/bold white] {earn_str} | "
+                    f"[bold white]Debt/Equity:[/bold white] {debt_str}\n"
+                    f"  [bold white]- 52w Range (Low / High):[/bold white] {low_str} / "
+                    f"{peak_str}"
                 )
             else:
                 diagnostic = {
@@ -512,9 +516,10 @@ def analyze_quality_cmd(
             [f"  • {item}\n" for item in diagnostic.get("bear_case", [])]
         )
 
+        type_str: str = asset.asset_type.upper()
         divider: str = "─" * 67
         panel_content: str = (
-            f"[bold]Asset Type:[/bold] {asset.asset_type.upper()}  │  "
+            f"[bold]Asset Type:[/bold] [bold blue]{type_str}[/bold blue]  │  "
             f"[bold]Quality Tier:[/bold] {tier_text.markup}  │  "
             f"[bold]Quality Score:[/bold] [bold blue]{score_val}/100[/bold blue]\n"
             f"{divider}\n"
@@ -525,12 +530,13 @@ def analyze_quality_cmd(
             "[bold red]🔴 Bear Case (Risks & Pressures):[/bold red]\n"
             f"{bear_bullets}\n"
             f"{divider}\n"
-            f"[bold]Valuation Status:[/bold] [cyan]{valuation_status}[/cyan]"
+            "[bold]Valuation Status:[/bold] "
+            f"[bold yellow]{valuation_status}[/bold yellow]"
         )
 
         card: Panel = Panel(
             panel_content,
-            title=f"[bold cyan]🏢 {name} ({symbol})[/bold cyan]",
+            title=f"[bold cyan]{name} ({symbol})[/bold cyan]",
             border_style=border_style,
             expand=False,
         )

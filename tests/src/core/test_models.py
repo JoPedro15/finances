@@ -4,7 +4,6 @@ subscript access, default values, immutability, and edge cases.
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
 from datetime import datetime
 from typing import Any
 
@@ -12,14 +11,20 @@ import pytest
 
 from src.core.models import (
     Asset,
+    AssetClassTimeSeries,
+    AssetPerformanceSummary,
     AssetSnapshot,
+    AssetTimeSeries,
     CountryExposure,
+    DashboardOverview,
     ETFDetails,
     Holding,
     PortfolioSnapshot,
+    PortfolioTimeSeries,
     Quotation,
     SectorExposure,
     StockDetails,
+    TimeSeriesPoint,
 )
 
 # ==============================================================================
@@ -160,7 +165,7 @@ def test_asset_immutability() -> None:
         average_buy_price=150.0,
     )
 
-    with pytest.raises(FrozenInstanceError):
+    with pytest.raises(AttributeError):
         asset.quantity = 99.0  # type: ignore[misc]
 
 
@@ -447,3 +452,97 @@ def test_stock_details_subscript_access() -> None:
     assert details["pe_ratio"] == 15.0
     assert details["sector"] == "Energy"
     assert details["market_cap"] is None
+
+
+# ==============================================================================
+# TimeSeriesPoint & Analytics Models
+# ==============================================================================
+
+
+def test_time_series_point_instantiation_and_immutability() -> None:
+    """Validates TimeSeriesPoint field assignment and frozen immutability."""
+    point: TimeSeriesPoint = TimeSeriesPoint(date="2026-08-22", value=150.5)
+
+    assert point.date == "2026-08-22"
+    assert point.value == 150.5
+
+    with pytest.raises(AttributeError):
+        point.value = 200.0  # type: ignore[misc]
+
+
+def test_asset_time_series_instantiation() -> None:
+    """Validates AssetTimeSeries default factory lists and field assignment."""
+    series: AssetTimeSeries = AssetTimeSeries(
+        ticker="VWCE.DE",
+        name="Vanguard All-World",
+        asset_type="ETF",
+    )
+
+    assert series.ticker == "VWCE.DE"
+    assert series.name == "Vanguard All-World"
+    assert series.asset_type == "ETF"
+    assert series.value_history == []
+    assert series.quantity_history == []
+
+
+def test_asset_class_time_series_instantiation() -> None:
+    """Validates AssetClassTimeSeries creation with history points."""
+    pt: TimeSeriesPoint = TimeSeriesPoint(date="2026-08-22", value=1000.0)
+    class_series: AssetClassTimeSeries = AssetClassTimeSeries(
+        asset_type="STOCK",
+        value_history=[pt],
+        share_history=[TimeSeriesPoint(date="2026-08-22", value=50.0)],
+    )
+
+    assert class_series.asset_type == "STOCK"
+    assert len(class_series.value_history) == 1
+    assert class_series.value_history[0].value == 1000.0
+    assert class_series.share_history[0].value == 50.0
+
+
+def test_portfolio_time_series_defaults() -> None:
+    """Validates PortfolioTimeSeries default empty list factories."""
+    pts: PortfolioTimeSeries = PortfolioTimeSeries()
+
+    assert pts.value_history == []
+    assert pts.ath_history == []
+    assert pts.drawdown_history == []
+
+
+def test_asset_performance_summary_fields() -> None:
+    """Validates AssetPerformanceSummary field assignments."""
+    summary: AssetPerformanceSummary = AssetPerformanceSummary(
+        ticker="AAPL",
+        name="Apple Inc.",
+        asset_type="STOCK",
+        latest_quantity=10.0,
+        latest_value_eur=2000.0,
+        cost_basis_eur=1500.0,
+        roi_eur=500.0,
+        roi_percent=33.33,
+        portfolio_share_percent=25.0,
+    )
+
+    assert summary.ticker == "AAPL"
+    assert summary.roi_eur == 500.0
+    assert summary.roi_percent == 33.33
+    assert summary.portfolio_share_percent == 25.0
+
+
+def test_dashboard_overview_instantiation() -> None:
+    """Validates DashboardOverview container with defaults and custom metrics."""
+    portfolio_ts: PortfolioTimeSeries = PortfolioTimeSeries(
+        value_history=[TimeSeriesPoint(date="2026-08-22", value=10000.0)]
+    )
+    overview: DashboardOverview = DashboardOverview(
+        portfolio_history=portfolio_ts,
+        asset_series=[],
+        class_series=[],
+        asset_summaries=[],
+        top_growth_contributor="AAPL",
+        max_drawdown_percent=-5.2,
+    )
+
+    assert overview.portfolio_history.value_history[0].value == 10000.0
+    assert overview.top_growth_contributor == "AAPL"
+    assert overview.max_drawdown_percent == -5.2
