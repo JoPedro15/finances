@@ -15,6 +15,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from src.config import DATA_DIR
 from src.core.analysis import evaluate_etf_quality, evaluate_stock_quality
 from src.core.exceptions import StorageError
 from src.core.models import Asset, ETFDetails, StockDetails
@@ -57,7 +58,7 @@ def export_quality_report(
         "# Independent Fundamental Health & Quality Evaluation Report",
         f"*Generated on: {timestamp_str}*\n",
         "## Evaluated Assets Summary\n",
-        ("| Asset Name | Ticker | Type | Quality Tier | Score | " "Valuation Status |"),
+        ("| Asset Name | Ticker | Type | Quality Tier | Score | Valuation Status |"),
         "| :--- | :---: | :---: | :---: | ---: | :--- |",
     ]
 
@@ -280,26 +281,57 @@ def analyze_quality_cmd(
         typer.Argument(
             help=(
                 "Optional ticker symbol or ISIN to analyze. "
-                "If omitted, analyzes all active portfolio assets."
+                "If omitted, analyzes all target portfolio assets."
             )
         ),
     ] = None,
+    targets_file: Annotated[
+        Path,
+        typer.Option(
+            "--targets-file",
+            "-t",
+            help="Path to JSON file containing target wishlist.",
+        ),
+    ] = DATA_DIR
+    / "portfolio_targets.json",
 ) -> None:
     """Evaluates absolute quality tiers, comprehensive fundamental metrics,
-    diagnostic Bull/Bear cases, and valuation status for portfolio assets.
+    diagnostic Bull/Bear cases, and valuation status for target portfolio assets.
     """
     stock_provider: StockProvider = StockProvider()
     etf_provider: ETFProvider = ETFProvider()
-    portfolio_repo: SqlitePortfolioRepository = SqlitePortfolioRepository()
 
-    try:
-        assets: list[Asset] = portfolio_repo.load_assets()
-    except StorageError as err:
-        logger.error(f"Failed to load assets from database: {err}")
-        raise typer.Exit(code=1) from err
+    assets: list[Asset] = []
+
+    if targets_file.exists():
+        try:
+            with open(targets_file, encoding="utf-8") as f:
+                data: dict[str, Any] = json.load(f)
+                for item in data.get("assets", []):
+                    item_dict: dict[str, Any] = item
+                    assets.append(
+                        Asset(
+                            name=str(item_dict["name"]),
+                            isin=str(item_dict.get("isin", "")),
+                            yahoo_ticker=str(item_dict["yahoo_ticker"]),
+                            asset_type=str(item_dict["asset_type"]),
+                            quantity=0.0,
+                            average_buy_price=0.0,
+                        )
+                    )
+        except Exception as err:
+            logger.error(f"Failed to load targets from '{targets_file}': {err}")
+            raise typer.Exit(code=1) from err
+    else:
+        portfolio_repo: SqlitePortfolioRepository = SqlitePortfolioRepository()
+        try:
+            assets = portfolio_repo.load_assets()
+        except StorageError as err:
+            logger.error(f"Failed to load assets from database: {err}")
+            raise typer.Exit(code=1) from err
 
     if not assets:
-        logger.warning("No assets found in active portfolio.")
+        logger.warning("No assets found for quality analysis.")
         return
 
     target_assets: list[Asset] = assets
@@ -312,7 +344,7 @@ def analyze_quality_cmd(
             or (a.isin and a.isin.upper() == clean_ticker)
         ]
         if not target_assets:
-            console.print(f"[red]Asset '{ticker}' not found in active portfolio.[/red]")
+            console.print(f"[red]Asset '{ticker}' not found in target list.[/red]")
             raise typer.Exit(code=1)
 
     console.print(
