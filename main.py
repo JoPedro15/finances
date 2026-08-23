@@ -94,10 +94,13 @@ def _push_cloud_data() -> bool:
 
 
 @app.callback()
-def main_callback() -> None:
+def main_callback(ctx: typer.Context) -> None:
     """Validates environment settings and pulls Cloud data on startup."""
     try:
         _ = settings
+        if ctx.invoked_subcommand in ("push-config", "pull-config"):
+            return
+
         logger.info("Synchronizing data from Cloud...")
         success: bool = _pull_cloud_data()
         if success:
@@ -193,7 +196,7 @@ def _display_single_etf_details(
     card_text: Text = Text()
     card_text.append("Asset Name: ", style="bold white")
     card_text.append(f"{name} ({isin})\n", style="bold yellow")
-    card_text.append("Asset Type: ", style="bold white")
+    card_text.append("Asset Type: ", style="bold blue")
     card_text.append("ETF\n", style="bold blue")
     card_text.append("TER: ", style="bold white")
     card_text.append(f"{ter_str}\n", style="bold green")
