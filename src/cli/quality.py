@@ -292,7 +292,8 @@ def analyze_quality_cmd(
             "-t",
             help="Path to JSON file containing target wishlist.",
         ),
-    ] = DATA_DIR / "portfolio_targets.json",
+    ] = DATA_DIR
+    / "portfolio_targets.json",
 ) -> None:
     """Evaluates absolute quality tiers, comprehensive fundamental metrics,
     diagnostic Bull/Bear cases, and valuation status for target portfolio assets.
@@ -304,7 +305,7 @@ def analyze_quality_cmd(
 
     if targets_file.exists():
         try:
-            with open(targets_file, mode="r", encoding="utf-8") as f:
+            with open(targets_file, encoding="utf-8") as f:
                 data: dict[str, Any] = json.load(f)
                 for item in data.get("assets", []):
                     item_dict: dict[str, Any] = item
