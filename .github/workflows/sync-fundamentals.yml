@@ -1,18 +1,17 @@
-name: Sync Portfolio Fundamentals
+name: Weekly Portfolio Pipeline
 
 on:
   schedule:
-    # Run every Sunday at midnight (UTC)
     - cron: '0 0 * * 0'
   workflow_dispatch:
 
 concurrency:
-  group: sync-portfolio-fundamentals
+  group: portfolio-pipeline
   cancel-in-progress: false
 
 jobs:
-  sync-fundamentals:
-    name: Execute Fundamental Data Sync
+  run-pipeline:
+    name: Execute Full Portfolio Pipeline
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34,14 +33,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Synchronize portfolio fundamental history
-        run: python main.py sync-fundamentals
+      - name: Run Sequential Portfolio Pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python main.py sync-fundamentals
+          python main.py save-snapshot
+          python main.py analyze-quality
+          python main.py opportunity
 
-      - name: Commit and push updated database
+      - name: Commit updated database and reports
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: 'chore(db): update portfolio fundamental history [skip ci]'
-          file_pattern: 'data/finances.db'
+          commit_message: 'chore(portfolio): update history and decision metrics [skip ci]'
+          file_pattern: 'data/finances.db output/*'
           commit_user_name: 'github-actions[bot]'
           commit_user_email: '41898282+github-actions[bot]@users.noreply.github.com'
           commit_author: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'

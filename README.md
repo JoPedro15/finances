@@ -1,6 +1,5 @@
 # Finances Portfolio Tracker & Opportunity Engine
 
-
 ![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Tests Coverage](./coverage.svg)
 ![CI Quality Pipeline](https://github.com/JoPedro15/finances/actions/workflows/ci.yml/badge.svg?branch=main)
@@ -10,103 +9,87 @@
 ![Security](https://img.shields.io/badge/security-Bandit%20%7C%20Audit-44cc11?style=flat-square&logo=shield&logoColor=white)
 ![GNU Make](https://img.shields.io/badge/env-GNU%20Make-active?style=flat-square&logo=gnu-make&logoColor=white)
 <br />
-![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20SQLite%20%7C%20Gemini%202.0%20Flash%20%7C%20Typer%20%7C%20pytest-FF9900?style=flat-square&logo=python&logoColor=white)![MIT License](https://img.shields.io/badge/license-MIT-607D8B?style=flat-square)
+![Stack](https://img.shields.io/badge/stack-yfinance%20%7C%20SQLite%20%7C%20Gemini%203.6%20Flash%20%7C%20Typer%20%7C%20pytest-FF9900?style=flat-square&logo=python&logoColor=white)
+![MIT License](https://img.shields.io/badge/license-MIT-607D8B?style=flat-square)
 
 ---
 
-The **Finances Portfolio Tracker & Opportunity Engine** is an enterprise-grade command-line interface (CLI) application engineered to track personal investment portfolios, monitor market prices, analyze historical performance, export visual analytics, and execute **deterministic multi-factor rebalancing powered by Google Gemini AI**.
+The **Finances Portfolio Tracker & Opportunity Engine** is an enterprise-grade command-line interface (CLI) application engineered to track personal investment portfolios, monitor real-time prices, audit look-through exposures, evaluate fundamental quality tiers, export visual performance analytics, and execute **deterministic multi-factor rebalancing powered by Google Gemini AI**.
 
-Designed with a strict separation of concerns, this system leverages Google Drive as a **Cloud Single Source of Truth (SSoT)** for all dynamic data (`finances.db`, portfolios, targets, and caches), integrating real-time market data retrieval, multi-currency conversion, relational SQLite persistence, and quantitative scoring strategies.
+Designed with strict separation of concerns, the system utilizes Google Drive as a **Cloud Single Source of Truth (SSoT)** for all dynamic datasets (`finances.db`, active portfolios, wishlist targets, and cached fundamentals). It seamlessly blends real-time market data retrieval, multi-currency conversion, relational SQLite persistence, and quantitative scoring models.
 
 ---
 
-## Architectural Blueprint & Directory Structure
 
-The repository follows a clean, modular architecture, segregating domain logic, infrastructure providers, opportunity engines, performance analytics, and presentation layers.
+## System Architecture & Directory Blueprint
 
+The repository follows a clean, modular architecture segregating domain entities, infrastructure providers, scoring strategies, analytics, and presentation layers.
 ```mermaid
 graph TD
-    GDrive[(Google Drive SSoT)] <-->|Pull / Push Sync| LocalDB[(Local SQLite / JSON Cache)]
+    GDrive[(Google Drive SSoT)] <-->|Bidirectional Sync| LocalDB[(Local SQLite / JSON Cache)]
     LocalDB --> Providers[Data Providers: yfinance / JustETF]
     LocalDB --> Analytics[Historical Analytics & Performance Engine]
-    Providers --> Engine[Opportunity Engine: Quant Scoring]
-    Engine --> Gemini[Gemini AI: Batch Rebalance]
-    Analytics --> Dashboard[Rich Terminal Dashboard & Chart Export]
-    Gemini --> Report[CLI Output & Snapshot Save]
-    Report -->|Auto Backup| GDrive
+    Providers --> Engine[Opportunity Engine: Quant Scoring Strategies]
+    Engine --> Exposure[Look-Through Exposure Policy Audit]
+    Exposure --> Gemini[Gemini AI: Batch Rebalance Advisory]
+    Analytics --> Dashboard[Rich Terminal Dashboard & Chart Exporter]
+    Gemini --> Report[CLI Matrix & Output Export]
+    Report -->|Auto Push Backup| GDrive
 ```
 
-| Layer                  | Path                                 | Description                                                                                                                                      |
-|:-----------------------|:-------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Core Domain**        | `src/core/`                          | Business logic, quotation retrieval, multi-currency exchange, snapshot management, performance analysis, and repository protocols.               |
-| **Analytics Engine**   | `src/core/portfolio_analytics.py`    | Historical time-series processing, ATH/drawdown tracking, asset class share breakdown, and ROI calculations.                                     |
-| **Opportunity Engine** | `src/core/opportunity_evaluation/`   | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) with active exposure constraint penalties. |
-| **Quality Evaluation** | `src/cli/quality.py`                 | Independent fundamental health analysis, absolute quality tiers (Tier A/B/C), diagnostic terminal cards, and Markdown report export.             |
-| **AI Infrastructure**  | `src/infra/ai/`                      | Google Gemini API client (`gemini-3.6-flash`) executing robust batch structured JSON portfolio rebalancing analysis with Pydantic validation.    |
-| **Database & Schema**  | `src/infra/database/`                | SQLite connection management, foreign key enforcement, transactional contexts, and SQL extraction queries (`finance_sql_extraction.py`).         |
-| **Cloud SSoT Engine**  | `src/infra/gdrive/`                  | Google Drive service wrapper handling bidirectional synchronization of `finances.db` and configuration JSON files.                               |
-| **JustETF Scraper**    | `src/infra/justetf/`                 | Scraper client extracting ETF composition, sector weights, geographic allocation, and TER directly from JustETF profile pages.                   |
-| **CLI & Automation**   | `src/cli/` & `root`                  | Typer-powered CLI interface (`main.py`, `cli/`) and GNU Make automation workflows.                                                               |
+| Layer                    | Path                                | Description                                                                                                                  |
+|:-------------------------|:------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------|
+| **CLI & Presentation**   | `src/cli/` & `main.py`              | Typer-powered CLI entrypoints (`dashboard`, `opportunity`, `quality`, `fundamentals`).                                       |
+| **Core Domain Models**   | `src/core/models.py`                | Immutable domain dataclasses (`Asset`, `Quotation`, `PortfolioSnapshot`, `StockDetails`, `ETFDetails`).                      |
+| **Scoring Strategies**   | `src/core/opportunity_evaluation/`  | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) with penalty factors.  |
+| **Exposure Engine**      | `src/core/exposure.py`              | Consolidates look-through sector, geographic, and company allocations across direct equities and ETFs.                       |
+| **Analytics Engine**     | `src/core/portfolio_analytics.py`   | Historical time-series processing, ATH tracking, drawdown analysis, and ROI calculation.                                     |
+| **AI Advisory**          | `src/infra/ai/`                     | Google Gemini API client (`gemini-3.6-flash`) executing batch structured JSON portfolio analysis.                            |
+| **Relational Storage**   | `src/infra/database/`               | SQLite database connection management, schema initialization DDLs, and SQL extraction queries.                               |
+| **Cloud SSoT Engine**    | `src/infra/gdrive/`                 | Google Drive service wrapper handling bidirectional synchronization of database and config files.                            |
+| **JustETF Scraper**      | `src/infra/justetf/`                | Web scraper client retrieving ETF compositions, sector weights, country allocations, and TER metrics.                        |
+| **Graphics & Utilities** | `src/utils/`                        | Matplotlib chart exporters, ANSI-colored terminal logging, and automated coverage badge generation.                          |
 
 ---
 
-## Core Modules & Technical Highlights
+## Core Technical Deep Dives
 
-### 1. Historical Analytics & Performance Dashboard (`src/cli/dashboard.py & src/core/portfolio_analytics.py`)
+### 1. Deterministic Opportunity Engine & Strategy Scoring (`src/core/opportunity_evaluation/`)
+Rather than relying solely on AI outputs, the system uses deterministic multi-factor scoring strategies:
+* **Stock Strategy** (`stock_strategy.py`): Evaluates price pullbacks from recent peaks using a trapezoidal sweet-spot curve (penalizing falling knives), forward vs. trailing P/E growth ratios, positioning relative to the 52-week range, and target allocation gaps.
+* **ETF Strategy** (`etf_strategy.py`): Evaluates technical discount sweet-spots, cost efficiency via Total Expense Ratio (TER), and current vs. target allocation gaps.
+* **Exposure Penalty Multipliers**: Multiplicatively scales down the `total_score` of assets that breach configured sector, country, or single-company concentration thresholds.
+
+
+### 2. Look-Through Portfolio Exposure Policies (`src/core/exposure.py`)
+* **Look-Through Aggregation**: Unpacks underlying ETF holdings (via JustETF data) and merges them with direct equity positions to determine true portfolio-wide concentration.
+* **Policy Constraints**: Enforces default thresholds for Country Allocation (Max 60%), Tech Sector Allocation (Max 50%), Other Sectors (Max 15%), and Single Company Exposure (Max 15%).
+
+### 3. Absolute Quality Tier Evaluation (`src/cli/quality.py` & `src/core/analysis.py`)
+* **Fundamental Scoring**: Evaluates asset fundamentals on a 0–100 scale, assigning Tier A, Tier B, or Tier C classifications based on profit margins, YoY revenue expansion, balance sheet leverage (Debt-to-Equity), and earnings trajectory.
+* **Diagnostic Reporting**: Outputs visual terminal summary cards detailing Bull Case catalysts, Bear Case risks, and explicit Valuation Status (`Undervalued`, `Fair Value`, `Overvalued`).
+
+### 4. Historical Analytics & Performance Dashboard (`src/cli/dashboard.py & src/core/portfolio_analytics.py`)
 * **Time-Series Valuation**: Extracts and processes full portfolio snapshots to compute historical valuation curves, All-Time Highs (ATH), and maximum drawdowns.
 * **Class Allocation & Drift**: Monitors the evolving weight ratio between Stocks and ETFs over time, measuring deviation against target asset allocations.
 * **Asset Growth & ROI Summary**: Computes total monetary return (€) and percentage gain (%) compared against cost basis for every asset.
-* **Automated Visual Chart Export**: Renders clean, publication-ready historical performance charts to output/plots/ using Matplotlib and Seaborn.  
+* **Automated Visual Chart Export**: Renders clean, publication-ready historical performance charts to output/plots/ using Matplotlib and Seaborn.
 
-
-### 2. Deterministic Opportunity Engine & Exposure Policies (`src/core/opportunity_evaluation/` & `src/core/exposure.py`)
-Rather than relying purely on opaque LLM predictions, the engine uses explicit quantitative models implementing the Strategy Pattern:
-* **Stock Scoring Strategy (`stock_strategy.py`)**: Evaluates price pullbacks from 52-week highs (with *falling knife* protection), forward vs. trailing P/E growth ratios, and 52-week range positioning.
-* **ETF Scoring Strategy (`etf_strategy.py`)**: Combines technical discount sweet-spots, cost efficiency via Total Expense Ratio (TER), and target allocation gaps.
-* **Exposure Constraint Enforcement**: Actively penalizes the composite priority score (`total_score`) when candidate assets belong to geographic regions, sectors, or individual companies that exceed defined portfolio concentration limits.
-
-### 3. Independent Fundamental Health & Quality Engine (`src/cli/quality.py` & `src/core/analysis.py`)
-* **Absolute Quality Tiers**: Classifies portfolio assets into **Tier A**, **Tier B**, or **Tier C** based on deterministic fundamental criteria (profit margins, revenue growth, debt-to-equity ratios, and dividend stability).
-* **Diagnostic Terminal Cards**: Renders rich visual cards using `rich` featuring **Bull Case** catalysts, **Bear Case** risks, and explicit **Valuation Status** (`Undervalued`, `Fair Value`, `Overvalued`).
-* **Automated Reporting & Persistence**: Exports comprehensive evaluation summaries to Markdown (`output/quality_report.md`) and records historical fundamental snapshots in SQLite (`stock_fundamental_history`, `etf_fundamental_history`).
-
-### 4. Gemini AI Batch Advisory (`src/infra/ai/`)
+### 5. Gemini AI Batch Advisory (`src/infra/ai/`)
 * **Enterprise Client (`GeminiClient`)**: Powered by `gemini-3.6-flash` via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
 * **Batch Portfolio Analysis**: Processes the entire target asset wishlist in a single API call, returning strict structured JSON validated through Pydantic (`BatchRebalanceRecommendations`).
 * **Graceful Fallback**: Automatically falls back to the quantitative opportunity matrix if AI quotas are exhausted or credentials are unconfigured.
 
-### 5. Cloud SSoT Architecture (`src/infra/gdrive/`)
+### 6. Cloud SSoT Architecture (`src/infra/gdrive/`)
 * **Stateless Local Environment**: The local `data/` directory is ephemeral and strictly ignored by Git (`.gitignore`).
 * **Automated Bidirectional Sync**: At application startup, all required operational files (`finances.db`, `portfolio.json`, `portfolio_targets.json`, `etf_cache.json`, `system_instruction.json`) are automatically pulled from Google Drive.
 * **Automated Persistence**: Any command generating or modifying data immediately pushes the updated state back to Google Drive upon process completion.
 
 ---
 
-## Quickstart & Setup
+## Strategy Configuration & Policy Limits
 
-1. **Clone repository and initialize environment**:
-
-```bash
-git clone https://github.com/JoPedro15/finances.git
-cd finances
-python3.13 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-2. **Configure GCP credentials and environment variables**:
-
-```bash
-mkdir -p secrets
-# Place your GCP OAuth credentials.json in secrets/credentials.json
-cp .env.example .env
-```
-
----
-
-## Environment Variables & Configuration
-
-Key configuration parameters in `.env`:
+All strategy weights, scoring bounds, and policy thresholds are centrally defined in `src/config.py` and overridden via `.env`:
 
 ```ini
 # Gemini AI Configuration
@@ -134,9 +117,23 @@ ETF_WEIGHT_ALLOCATION=0.40
 
 ---
 
+## Relational Database Schema Overview
+
+The central finances.db SQLite database is managed via transactional connection contexts and automatic DDL migrations (`src/infra/database/schema.py`):
+
+* `assets`: Stores registered holdings (ISIN, Yahoo ticker, quantity, average buy price, asset type).
+* `snapshots` & `asset_snapshots`: Records timestamped portfolio valuation history and multi-currency exchange rates.
+* `stock_fundamental_history`: Tracks historical equity fundamentals (P/E ratios, dividend yield, 52w range, quality tier, quality score).
+* `etf_fundamental_history`: Stores historical ETF metadata (TER, holdings JSON, sector/country breakdown JSON, quality tier, quality score).
+* `opportunities` & `opportunity_asset_metrics`: Logs historical rebalancing runs, factor scores, and AI recommendations.
+
+___
+
 ## CLI Reference & Usage
 
 The application is controlled via a rich Typer CLI interface defined in `main.py` and GNU Make shortcuts. All operational workflows are accessible directly through the main entrypoint.
+
+---
 
 ### Portfolio Monitoring & Opportunity Execution
 
@@ -256,6 +253,13 @@ The quality pipeline executes:
 - **Bandit**: Security vulnerability scanning (`bandit`).
 - **Pip-Audit**: Known dependency vulnerability auditing (`pip-audit`).
 - **Pytest**: Unit test execution with rigorous branch coverage reporting (`pytest --cov=src`).
+
+---
+
+## CI/CD Pipelines
+
+* **CI Quality & Security Pipeline** (`.github/workflows/ci.yml`): Triggered on push or PR to main. Executes Black, Ruff, Mypy, Bandit, Pip-Audit, and Pytest with branch coverage, automatically updating the `coverage.svg` badge.
+* **Weekly Execution Pipeline** (`.github/workflows/sync-fundamentals_3.yml`): Scheduled every Sunday at 00:00 UTC. Automatically fetches live fundamental metrics, records valuation snapshots, updates quality tiers, ranks opportunities via Gemini AI, and commits updated database state back to the repository.
 
 ---
 
