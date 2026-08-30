@@ -1,3 +1,5 @@
+> **⚠️ Financial Disclaimer:** This software is for educational and personal portfolio tracking only. It does not constitute financial advice. Algorithmic scores and Gemini AI recommendations are automated insights, not trading signals. Read the full [DISCLAIMER.md](DISCLAIMER.md) before executing any commands. Use at your own risk.
+
 # Finances Portfolio Tracker & Opportunity Engine
 
 ![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)
@@ -24,6 +26,7 @@ Designed with strict separation of concerns, the system utilizes Google Drive as
 ## System Architecture & Directory Blueprint
 
 The repository follows a clean, modular architecture segregating domain entities, infrastructure providers, scoring strategies, analytics, and presentation layers.
+
 ```mermaid
 graph TD
     GDrive[(Google Drive SSoT)] <-->|Bidirectional Sync| LocalDB[(Local SQLite / JSON Cache)]
@@ -119,13 +122,24 @@ ETF_WEIGHT_ALLOCATION=0.40
 
 ## Relational Database Schema Overview
 
-The central finances.db SQLite database is managed via transactional connection contexts and automatic DDL migrations (`src/infra/database/schema.py`):
+The central `finances.db` SQLite database is managed via transactional connection contexts and automatic DDL migrations (`src/infra/database/schema.py`):
+
+### Schema Overview
 
 * `assets`: Stores registered holdings (ISIN, Yahoo ticker, quantity, average buy price, asset type).
 * `snapshots` & `asset_snapshots`: Records timestamped portfolio valuation history and multi-currency exchange rates.
 * `stock_fundamental_history`: Tracks historical equity fundamentals (P/E ratios, dividend yield, 52w range, quality tier, quality score).
 * `etf_fundamental_history`: Stores historical ETF metadata (TER, holdings JSON, sector/country breakdown JSON, quality tier, quality score).
 * `opportunities` & `opportunity_asset_metrics`: Logs historical rebalancing runs, factor scores, and AI recommendations.
+
+### Migrating Legacy JSON Storage to SQLite
+
+When upgrading from legacy file-based setups (`portfolio.json` and `portfolio_targets.json`), execute the migration utility to populate `finances.db:
+
+```bash
+# Run migration script to transform legacy JSON files into relational SQLite records
+python -m src.migrate_json_to_sqlite
+```
 
 ___
 
@@ -196,41 +210,6 @@ make sync-fundamentals
 
 ---
 
-## Database Schema & Legacy Data Migration
-
-The application relies on SQLite for structured relational persistence, enforcing foreign key integrity, transactional isolation, and historical tracking.
-
-### Automatic Schema Initialization
-
-Database tables and indexes are managed automatically via `src/infra/database/schema.py`. Upon establishing a database connection context (`get_db_context`), the system executes `initialize_database(conn)` to ensure all required relational structures exist:
-
-* **`assets`**: Stores active portfolio equities and ETFs, ISINs, tickers, quantities, and average buy prices.
-* **`snapshots` & `asset_snapshots`**: Persists timestamped portfolio valuations, total returns, and asset weight distributions.
-* **`stock_fundamental_history`**: Records historical equity metrics, fundamental scores, quality tiers, and valuation diagnostics.
-* **`etf_fundamental_history`**: Stores TER, top holdings, sector allocations, geographic distributions, and quality tiers in structured JSON columns[cite: 30].
-* **`opportunities` & `opportunity_asset_metrics`**: Persists multi-factor rebalancing runs and AI-driven recommendations[cite: 30].
-
-### Migrating Legacy JSON Storage to SQLite
-
-When upgrading from legacy file-based setups (`portfolio.json` and `portfolio_targets.json`), execute the standalone migration utility to populate `finances.db`[cite: 30]:
-
-```bash
-# Run migration script to transform legacy JSON files into relational SQLite records
-python -m src.migrate_json_to_sqlite
-```
-
-The migration pipeline executes the following steps:
-
-1. Validates and initializes the target SQLite database schema.
-
-2. Parses active holdings and allocation target percentages from local or pulled JSON files.
-
-3. Inserts asset records into the `assets` table while preventing duplicate ISIN entries.
-
-4. Triggers an automated Cloud SSoT backup, synchronizing the updated `finances.db` directly to Google Drive.
-
----
-
 ## Quality Gates & Testing Suite
 
 The project enforces strict code quality standards, verified through automated GitHub Actions CI pipelines (`ci.yml`).
@@ -258,7 +237,7 @@ The quality pipeline executes:
 
 ## CI/CD Pipelines
 
-* **CI Quality & Security Pipeline** (`.github/workflows/ci.yml`): Triggered on push or PR to main. Executes Black, Ruff, Mypy, Bandit, Pip-Audit, and Pytest with branch coverage, automatically updating the `coverage.svg` badge.
+* **CI Quality & Security Pipeline** (`.github/workflows/ci.yml`): Triggered on push or PR to `main`. Executes Black, Ruff, Mypy, Bandit, Pip-Audit, and Pytest with branch coverage, automatically updating the `coverage.svg` badge.
 * **Weekly Execution Pipeline** (`.github/workflows/sync-fundamentals_3.yml`): Scheduled every Sunday at 00:00 UTC. Automatically fetches live fundamental metrics, records valuation snapshots, updates quality tiers, ranks opportunities via Gemini AI, and commits updated database state back to the repository.
 
 ---
