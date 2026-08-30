@@ -4,37 +4,43 @@ This file contains the logic for creating and managing portfolio value snapshots
 
 from __future__ import annotations
 
-import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+from src.config import settings
+from src.core.currency_exchange import get_exchange_rate
 from src.core.exceptions import StorageError
-from src.core.get_quotation import get_exchange_rate, get_quotation
 from src.core.models import Asset, AssetSnapshot, PortfolioSnapshot, Quotation
+from src.core.providers import AssetDataProvider, ETFProvider, StockProvider
 from src.core.repositories import (
     HistoryRepository,
-    JsonHistoryRepository,
-    JsonPortfolioRepository,
     PortfolioRepository,
+    SqliteHistoryRepository,
+    SqlitePortfolioRepository,
 )
+from src.infra.database.connection import DEFAULT_DB_PATH
 from src.utils.logger.logger import logger
 
-# --- Configuration ---
-DATA_DIR: str = os.path.join(os.path.dirname(__file__), "../..", "data")
-PORTFOLIO_FILE: str = os.path.join(DATA_DIR, "portfolio.json")
-HISTORY_FILE: str = os.path.join(DATA_DIR, "history.json")
+
+def get_provider_for_asset(asset: Asset) -> AssetDataProvider:
+    """Selects the appropriate data provider based on asset type."""
+    asset_type: str = str(getattr(asset, "asset_type", "STOCK")).upper()
+    if asset_type == "ETF":
+        return ETFProvider()
+    return StockProvider()
 
 
 def get_snapshot(
     portfolio_repo: PortfolioRepository | None = None,
     max_workers: int = 5,
 ) -> PortfolioSnapshot | None:
-    """Calculates the current value of all assets in the portfolio concurrently."""
+    """Calculates current value of all assets in the portfolio concurrently."""
     logger.section("Getting Portfolio Snapshot")
 
-    repo: PortfolioRepository = portfolio_repo or JsonPortfolioRepository(
-        PORTFOLIO_FILE
+    repo: PortfolioRepository = portfolio_repo or SqlitePortfolioRepository(
+        DEFAULT_DB_PATH
     )
 
     try:
@@ -51,22 +57,23 @@ def get_snapshot(
         )
 
     def fetch_asset_quotation(asset: Asset) -> tuple[Asset, Quotation | None]:
-        raw_quotation = get_quotation(asset.yahoo_ticker)
+        provider: AssetDataProvider = get_provider_for_asset(asset)
+        raw_quotation: Quotation | None = provider.get_price(asset)
+
+        provider.get_details(asset)
+
         if not raw_quotation:
             return asset, None
-        if isinstance(raw_quotation, Quotation):
-            return asset, raw_quotation
-        if isinstance(raw_quotation, dict):
-            return asset, Quotation(
-                price=float(raw_quotation["price"]),
-                currency=str(raw_quotation.get("currency", "N/A")),
-            )
-        return asset, None
+        return asset, raw_quotation
 
     quotations_map: dict[str, Quotation] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(fetch_asset_quotation, asset) for asset in assets]
+        futures: list[Future[tuple[Asset, Quotation | None]]] = [
+            executor.submit(fetch_asset_quotation, asset) for asset in assets
+        ]
         for future in as_completed(futures):
+            asset: Asset
+            fetched_quotation: Quotation | None
             asset, fetched_quotation = future.result()
             if fetched_quotation:
                 quotations_map[asset.yahoo_ticker] = fetched_quotation
@@ -134,14 +141,34 @@ def display_snapshot(snapshot_data: PortfolioSnapshot | dict[str, Any]) -> None:
     logger.info(f"Total Portfolio Value: {snapshot.total_value_eur:.2f} EUR")
 
     for asset in snapshot.assets_snapshot:
-        logger.print(f"  - {asset.name}: {asset.value_eur:.2f} EUR")
+        logger.info(f"  - {asset.name}: {asset.value_eur:.2f} EUR")
+
+
+def trigger_gdrive_backup(file_path: Path, folder_id: str | None = None) -> bool:
+    """Triggers non-blocking backup of a persistence file to Google Drive."""
+    try:
+        from src.infra.gdrive.service import GoogleDriveService
+
+        target_folder: str | None = folder_id or settings.gdrive_snapshot_folder_id
+        service: GoogleDriveService = GoogleDriveService(folder_id=target_folder)
+        success: bool = service.backup_file(file_path)
+        if success:
+            logger.info(f"Google Drive backup successful for '{file_path.name}'.")
+        else:
+            logger.warning(f"Google Drive backup skipped for '{file_path.name}'.")
+        return success
+    except Exception as e:
+        logger.warning(f"Google Drive backup failed gracefully: {e}")
+        return False
 
 
 def save_snapshot(
     snapshot_data: PortfolioSnapshot | dict[str, Any],
     history_repo: HistoryRepository | None = None,
+    backup_to_gdrive: bool = True,
 ) -> None:
-    """Appends a snapshot to the history storage."""
+    """Appends a snapshot to storage and optionally backs
+    up local database to Google Drive."""
     logger.section("Saving Snapshot")
 
     snapshot: PortfolioSnapshot = (
@@ -150,7 +177,7 @@ def save_snapshot(
         else PortfolioSnapshot.from_dict(snapshot_data)
     )
 
-    repo: HistoryRepository = history_repo or JsonHistoryRepository(HISTORY_FILE)
+    repo: HistoryRepository = history_repo or SqliteHistoryRepository(DEFAULT_DB_PATH)
 
     try:
         repo.save_snapshot(snapshot)
@@ -158,4 +185,13 @@ def save_snapshot(
         logger.error(f"Failed to write history snapshot: {e}", exception=e)
         return
 
-    logger.success(f"Snapshot successfully saved to {HISTORY_FILE}")
+    logger.success(f"Snapshot successfully saved to database ({DEFAULT_DB_PATH})")
+
+    if backup_to_gdrive:
+        db_file: Path = Path(DEFAULT_DB_PATH)
+        if db_file.exists():
+            trigger_gdrive_backup(db_file)
+
+        history_json: Path = Path("data/history.json")
+        if history_json.exists():
+            trigger_gdrive_backup(history_json)

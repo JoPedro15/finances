@@ -6,7 +6,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,20 +40,25 @@ class Asset:
     yahoo_ticker: str
     quantity: float
     average_buy_price: float
+    asset_type: str = "STOCK"
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Asset:
+        raw_type: str = str(
+            data.get("asset_type") or data.get("type") or "STOCK"
+        ).upper()
         return cls(
-            name=data.get("name", ""),
-            isin=data.get("isin", ""),
-            yahoo_ticker=data.get("yahoo_ticker", ""),
+            name=str(data.get("name", "")),
+            isin=str(data.get("isin", "")),
+            yahoo_ticker=str(data.get("yahoo_ticker") or data.get("symbol", "")),
             quantity=float(data.get("quantity", 0.0)),
             average_buy_price=float(
                 data.get("averageBuyPrice", data.get("average_buy_price", 0.0))
             ),
+            asset_type=raw_type,
         )
 
     @property
@@ -75,9 +83,9 @@ class AssetSnapshot:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AssetSnapshot:
         return cls(
-            name=data.get("name", ""),
-            isin=data.get("isin", ""),
-            yahoo_ticker=data.get("yahoo_ticker", ""),
+            name=str(data.get("name", "")),
+            isin=str(data.get("isin", "")),
+            yahoo_ticker=str(data.get("yahoo_ticker", "")),
             native_price=float(data.get("native_price", 0.0)),
             native_currency=str(data.get("native_currency", "EUR")),
             value_eur=float(data.get("value_eur", 0.0)),
@@ -198,8 +206,8 @@ class ETFDetails:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ETFDetails:
-        raw_ter = data.get("ter_pct")
-        ter_pct = float(raw_ter) if raw_ter is not None else None
+        raw_ter: Any = data.get("ter_pct")
+        ter_pct: float | None = float(raw_ter) if raw_ter is not None else None
 
         return cls(
             holdings=[Holding.from_dict(item) for item in data.get("holdings", [])],
@@ -221,3 +229,156 @@ class ETFDetails:
             "country_breakdown": [item.to_dict() for item in self.country_breakdown],
             "ter_pct": self.ter_pct,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class StockDetails:
+    """Consolidates stock fundamental metrics and market data."""
+
+    market_cap: float | None = None
+    pe_ratio: float | None = None
+    forward_pe: float | None = None
+    dividend_yield_pct: float | None = None
+    fifty_two_week_high: float | None = None
+    fifty_two_week_low: float | None = None
+    sector: str | None = None
+    industry: str | None = None
+    price_to_book: float | None = None
+    peg_ratio: float | None = None
+    beta: float | None = None
+    profit_margins_pct: float | None = None
+    revenue_growth_pct: float | None = None
+    earnings_growth_pct: float | None = None
+    total_debt_to_equity: float | None = None
+    target_mean_price: float | None = None
+    recommendation_key: str | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> StockDetails:
+        def _get_float(key: str) -> float | None:
+            val: Any = data.get(key)
+            return float(val) if val is not None else None
+
+        def _get_str(key: str) -> str | None:
+            val: Any = data.get(key)
+            return str(val) if val is not None else None
+
+        return cls(
+            market_cap=_get_float("market_cap"),
+            pe_ratio=_get_float("pe_ratio"),
+            forward_pe=_get_float("forward_pe"),
+            dividend_yield_pct=_get_float("dividend_yield_pct"),
+            fifty_two_week_high=_get_float("fifty_two_week_high"),
+            fifty_two_week_low=_get_float("fifty_two_week_low"),
+            sector=_get_str("sector"),
+            industry=_get_str("industry"),
+            price_to_book=_get_float("price_to_book"),
+            peg_ratio=_get_float("peg_ratio"),
+            beta=_get_float("beta"),
+            profit_margins_pct=_get_float("profit_margins_pct"),
+            revenue_growth_pct=_get_float("revenue_growth_pct"),
+            earnings_growth_pct=_get_float("earnings_growth_pct"),
+            total_debt_to_equity=_get_float("total_debt_to_equity"),
+            target_mean_price=_get_float("target_mean_price"),
+            recommendation_key=_get_str("recommendation_key"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+class RecommendationAction(StrEnum):
+    """Supported investment opportunity_evaluation actions."""
+
+    BUY = "BUY"
+    SELL = "SELL"
+    HOLD = "HOLD"
+
+
+class UrgencyLevel(StrEnum):
+    """Urgency priority levels for recommendation execution."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class RebalanceRecommendation(BaseModel):
+    """Structured AI recommendation schema for asset portfolio rebalancing."""
+
+    action: RecommendationAction
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    reasoning: str = Field(max_length=250)
+    target_allocation_pct: float = Field(ge=0.0, le=100.0)
+    urgency_level: UrgencyLevel
+    risk_score: int = Field(ge=1, le=5)
+    valuation_score: int = Field(ge=1, le=10)
+    expected_dividend_yield_pct: float | None = Field(default=None, ge=0.0, le=100.0)
+    ter_impact_assessment: str | None = Field(default=None, max_length=100)
+
+
+@dataclass(frozen=True, slots=True)
+class TimeSeriesPoint:
+    """Represents a single timestamped value point in a time series."""
+
+    date: str
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
+class AssetTimeSeries:
+    """Stores historical time series metrics for an individual asset."""
+
+    ticker: str
+    name: str
+    asset_type: str
+    value_history: list[TimeSeriesPoint] = field(default_factory=list)
+    quantity_history: list[TimeSeriesPoint] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class AssetClassTimeSeries:
+    """Stores historical valuation and composition split for an asset class."""
+
+    asset_type: str
+    value_history: list[TimeSeriesPoint] = field(default_factory=list)
+    share_history: list[TimeSeriesPoint] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioTimeSeries:
+    """Stores historical metrics for global portfolio valuation."""
+
+    value_history: list[TimeSeriesPoint] = field(default_factory=list)
+    ath_history: list[TimeSeriesPoint] = field(default_factory=list)
+    drawdown_history: list[TimeSeriesPoint] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class AssetPerformanceSummary:
+    """Summary snapshot metrics for an individual asset position."""
+
+    ticker: str
+    name: str
+    asset_type: str
+    latest_quantity: float
+    latest_value_eur: float
+    cost_basis_eur: float
+    roi_eur: float
+    roi_percent: float
+    portfolio_share_percent: float
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardOverview:
+    """Aggregated analytics dataset for terminal rendering and chart generation."""
+
+    portfolio_history: PortfolioTimeSeries
+    asset_series: list[AssetTimeSeries]
+    class_series: list[AssetClassTimeSeries]
+    asset_summaries: list[AssetPerformanceSummary]
+    top_growth_contributor: str | None = None
+    max_drawdown_percent: float = 0.0

@@ -13,6 +13,7 @@ env/
 .env
 .env.*
 !.env.example
+secrets/
 
 # Testing & Coverage
 .coverage
@@ -33,6 +34,11 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Project-specific Data & Logs
-data/history.json
+# Output Reports (CSV & Markdown)
+output/
+
+# Project-specific Data & Logs (Cloud SSOT)
+data/
+!data/example.portfolio.json
+*.db
 *.log
