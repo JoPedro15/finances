@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config save-snapshot etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality dashboard pre-invest
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config save-snapshot etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality dashboard update-finance
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality Gates
@@ -98,9 +98,15 @@ exposure:
 sync-fundamentals:
 	PYTHONPATH=src $(PYTHON) main.py sync-fundamentals
 
-# Consolidated pre-investment sequence before market open.
-pre-invest: sync-fundamentals save-snapshot exposure analyze-opportunity
-
+# Fully updates finance.db with fundamental data, portfolio snapshot, exposure checks, and opportunity analysis before or after trading.
+update-finance:
+	PYTHONPATH=src python3 main.py pull-config
+	PYTHONPATH=. python3 src/migrate_json_to_sqlite.py
+	PYTHONPATH=src python3 main.py sync-fundamentals
+	PYTHONPATH=src python3 main.py save-snapshot
+	python3 main.py exposure-check
+	PYTHONPATH=src python3 -m cli.opportunity --skip-ai
+	PYTHONPATH=src python3 main.py push-config
 # Orchestrates portfolio opportunity_evaluation ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
 # Accepts optional CLI flags via FLAGS variable (e.g., make opportunity FLAGS="--skip-ai -v"):
 #   -t, --targets-file PATH : Path to wishlist targets JSON file (default: data/portfolio_targets.json)
@@ -109,7 +115,7 @@ pre-invest: sync-fundamentals save-snapshot exposure analyze-opportunity
 #   -v, --verbose           : Display granular factor score breakdowns (Dip Sc, Cost Sc, Gap Sc)
 #   -o, --output-csv PATH   : CSV export destination path (default: output/opportunity_output_22_08_2026.csv)
 analyze-opportunity:
-	PYTHONPATH=src $(PYTHON) -m cli.opportunity
+	PYTHONPATH=src $(PYTHON) -m cli.opportunity --skip-ai
 
 # Evaluates absolute quality tiers, comprehensive fundamental metrics, and diagnostic Bull/Bear cases.
 analyze-quality:

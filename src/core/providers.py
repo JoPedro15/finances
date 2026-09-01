@@ -26,7 +26,9 @@ class AssetDataProvider(Protocol):
 
     def get_price(self, asset: Asset) -> Quotation | None: ...
 
-    def get_details(self, asset: Asset) -> ETFDetails | StockDetails | None: ...
+    def get_details(
+        self, asset: Asset, force_refresh: bool = False
+    ) -> ETFDetails | StockDetails | None: ...
 
 
 class StockProvider:
@@ -73,7 +75,9 @@ class StockProvider:
             logger.error(f"Error fetching quotation for '{asset.yahoo_ticker}': {e}")
             return None
 
-    def get_details(self, asset: Asset) -> StockDetails | None:
+    def get_details(
+        self, asset: Asset, force_refresh: bool = False
+    ) -> StockDetails | None:
         if not asset.yahoo_ticker:
             logger.error(f"No Yahoo ticker provided for stock asset '{asset.name}'.")
             return None
@@ -229,16 +233,21 @@ class ETFProvider:
             ter_pct=details.ter_pct,
         )
 
-    def get_details(self, asset: Asset) -> ETFDetails | None:
+    def get_details(
+        self, asset: Asset, force_refresh: bool = False
+    ) -> ETFDetails | None:
         """Retrieves ETF composition, verifying breakdown validity before caching."""
         if not asset.isin:
             logger.error(f"No ISIN provided for ETF asset {asset.name}.")
             return None
 
-        cached_details: ETFDetails | None = self.cache_repo.get_etf_details(asset.isin)
-        if cached_details is not None:
-            if cached_details.sector_breakdown or cached_details.country_breakdown:
-                return cached_details
+        if not force_refresh:
+            cached_details: ETFDetails | None = self.cache_repo.get_etf_details(
+                asset.isin
+            )
+            if cached_details is not None:
+                if cached_details.sector_breakdown or cached_details.country_breakdown:
+                    return cached_details
 
         try:
             details: ETFDetails = self.justetf_client.get_etf_details(asset.isin)
@@ -254,7 +263,10 @@ class ETFProvider:
             fallback_details: ETFDetails = self._apply_benchmark_fallback(
                 asset,
                 ETFDetails(
-                    holdings=[], sector_breakdown=[], country_breakdown=[], ter_pct=None
+                    holdings=[],
+                    sector_breakdown=[],
+                    country_breakdown=[],
+                    ter_pct=None,
                 ),
             )
             if fallback_details.sector_breakdown or fallback_details.country_breakdown:

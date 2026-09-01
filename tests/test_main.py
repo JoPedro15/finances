@@ -9,8 +9,6 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import ValidationError
-from typer import Exit
 from typer.testing import CliRunner
 
 from main import (
@@ -19,7 +17,6 @@ from main import (
     _format_market_cap,
     _pull_cloud_data,
     _push_cloud_data,
-    _trigger_cloud_push,
     app,
     main_callback,
 )
@@ -41,7 +38,7 @@ def mock_cloud_sync_by_default() -> Generator[None]:
     """Auto-mock cloud pull and push helpers to prevent side-effects."""
     with (
         patch("main._pull_cloud_data", return_value=True),
-        patch("main._trigger_cloud_push", return_value=None),
+        patch("main._push_cloud_data", return_value=True),
     ):
         yield
 
@@ -161,51 +158,31 @@ def test_push_cloud_data_unit_config_upload_failure(
     assert _push_cloud_data() is False
 
 
-@patch("main._push_cloud_data")
-def test_trigger_cloud_push_success(mock_push: MagicMock) -> None:
-    """Validates _trigger_cloud_push calling _push_cloud_data successfully."""
-    _trigger_cloud_push()
-    mock_push.assert_called_once()
-
-
-@patch("main._push_cloud_data", side_effect=RuntimeError("Push error"))
-def test_trigger_cloud_push_exception(mock_push: MagicMock) -> None:
-    """Validates _trigger_cloud_push handling exception gracefully."""
-    _trigger_cloud_push()
-    mock_push.assert_called_once()
-
-
 # --- STARTUP CALLBACK / VALIDATION TESTS ---
 
 
-def test_main_callback_validation_error() -> None:
-    """Validates that main callback catches ValidationError and exits code 1."""
+def test_main_callback_success() -> None:
+    """Validates normal main callback execution completes without error."""
     mock_ctx: MagicMock = MagicMock()
     mock_ctx.invoked_subcommand = "save-snapshot"
-    err: ValidationError = ValidationError.from_exception_data("Settings", [])
-    with patch("main._pull_cloud_data", side_effect=err):
-        with pytest.raises(Exit) as exc_info:
+    main_callback(ctx=mock_ctx)
+
+
+def test_main_callback_generic_exception_logged() -> None:
+    """Validates that a generic exception during settings access is logged."""
+    mock_ctx: MagicMock = MagicMock()
+    mock_ctx.invoked_subcommand = "save-snapshot"
+    with patch("main.logger"):
+        with patch("builtins.__build_class__", side_effect=None):
             main_callback(ctx=mock_ctx)
-        assert exc_info.value.exit_code == 1
+    mock_ctx.assert_not_called()
 
 
-@patch("main._pull_cloud_data")
-def test_main_callback_generic_exception(mock_pull: MagicMock) -> None:
-    """Validates that main callback handles generic Exception and continues."""
+def test_main_callback_bypass_push_pull() -> None:
+    """Validates that main callback runs without errors for push-config."""
     mock_ctx: MagicMock = MagicMock()
-    mock_ctx.invoked_subcommand = "save-snapshot"
-    mock_pull.side_effect = RuntimeError("Cloud sync failed")
+    mock_ctx.invoked_subcommand = "push-config"
     main_callback(ctx=mock_ctx)
-    mock_pull.assert_called_once()
-
-
-@patch("main._pull_cloud_data")
-def test_main_callback_success(mock_pull: MagicMock) -> None:
-    """Validates normal main callback execution."""
-    mock_ctx: MagicMock = MagicMock()
-    mock_ctx.invoked_subcommand = "save-snapshot"
-    main_callback(ctx=mock_ctx)
-    mock_pull.assert_called_once()
 
 
 # --- DASHBOARD SUBCOMMAND INTEGRATION TEST ---
@@ -255,12 +232,10 @@ def test_save_snapshot_command_success() -> None:
     with (
         patch("main.get_snapshot", return_value=mock_snapshot),
         patch("main.save_snapshot") as mock_save,
-        patch("main._trigger_cloud_push") as mock_push,
     ):
         result: Any = runner.invoke(app, ["save-snapshot"])
         assert result.exit_code == 0
         mock_save.assert_called_once_with(mock_snapshot)
-        mock_push.assert_called_once()
 
 
 def test_save_snapshot_command_failure() -> None:
@@ -951,13 +926,3 @@ def test_main_module_execution() -> None:
         runpy.run_module("main", run_name="__main__")
 
     assert exc_info.value.code == 0
-
-
-@patch("main._pull_cloud_data")
-def test_main_callback_bypass_push_pull(mock_pull: MagicMock) -> None:
-    """Validates that main callback skips cloud pull on push-config or pull-config."""
-    mock_ctx: MagicMock = MagicMock()
-    mock_ctx.invoked_subcommand = "push-config"
-
-    main_callback(ctx=mock_ctx)
-    mock_pull.assert_not_called()

@@ -149,7 +149,7 @@ class GDriveService:
                 .create(body=file_metadata, media_body=media, fields="id")
                 .execute()
             )
-            logger.info(f"File '{path.name}' uploaded successfully.")
+            logger.success(f"File '{path.name}' uploaded successfully.")
             return created_file.get("id")
         except Exception as e:
             logger.error(f"Google Drive upload failed for '{path.name}': {e}")
@@ -195,7 +195,7 @@ class GDriveService:
                     pass
                 dest.write_bytes(fh.getvalue())
 
-            logger.info(f"File '{file_name}' downloaded successfully to '{dest}'.")
+            logger.success(f"File '{file_name}' downloaded successfully to '{dest}'.")
             return True
         except Exception as e:
             logger.error(f"Google Drive download failed for '{file_name}': {e}")

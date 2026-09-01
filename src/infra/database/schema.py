@@ -125,7 +125,6 @@ def initialize_database(conn: sqlite3.Connection) -> None:
     cursor.execute(CREATE_OPPORTUNITIES_TABLE_SQL)
     cursor.execute(CREATE_OPPORTUNITY_ASSET_METRICS_TABLE_SQL)
 
-    # Safe schema migrations for existing databases lacking quality columns
     for table in ("stock_fundamental_history", "etf_fundamental_history"):
         for column, col_type in [
             ("quality_tier", "TEXT"),
@@ -133,7 +132,9 @@ def initialize_database(conn: sqlite3.Connection) -> None:
         ]:
             try:
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type};")
-                logger.info(f"Successfully added column '{column}' to table '{table}'.")
+                logger.success(
+                    f"Successfully added column '{column}' to table '{table}'."
+                )
             except sqlite3.OperationalError:
                 pass
 

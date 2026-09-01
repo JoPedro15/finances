@@ -332,7 +332,7 @@ def export_outputs(
                 }
                 writer.writerow(row)
 
-        logger.info(f"Successfully exported opportunity matrix CSV to '{csv_path}'.")
+        logger.success(f"Successfully exported opportunity matrix CSV to '{csv_path}'.")
     except Exception as err:
         logger.error(f"Failed to export CSV to '{csv_path}': {err}")
 
@@ -536,7 +536,7 @@ def export_outputs(
     try:
         with open(md_path, mode="w", encoding="utf-8") as md_file:
             md_file.write("\n".join(md_lines))
-        logger.info(
+        logger.success(
             f"Successfully exported opportunity report Markdown to '{md_path}'."
         )
     except Exception as err:
@@ -549,7 +549,7 @@ def export_outputs(
             )
             drive_service.upload_file(csv_path, overwrite=True)
             drive_service.upload_file(md_path, overwrite=True)
-            logger.info(
+            logger.success(
                 "Successfully backed up opportunity reports to "
                 "Google Drive reports folder."
             )
@@ -1026,7 +1026,7 @@ def recommend_rebalance(
                 asset_dict_map=asset_dict_map,
                 recommendations_map=recommendations_map,
             )
-            logger.info(
+            logger.success(
                 "Successfully persisted opportunity report into SQLite database."
             )
         except Exception as err:
