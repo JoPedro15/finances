@@ -17,12 +17,14 @@ from src.utils.logger.logger import logger
 
 
 def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
+    """Synchronizes stock fundamental data into the SQLite database."""
     db_path_obj: Path = Path(db_path)
     opportunity_repo: SqliteOpportunityRepository = SqliteOpportunityRepository(
         db_path=db_path_obj
     )
     stock_provider: StockProvider = StockProvider()
 
+    stocks: list[tuple[int, Asset]] = []
     try:
         with get_db_context(str(db_path_obj)) as conn:
             initialize_database(conn)
@@ -32,7 +34,8 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 "average_buy_price, asset_type FROM assets "
                 "WHERE UPPER(asset_type) = 'STOCK'"
             )
-            stocks: list[tuple[int, Asset]] = [
+            rows: list[Any] = cursor.fetchall()
+            stocks = [
                 (
                     int(row["id"]),
                     Asset(
@@ -44,7 +47,7 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                         asset_type=str(row["asset_type"]),
                     ),
                 )
-                for row in cursor.fetchall()
+                for row in rows
             ]
     except Exception as e:
         logger.error(f"Failed to fetch stock assets from database: {e}")
@@ -65,8 +68,8 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
             details: StockDetails | None = stock_provider.get_details(asset)
             if details is None:
                 logger.warning(
-                    f"No fundamental details returned for ticker "
-                    f"'{asset.yahoo_ticker}'."
+                    f"No fundamental details returned for ticker '{asset.yahoo_ticker}'. "
+                    "Verify provider implementation or network limits."
                 )
                 continue
 
@@ -86,20 +89,24 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 quality_tier=quality_tier,
                 quality_score=quality_score,
             )
+            logger.success(
+                f"Successfully synced stock fundamentals for '{asset.yahoo_ticker}'."
+            )
         except Exception as e:
             logger.error(
-                f"Failed to sync fundamentals for ticker "
-                f"'{asset.yahoo_ticker}': {e}"
+                f"Failed to sync fundamentals for ticker '{asset.yahoo_ticker}': {e}"
             )
 
 
 def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
+    """Synchronizes ETF fundamental data into the SQLite database."""
     db_path_obj: Path = Path(db_path)
     opportunity_repo: SqliteOpportunityRepository = SqliteOpportunityRepository(
         db_path=db_path_obj
     )
     etf_provider: ETFProvider = ETFProvider()
 
+    etfs: list[tuple[int, Asset]] = []
     try:
         with get_db_context(str(db_path_obj)) as conn:
             initialize_database(conn)
@@ -109,7 +116,8 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 "average_buy_price, asset_type FROM assets "
                 "WHERE UPPER(asset_type) = 'ETF'"
             )
-            etfs: list[tuple[int, Asset]] = [
+            rows: list[Any] = cursor.fetchall()
+            etfs = [
                 (
                     int(row["id"]),
                     Asset(
@@ -121,7 +129,7 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                         asset_type=str(row["asset_type"]),
                     ),
                 )
-                for row in cursor.fetchall()
+                for row in rows
             ]
     except Exception as e:
         logger.error(f"Failed to fetch ETF assets from database: {e}")
@@ -142,7 +150,8 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
             details: ETFDetails | None = etf_provider.get_details(asset)
             if details is None:
                 logger.warning(
-                    f"No fundamental details returned for ETF ISIN '{asset.isin}'."
+                    f"No fundamental details returned for ETF ISIN '{asset.isin}'. "
+                    "Verify provider implementation or network limits."
                 )
                 continue
 
@@ -162,6 +171,9 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 quality_tier=quality_tier,
                 quality_score=quality_score,
             )
+            logger.success(
+                f"Successfully synced ETF fundamentals for '{asset.isin}'."
+            )
         except Exception as e:
             logger.error(
                 f"Failed to sync fundamentals for ETF ISIN '{asset.isin}': {e}"
@@ -169,12 +181,14 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
 
 
 def sync_portfolio_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
+    """Orchestrates stock and ETF fundamental sync."""
     logger.section("Synchronizing Portfolio Fundamentals")
     sync_stock_fundamentals(db_path=db_path)
     sync_etf_fundamentals(db_path=db_path)
 
 
 def main() -> None:
+    """CLI entrypoint for standalone fundamentals sync execution."""
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Stock and ETF fundamentals management and history sync."
     )

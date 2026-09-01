@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -41,8 +42,8 @@ CONFIG_FILES: list[Path] = [
     DATA_DIR / "system_instruction.json",
 ]
 
-# Database file mapped to GDRIVE_DATABASE_FOLDER_ID
-DB_FILE: Path = DATA_DIR / "finances.db"
+# Database file mapped dynamically to DEFAULT_DB_PATH to avoid filename mismatch
+DB_FILE: Path = Path(DEFAULT_DB_PATH)
 
 app: typer.Typer = typer.Typer(
     name="finances",
@@ -95,39 +96,19 @@ def _push_cloud_data() -> bool:
 
 @app.callback()
 def main_callback(ctx: typer.Context) -> None:
-    """Validates environment settings and pulls Cloud data on startup."""
+    """Validates environment settings on startup."""
     try:
         _ = settings
-        if ctx.invoked_subcommand in ("push-config", "pull-config"):
-            return
-
-        logger.info("Synchronizing data from Cloud...")
-        success: bool = _pull_cloud_data()
-        if success:
-            logger.success("Cloud data synchronized successfully.")
-        else:
-            logger.warning("Cloud data synchronization completed with warnings.")
     except ValidationError as err:
         logger.error(f"Environment configuration validation failed:\n{err}")
         raise typer.Exit(code=1) from err
     except Exception as e:
-        logger.error(f"Failed to synchronize data from Cloud: {e}")
-        logger.warning("Proceeding with local data only.")
-
-
-def _trigger_cloud_push() -> None:
-    """Helper to push updated local operational files back to Cloud."""
-    logger.info("Synchronizing data back to Cloud...")
-    try:
-        _push_cloud_data()
-        logger.success("Cloud synchronization complete.")
-    except Exception as e:
-        logger.error(f"Failed to push data to Cloud: {e}")
+        logger.error(f"Failed to validate environment configuration: {e}")
 
 
 @app.command(name="save-snapshot")
 def save_snapshot_cmd() -> None:
-    """Calculates valuation, saves history, and pushes to Cloud."""
+    """Calculates valuation and saves history snapshot to local database."""
     try:
         snapshot_data: PortfolioSnapshot | None = get_snapshot()
         if not snapshot_data:
@@ -135,7 +116,6 @@ def save_snapshot_cmd() -> None:
             raise typer.Exit(code=1)
 
         save_snapshot(snapshot_data)
-        _trigger_cloud_push()
     except typer.Exit:
         raise
     except Exception as err:
@@ -287,8 +267,6 @@ def etf_details_cmd(
             _display_single_etf_details(
                 asset.isin, asset.name, provider, ticker=asset.yahoo_ticker
             )
-
-        _trigger_cloud_push()
     except typer.Exit:
         raise
     except Exception as err:
@@ -379,7 +357,6 @@ def analyze_quality_cli(
     """Evaluates absolute quality tiers and metrics for assets."""
     try:
         analyze_quality_cmd(ticker=ticker)
-        _trigger_cloud_push()
     except typer.Exit:
         raise
     except Exception as err:
@@ -440,8 +417,6 @@ def stock_details_cmd(
 
         for asset in stock_assets:
             _display_single_stock_details(asset.yahoo_ticker, asset.name, provider)
-
-        _trigger_cloud_push()
     except typer.Exit:
         raise
     except Exception as err:
@@ -579,7 +554,6 @@ def opportunity_cmd(
         skip_ai=skip_ai,
         verbose=verbose,
     )
-    _trigger_cloud_push()
 
 
 @app.command(name="sync-fundamentals")
@@ -592,10 +566,9 @@ def sync_fundamentals_cmd(
         ),
     ] = DEFAULT_DB_PATH,
 ) -> None:
-    """Synchronizes portfolio fundamentals into database and pushes."""
+    """Synchronizes portfolio fundamentals into local SQLite database."""
     try:
         sync_portfolio_fundamentals(db_path=db_path)
-        _trigger_cloud_push()
     except Exception as err:
         logger.error(f"Failed to synchronize portfolio fundamentals: {err}")
         raise typer.Exit(code=1) from err

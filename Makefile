@@ -99,7 +99,7 @@ sync-fundamentals:
 	PYTHONPATH=src $(PYTHON) main.py sync-fundamentals
 
 # Fully updates finance.db with fundamental data, portfolio snapshot, exposure checks, and opportunity analysis before or after trading.
-update-finance: sync-fundamentals save-snapshot exposure analyze-opportunity
+update-finance: pull-config sync-portfolio sync-fundamentals save-snapshot exposure analyze-opportunity
 
 # Orchestrates portfolio opportunity_evaluation ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
 # Accepts optional CLI flags via FLAGS variable (e.g., make opportunity FLAGS="--skip-ai -v"):
