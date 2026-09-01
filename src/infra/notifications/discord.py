@@ -174,7 +174,7 @@ def send_discord_notification(
 
         response = webhook.execute()
         if response.status_code in (200, 204):
-            logger.info("Successfully sent opportunity_evaluation report to Discord.")
+            logger.success("Successfully sent opportunity_evaluation report to Discord.")
             return True
 
         logger.error(

@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
+from src.core.analysis import evaluate_etf_quality, evaluate_stock_quality
 from src.core.models import Asset, ETFDetails, StockDetails
 from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import SqliteOpportunityRepository
@@ -24,7 +26,7 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     try:
         with get_db_context(str(db_path_obj)) as conn:
             initialize_database(conn)
-            cursor = conn.cursor()
+            cursor: Any = conn.cursor()
             cursor.execute(
                 "SELECT id, isin, name, yahoo_ticker, quantity, "
                 "average_buy_price, asset_type FROM assets "
@@ -68,7 +70,22 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 )
                 continue
 
-            opportunity_repo.save_stock_fundamentals(asset_id=asset_id, details=details)
+            evaluation: dict[str, Any] = evaluate_stock_quality(details)
+            quality_tier: str | None = (
+                str(evaluation["tier"]) if evaluation.get("tier") is not None else None
+            )
+            quality_score: int | None = (
+                int(evaluation["score"])
+                if evaluation.get("score") is not None
+                else None
+            )
+
+            opportunity_repo.save_stock_fundamentals(
+                asset_id=asset_id,
+                details=details,
+                quality_tier=quality_tier,
+                quality_score=quality_score,
+            )
         except Exception as e:
             logger.error(
                 f"Failed to sync fundamentals for ticker "
@@ -86,7 +103,7 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     try:
         with get_db_context(str(db_path_obj)) as conn:
             initialize_database(conn)
-            cursor = conn.cursor()
+            cursor: Any = conn.cursor()
             cursor.execute(
                 "SELECT id, isin, name, yahoo_ticker, quantity, "
                 "average_buy_price, asset_type FROM assets "
@@ -129,7 +146,22 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 )
                 continue
 
-            opportunity_repo.save_etf_fundamentals(asset_id=asset_id, details=details)
+            evaluation: dict[str, Any] = evaluate_etf_quality(details)
+            quality_tier: str | None = (
+                str(evaluation["tier"]) if evaluation.get("tier") is not None else None
+            )
+            quality_score: int | None = (
+                int(evaluation["score"])
+                if evaluation.get("score") is not None
+                else None
+            )
+
+            opportunity_repo.save_etf_fundamentals(
+                asset_id=asset_id,
+                details=details,
+                quality_tier=quality_tier,
+                quality_score=quality_score,
+            )
         except Exception as e:
             logger.error(
                 f"Failed to sync fundamentals for ETF ISIN '{asset.isin}': {e}"

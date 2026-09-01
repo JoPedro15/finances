@@ -629,7 +629,7 @@ class SqliteOpportunityRepository:
                 cursor = conn.cursor()
                 cursor.execute(query, params)
 
-            logger.info(
+            logger.success(
                 "Successfully saved fundamental history snapshot for "
                 f"asset_id={asset_id} with quality tier {quality_tier}."
             )
@@ -707,7 +707,7 @@ class SqliteOpportunityRepository:
                 cursor = conn.cursor()
                 cursor.execute(query, params)
 
-            logger.info(
+            logger.success(
                 "Successfully saved ETF fundamental history snapshot for "
                 f"asset_id={asset_id} with quality tier {quality_tier}."
             )

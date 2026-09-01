@@ -123,7 +123,7 @@ def export_quality_report(
     try:
         with open(md_path, mode="w", encoding="utf-8") as md_file:
             md_file.write("\n".join(md_lines))
-        logger.info(f"Successfully exported quality report Markdown to '{md_path}'.")
+        logger.success(f"Successfully exported quality report Markdown to '{md_path}'.")
     except Exception as err:
         logger.error(f"Failed to export quality report Markdown to '{md_path}': {err}")
 
@@ -264,7 +264,7 @@ def save_quality_to_database(
                         ),
                     )
             conn.commit()
-        logger.info(
+        logger.success(
             "Successfully persisted quality evaluation metrics "
             "and history into SQLite database."
         )

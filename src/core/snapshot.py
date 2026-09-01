@@ -153,7 +153,7 @@ def trigger_gdrive_backup(file_path: Path, folder_id: str | None = None) -> bool
         service: GoogleDriveService = GoogleDriveService(folder_id=target_folder)
         success: bool = service.backup_file(file_path)
         if success:
-            logger.info(f"Google Drive backup successful for '{file_path.name}'.")
+            logger.success(f"Google Drive backup successful for '{file_path.name}'.")
         else:
             logger.warning(f"Google Drive backup skipped for '{file_path.name}'.")
         return success
