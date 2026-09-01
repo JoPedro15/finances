@@ -29,6 +29,7 @@ from src.core.repositories import (
     JsonPortfolioRepository,
     ParquetHistoryRepository,
     SqliteHistoryRepository,
+    SqliteOpportunityRepository,
     SqlitePortfolioRepository,
 )
 
@@ -587,3 +588,137 @@ def test_parquet_history_repo_save_write_error(
 
     with pytest.raises(StorageWriteError):
         repo.save_snapshot(sample_snapshot)
+
+
+# ==============================================================================
+# SqliteOpportunityRepository Tests
+# ==============================================================================
+
+
+def _make_score(symbol: str, asset_type_val: str = "stock") -> MagicMock:
+    score: MagicMock = MagicMock()
+    score.symbol = symbol
+    score.asset_type.value = asset_type_val
+    score.dip_score = 0.5
+    score.cost_score = 0.6
+    score.allocation_score = 0.7
+    score.total_score = 0.8
+    return score
+
+
+def test_sqlite_opportunity_repo_save_and_load_history(tmp_path: Path) -> None:
+    """Verifies saving an opportunity report and loading asset history."""
+    db_path: Path = tmp_path / "finances_test.db"
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(db_path=db_path)
+
+    score = _make_score("AAPL")
+    asset_dict_map = {
+        "AAPL": {
+            "current_price": 180.0,
+            "current_allocation_pct": 10.0,
+            "target_allocation_pct": 12.0,
+            "forward_pe": 25.0,
+            "trailing_pe": 30.0,
+            "peg_ratio": 1.5,
+            "price_to_book": 3.0,
+            "dividend_yield_pct": 0.5,
+            "ter": None,
+        }
+    }
+
+    repo.save_opportunity_report(
+        timestamp="2026-09-01T10:00:00",
+        total_value_eur=5000.0,
+        has_ai=False,
+        ranked_scores=[score],
+        asset_dict_map=asset_dict_map,
+        recommendations_map={},
+    )
+
+    history = repo.load_asset_history("AAPL", limit=5)
+    assert len(history) == 1
+    assert history[0]["timestamp"] == "2026-09-01T10:00:00"
+
+
+def test_sqlite_opportunity_repo_save_with_ai_recommendation(
+    tmp_path: Path,
+) -> None:
+    """Verifies saving with AI recommendation populates action fields."""
+    db_path: Path = tmp_path / "finances_test.db"
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(db_path=db_path)
+
+    score = _make_score("NVDA")
+    rec: MagicMock = MagicMock()
+    rec.action.value = "buy"
+    rec.urgency_level.value = "high"
+    rec.confidence_score = 0.90
+
+    repo.save_opportunity_report(
+        timestamp="2026-09-01T11:00:00",
+        total_value_eur=8000.0,
+        has_ai=True,
+        ranked_scores=[score],
+        asset_dict_map={},
+        recommendations_map={"NVDA": rec},
+    )
+
+    history = repo.load_asset_history("NVDA")
+    assert len(history) == 1
+
+
+def test_sqlite_opportunity_repo_duplicate_timestamp_ignored(
+    tmp_path: Path,
+) -> None:
+    """Verifies duplicate timestamp is silently ignored (ON CONFLICT DO NOTHING)."""
+    db_path: Path = tmp_path / "finances_test.db"
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(db_path=db_path)
+
+    repo.save_opportunity_report(
+        timestamp="2026-09-01T12:00:00",
+        total_value_eur=1000.0,
+        has_ai=False,
+        ranked_scores=[],
+        asset_dict_map={},
+        recommendations_map={},
+    )
+    repo.save_opportunity_report(
+        timestamp="2026-09-01T12:00:00",
+        total_value_eur=1000.0,
+        has_ai=False,
+        ranked_scores=[],
+        asset_dict_map={},
+        recommendations_map={},
+    )
+
+    history = repo.load_asset_history("AAPL")
+    assert history == []
+
+
+def test_sqlite_opportunity_repo_load_history_nonexistent_db(
+    tmp_path: Path,
+) -> None:
+    """Verifies load_asset_history returns empty list when DB does not exist."""
+    db_path: Path = tmp_path / "missing.db"
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(db_path=db_path)
+    assert repo.load_asset_history("AAPL") == []
+
+
+@patch("src.core.repositories.get_db_context")
+def test_sqlite_opportunity_repo_save_write_error(
+    mock_db_context: MagicMock, tmp_path: Path
+) -> None:
+    """Verifies StorageWriteError is raised when DB write fails."""
+    db_path: Path = tmp_path / "finances_test.db"
+    mock_db_context.side_effect = Exception("Disk failure")
+
+    repo: SqliteOpportunityRepository = SqliteOpportunityRepository(db_path=db_path)
+
+    with pytest.raises(StorageWriteError):
+        repo.save_opportunity_report(
+            timestamp="2026-09-01T13:00:00",
+            total_value_eur=1000.0,
+            has_ai=False,
+            ranked_scores=[],
+            asset_dict_map={},
+            recommendations_map={},
+        )

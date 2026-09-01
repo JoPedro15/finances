@@ -246,10 +246,7 @@ class ETFProvider:
                 asset.isin
             )
             if cached_details is not None:
-                if (
-                    cached_details.sector_breakdown
-                    or cached_details.country_breakdown
-                ):
+                if cached_details.sector_breakdown or cached_details.country_breakdown:
                     return cached_details
 
         try:
@@ -272,9 +269,6 @@ class ETFProvider:
                     ter_pct=None,
                 ),
             )
-            if (
-                fallback_details.sector_breakdown
-                or fallback_details.country_breakdown
-            ):
+            if fallback_details.sector_breakdown or fallback_details.country_breakdown:
                 return fallback_details
             return None

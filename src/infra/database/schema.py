@@ -132,7 +132,9 @@ def initialize_database(conn: sqlite3.Connection) -> None:
         ]:
             try:
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type};")
-                logger.success(f"Successfully added column '{column}' to table '{table}'.")
+                logger.success(
+                    f"Successfully added column '{column}' to table '{table}'."
+                )
             except sqlite3.OperationalError:
                 pass
 

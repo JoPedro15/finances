@@ -68,7 +68,8 @@ def sync_stock_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
             details: StockDetails | None = stock_provider.get_details(asset)
             if details is None:
                 logger.warning(
-                    f"No fundamental details returned for ticker '{asset.yahoo_ticker}'. "
+                    f"No fundamental details returned for ticker "
+                    f"'{asset.yahoo_ticker}'. "
                     "Verify provider implementation or network limits."
                 )
                 continue
@@ -171,9 +172,7 @@ def sync_etf_fundamentals(db_path: str | Path = DEFAULT_DB_PATH) -> None:
                 quality_tier=quality_tier,
                 quality_score=quality_score,
             )
-            logger.success(
-                f"Successfully synced ETF fundamentals for '{asset.isin}'."
-            )
+            logger.success(f"Successfully synced ETF fundamentals for '{asset.isin}'.")
         except Exception as e:
             logger.error(
                 f"Failed to sync fundamentals for ETF ISIN '{asset.isin}': {e}"
