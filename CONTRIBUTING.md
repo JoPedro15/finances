@@ -15,4 +15,4 @@ All contributions must pass local quality checks before opening a Pull Request:
 * **Use Mock Data in Tests:** Ensure unit tests use static mock payloads instead of hitting live external endpoints.
 
 ## 3. Code Licensing & Intellectual Property
-By submitting a Pull Request or contributing code to this repository, you agree that all your contributions will be licensed under the project's existing [LICENSE](LICENSE) (MIT License), and you warrant that you hold the necessary rights to submit the code free of encumbrances or third-party IP breaches.
+By submitting a Pull Request or contributing code to this repository, you agree that all your contributions will be licensed under the project's existing [LICENCE.md](LICENCE.md) (MIT License), and you warrant that you hold the necessary rights to submit the code free of encumbrances or third-party IP breaches.

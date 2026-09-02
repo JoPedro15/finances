@@ -40,7 +40,7 @@ jobs:
           python main.py sync-fundamentals
           python main.py save-snapshot
           python main.py analyze-quality
-          python main.py opportunity
+          python main.py opportunity_evaluation
 
       - name: Commit updated database and reports
         uses: stefanzweifel/git-auto-commit-action@v5
