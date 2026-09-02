@@ -14,15 +14,18 @@ from rich.text import Text
 from src.cli.dashboard import app as dashboard_app
 from src.cli.fundamentals import sync_portfolio_fundamentals
 from src.cli.opportunity import recommend_rebalance
+from src.cli.projection_presenter import ProjectionPresenter
 from src.cli.quality import analyze_quality_cmd
 from src.config import DATA_DIR, settings
 from src.core.exposure import ExposureEngine
 from src.core.models import (
     Asset,
     ETFDetails,
+    GrowthProjectionResult,
     PortfolioSnapshot,
     StockDetails,
 )
+from src.core.projections import ProjectionEngine
 from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import (
     SqliteHistoryRepository,
@@ -571,6 +574,89 @@ def sync_fundamentals_cmd(
     except Exception as err:
         logger.error(f"Failed to synchronize portfolio fundamentals: {err}")
         raise typer.Exit(code=1) from err
+
+
+@app.command(name="project-growth")
+def project_growth_cmd(
+    initial_value: Annotated[
+        float | None,
+        typer.Option("--initial-value", "-i", help="Initial portfolio capital."),
+    ] = None,
+    monthly_contribution: Annotated[
+        float,
+        typer.Option(
+            "--monthly-contribution", "-m", help="Regular monthly contribution in EUR."
+        ),
+    ] = 0.0,
+    expected_return: Annotated[
+        float,
+        typer.Option(
+            "--expected-return", "-r", help="Custom expected annual return percentage."
+        ),
+    ] = 0.07,
+    compare_scenarios: Annotated[
+        bool,
+        typer.Option(
+            "--compare-scenarios",
+            "-c",
+            help="Display comparison across conservative, "
+            "moderate, and aggressive scenarios.",
+        ),
+    ] = False,
+    db_path: Annotated[
+        Path,
+        typer.Option("--db-path", help="Path to SQLite database file."),
+    ] = DEFAULT_DB_PATH,
+) -> None:
+    """Projects portfolio growth over 10, 20, and 30-year horizons."""
+    from src.infra.database.finance_sql_extraction import FinanceSQLExtractor
+
+    engine = ProjectionEngine()
+    presenter = ProjectionPresenter()
+    extractor = FinanceSQLExtractor(db_path=db_path)
+
+    # Determine initial value
+    if initial_value is None:
+        history = extractor.fetch_portfolio_history()
+        initial_value = history[-1].total_value_eur if history else 0.0
+
+    # Determine CAGR for primary scenario
+    hist_cagr = engine.calculate_historical_cagr(extractor)
+
+    # Define scenarios
+    scenarios = []
+    if compare_scenarios:
+        for name, rate in [
+            ("Conservative - 5%", 0.05),
+            ("Moderate - 7%", 0.07),
+            ("Aggressive - 9%", 0.09),
+        ]:
+            scenarios.append(
+                engine.generate_scenario(
+                    name, initial_value, monthly_contribution, rate
+                )
+            )
+    else:
+        scenarios.append(
+            engine.generate_scenario(
+                "Primary",
+                initial_value,
+                monthly_contribution,
+                expected_return or hist_cagr,
+            )
+        )
+
+    result = GrowthProjectionResult(
+        initial_value=initial_value,
+        monthly_contribution=monthly_contribution,
+        scenarios=scenarios,
+        historical_cagr_pct=hist_cagr,
+        primary_scenario=scenarios[0],
+    )
+
+    presenter.render_summary(result)
+    for scenario in scenarios:
+        presenter.render_milestones(result, scenario_name=scenario.name)
 
 
 if __name__ == "__main__":

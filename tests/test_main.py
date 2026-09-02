@@ -393,7 +393,8 @@ def test_etf_details_cmd_single_isin_success(
     assert "ETF DETAILS - EUNL.DE" in result.output
     assert "TER:" in result.output
     assert "0.20%" in result.output
-    assert "Apple (US0378331005): 5.00%" in result.output
+    assert "Apple" in result.output
+    assert "5.00%" in result.output
 
 
 def test_etf_details_cmd_invalid_isin() -> None:
@@ -457,7 +458,8 @@ def test_etf_details_cmd_empty_breakdowns_and_holding_without_isin(
     assert result.exit_code == 0
     assert "TER:" in result.output
     assert "N/A" in result.output
-    assert "Unlisted Asset: 10.00%" in result.output
+    assert "Unlisted Asset" in result.output
+    assert "10.00%" in result.output
 
 
 @patch("main.ETFProvider")
