@@ -75,7 +75,7 @@ jobs:
 
       - name: Generate Coverage Badge
         run: |
-          PYTHONPATH=src python3 src/utils/generate_badge.py
+          coverage-badge -o coverage.svg -f
 
       - name: Commit Updated Badge
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
