@@ -75,7 +75,7 @@ jobs:
 
       - name: Generate Coverage Badge
         run: |
-          coverage-badge -o coverage.svg -f
+          genbadge coverage -i coverage.xml -o coverage.svg
 
       - name: Commit Updated Badge
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

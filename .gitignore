@@ -18,8 +18,14 @@ secrets/
 # Testing & Coverage
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 .pytest_cache/
+
+# Distribution & Packaging
+*.egg-info/
+build/
+dist/
 
 # Type Checking
 .mypy_cache/
