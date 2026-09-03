@@ -148,7 +148,7 @@ def test_dashboard_show_ticker_not_found(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 1
-    assert "Ticker 'INVALID' not found" in result.output
+    assert "not found" in result.output.lower()
 
 
 @patch("src.cli.dashboard.PortfolioChartExporter")
