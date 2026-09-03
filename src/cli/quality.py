@@ -143,7 +143,8 @@ def save_quality_to_database(
     fetched_at_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        with sqlite3.connect(db_path) as conn:
+        conn = sqlite3.connect(db_path)
+        with conn:
             cursor: sqlite3.Cursor = conn.cursor()
             for item in evaluated_assets:
                 symbol_str: str = str(item["symbol"])
@@ -263,7 +264,8 @@ def save_quality_to_database(
                             quality_score,
                         ),
                     )
-            conn.commit()
+            # Commit is handled by with conn context manager on success
+        conn.close()
         logger.success(
             "Successfully persisted quality evaluation metrics "
             "and history into SQLite database."

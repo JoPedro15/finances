@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config save-snapshot etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality dashboard update-finance
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config save-snapshot etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality dashboard update-finance project-growth
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality Gates
@@ -107,6 +107,7 @@ update-finance:
 	python3 main.py exposure-check
 	PYTHONPATH=src python3 -m cli.opportunity --skip-ai
 	PYTHONPATH=src python3 main.py push-config
+
 # Orchestrates portfolio opportunity_evaluation ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
 # Accepts optional CLI flags via FLAGS variable (e.g., make opportunity FLAGS="--skip-ai -v"):
 #   -t, --targets-file PATH : Path to wishlist targets JSON file (default: data/portfolio_targets.json)
@@ -125,3 +126,8 @@ analyze-quality:
 # Accepts optional CLI flags via FLAGS variable (e.g., make dashboard FLAGS="--export-plots" or FLAGS="-t AAPL"):
 dashboard:
 	PYTHONPATH=src $(PYTHON) main.py dashboard show $(if $(TICKER),-t $(TICKER)) $(FLAGS)
+
+# Projects portfolio growth over 10, 20, and 30-year horizons.
+# Example usage: make project-growth FLAGS="--monthly-contribution 500 --compare-scenarios"
+project-growth:
+	PYTHONPATH=src $(PYTHON) main.py project-growth $(FLAGS) --compare-scenarios --monthly-contribution 500

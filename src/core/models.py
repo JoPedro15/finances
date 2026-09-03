@@ -382,3 +382,68 @@ class DashboardOverview:
     asset_summaries: list[AssetPerformanceSummary]
     top_growth_contributor: str | None = None
     max_drawdown_percent: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class GrowthMilestone:
+    """Represents portfolio growth metrics at a specific year milestone."""
+
+    year: int
+    total_invested: float
+    compound_interest: float
+    projected_value: float
+    inflation_adjusted_value: float = 0.0
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class GrowthProjectionScenario:
+    """Projection scenario with annual return rate, contributions, and milestones."""
+
+    name: str
+    annual_return_pct: float
+    monthly_contribution: float
+    progression: list[GrowthMilestone] = field(default_factory=list)
+    milestones: dict[int, GrowthMilestone] = field(default_factory=dict)
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "annual_return_pct": self.annual_return_pct,
+            "monthly_contribution": self.monthly_contribution,
+            "progression": [item.to_dict() for item in self.progression],
+            "milestones": {str(yr): ms.to_dict() for yr, ms in self.milestones.items()},
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class GrowthProjectionResult:
+    """Consolidated result of portfolio compound growth projections."""
+
+    initial_value: float
+    monthly_contribution: float
+    scenarios: list[GrowthProjectionScenario]
+    historical_cagr_pct: float | None = None
+    primary_scenario: GrowthProjectionScenario | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "initial_value": self.initial_value,
+            "monthly_contribution": self.monthly_contribution,
+            "scenarios": [sc.to_dict() for sc in self.scenarios],
+            "historical_cagr_pct": self.historical_cagr_pct,
+            "primary_scenario": (
+                self.primary_scenario.to_dict() if self.primary_scenario else None
+            ),
+        }
