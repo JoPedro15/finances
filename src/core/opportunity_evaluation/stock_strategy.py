@@ -90,12 +90,20 @@ class StockScoringStrategy(ScoringStrategy):
     def calculate_allocation_score(
         self, target_allocation_pct: float, current_allocation_pct: float
     ) -> float:
-        """Calculates underweight allocation gap priority score."""
+        """Calculates underweight allocation gap priority score using relative gap.
+
+        Measures the percentage of the target that is still missing.
+        Example: Target 10%, Current 5% -> 50% missing (0.5 score).
+        Example: Target 3%, Current 0% -> 100% missing (1.0 score).
+        """
+        if target_allocation_pct <= 0.0:
+            return 0.0
+
         gap_pct: float = target_allocation_pct - current_allocation_pct
         if gap_pct <= 0.0:
             return 0.0  # Overweight or on target
 
-        return max(0.0, min(1.0, gap_pct / self.config.alloc_gap_max_pct))
+        return max(0.0, min(1.0, gap_pct / target_allocation_pct))
 
     def calculate_score(
         self,
