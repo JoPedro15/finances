@@ -42,8 +42,9 @@ graph TD
 
 | Layer                    | Path                                | Description                                                                                                                  |
 |:-------------------------|:------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------|
-| **CLI & Presentation**   | `src/cli/` & `main.py`              | Typer-powered CLI entrypoints (`dashboard`, `opportunity_evaluation`, `analyze-quality`, `fundamentals`).                     |
-| **Core Domain Models**   | `src/core/models.py`                | Immutable domain dataclasses (`Asset`, `Quotation`, `PortfolioSnapshot`, `StockDetails`, `ETFDetails`, etc.).                |
+| **CLI & Presentation**   | `src/cli/` & `main.py`              | Typer-powered CLI entrypoints (`dashboard`, `opportunity_evaluation`, `analyze-quality`, `fundamentals`, `project-growth`).  |
+| **Core Domain Models**   | `src/core/models.py`                | Immutable domain dataclasses (`Asset`, `Quotation`, `PortfolioSnapshot`, `GrowthMilestone`, `GrowthProjectionResult`, etc.). |
+| **Projections Engine**   | `src/core/projections.py`           | Financial mathematics for long-term compound growth forecasting with inflation adjustment logic.                             |
 | **Scoring Strategies**   | `src/core/opportunity_evaluation/`  | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) with penalty factors.  |
 | **Exposure Engine**      | `src/core/exposure.py`              | Consolidates look-through sector, geographic, and company allocations across direct equities and ETFs.                       |
 | **Analytics Engine**     | `src/core/portfolio_analytics.py`   | Historical time-series processing, ATH tracking, drawdown analysis, and ROI calculation.                                     |
@@ -78,16 +79,21 @@ Rather than relying solely on AI outputs, the system uses deterministic multi-fa
 * **Asset Growth & ROI Summary**: Computes total monetary return (€) and percentage gain (%) compared against cost basis for every asset.
 * **Automated Visual Chart Export**: Renders clean, publication-ready historical performance charts to `output/plots/` using Matplotlib and Seaborn.
 
-### 5. Gemini AI Batch Advisory (`src/infra/ai/`)
+### 5. Long-Term Growth Projections (`src/core/projections.py`)
+* **Compound Growth Engine**: Forecasts portfolio evolution over 10, 20, and 30 years using the compound interest annuity formula ($FV = PV(1+r)^t + PMT \frac{(1+r)^t - 1}{r}$).
+* **Inflation Adjustment**: Calculates "Real Value" by discounting future nominal totals by a 2% annual inflation target to reflect future purchasing power in today's Euros.
+* **Historical Performance Baseline**: Automatically computes the Compound Annual Growth Rate (CAGR) from SQLite history. For periods under 1 year, it intelligently uses Absolute Return to maintain realistic baseline projections.
+
+### 6. Gemini AI Batch Advisory (`src/infra/ai/`)
 * **Enterprise Client (`GeminiClient`)**: Powered by `gemini-3.6-flash` via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
 * **Batch Portfolio Analysis**: Processes the entire target asset wishlist in a single API call, returning strict structured JSON validated through Pydantic (`BatchRebalanceRecommendations`).
 * **Graceful Fallback**: Automatically falls back to the quantitative opportunity matrix if AI quotas are exhausted or credentials are unconfigured.
 
-### 6. Discord Alerts & Webhook Notifications (`src/infra/notifications/discord.py`)
+### 7. Discord Alerts & Webhook Notifications (`src/infra/notifications/discord.py`)
 * **Rich Embeds & Action Cards**: Formats portfolio valuation totals, active strategy weights, decision matrices, and color-coded action recommendations (`BUY` / `SELL` / `HOLD`).
 * **Factor Scores & Reasoning**: Dispatches granular factor breakdowns (Dip, Valuation, Gap, Quant Total) and AI reasoning directly to configured Discord channels.
 
-### 7. Cloud SSoT Architecture (`src/infra/gdrive/`)
+### 8. Cloud SSoT Architecture (`src/infra/gdrive/`)
 * **Stateless Local Environment**: The local `data/` directory is ephemeral and strictly ignored by Git (`.gitignore`).
 * **Automated Bidirectional Sync**: At application startup or command run, required operational files (`finances.db`, `portfolio.json`, `portfolio_targets.json`, `etf_cache.json`, `system_instruction.json`) are synchronized with Google Drive.
 * **Automated Persistence**: Commands generating or modifying data push updated state back to Google Drive upon process completion.
@@ -191,6 +197,12 @@ make dashboard FLAGS="--export-plots"
 ```bash
 # Full Rebalancing Opportunity Pipeline (Quantitative Scoring + Gemini AI Batch Analysis)
 make analyze-opportunity
+
+# Project long-term portfolio growth (10y, 20y, 30y) with inflation adjustment
+make project-growth
+
+# Compare projection scenarios (Conservative, Moderate, Aggressive) with monthly contributions
+make project-growth FLAGS="--compare-scenarios --monthly-contribution 500"
 
 # Run opportunity engine in quantitative-only mode (bypassing AI)
 make analyze-opportunity FLAGS="--skip-ai"
