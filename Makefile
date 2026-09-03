@@ -13,7 +13,7 @@ ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 # ==============================================================================
 # Installs the package and its development dependencies in editable mode.
 install:
-	$(PYTHON) -m pip install -e .[dev
+	$(PYTHON) -m pip install -e .[dev]
 
 # Automatically formats code with Black and fixes linting/imports with Ruff.
 format:
