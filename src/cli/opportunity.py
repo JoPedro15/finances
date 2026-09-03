@@ -710,7 +710,7 @@ def _display_rebalance_results(
         ]
 
         if active_recs:
-            console.print("[bold yellow]Actionable AI Advisory Insights[/bold yellow]")
+            console.print("[bold cyan]ACTIONABLE AI ADVISORY INSIGHTS[/bold cyan]")
             for symbol, rec in active_recs:
                 target_item = asset_dict_map[symbol]
                 act_text: Text = _format_action(rec.action)

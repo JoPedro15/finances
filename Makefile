@@ -98,14 +98,14 @@ exposure:
 sync-fundamentals:
 	PYTHONPATH=src $(PYTHON) main.py sync-fundamentals
 
-# Fully updates finance.db with fundamental data, portfolio snapshot, exposure checks, and opportunity analysis before or after trading.
-update-finance:
+# Fully updates finances.db with fundamental data, portfolio snapshot, exposure checks, and opportunity analysis before or after trading.
+update-finances:
 	PYTHONPATH=src python3 main.py pull-config
 	PYTHONPATH=. python3 src/migrate_json_to_sqlite.py
 	PYTHONPATH=src python3 main.py sync-fundamentals
 	PYTHONPATH=src python3 main.py save-snapshot
 	python3 main.py exposure-check
-	PYTHONPATH=src python3 -m cli.opportunity --skip-ai
+	PYTHONPATH=src python3 -m cli.opportunity
 	PYTHONPATH=src python3 main.py push-config
 
 # Orchestrates portfolio opportunity_evaluation ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.

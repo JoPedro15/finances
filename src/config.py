@@ -69,22 +69,22 @@ class Settings(BaseSettings):
     # Stock Strategy Settings
     stock_dip_min_pct: float = Field(default=5.0, alias="STOCK_DIP_MIN_PCT")
     stock_dip_max_pct: float = Field(default=20.0, alias="STOCK_DIP_MAX_PCT")
-    stock_weight_dip: float = Field(default=0.30, alias="STOCK_WEIGHT_DIP")
+    stock_weight_dip: float = Field(default=0.35, alias="STOCK_WEIGHT_DIP")
     stock_weight_forward_pe: float = Field(
-        default=0.30, alias="STOCK_WEIGHT_FORWARD_PE"
+        default=0.35, alias="STOCK_WEIGHT_FORWARD_PE"
     )
     stock_weight_52w_range: float = Field(default=0.15, alias="STOCK_WEIGHT_52W_RANGE")
     stock_weight_allocation: float = Field(
-        default=0.25, alias="STOCK_WEIGHT_ALLOCATION"
+        default=0.15, alias="STOCK_WEIGHT_ALLOCATION"
     )
     stock_alloc_gap_max_pct: float = Field(
         default=10.0, alias="STOCK_ALLOC_GAP_MAX_PCT"
     )
 
     # ETF Strategy Settings
-    etf_weight_dip: float = Field(default=0.40, alias="ETF_WEIGHT_DIP")
+    etf_weight_dip: float = Field(default=0.60, alias="ETF_WEIGHT_DIP")
     etf_weight_ter: float = Field(default=0.20, alias="ETF_WEIGHT_TER")
-    etf_weight_allocation: float = Field(default=0.40, alias="ETF_WEIGHT_ALLOCATION")
+    etf_weight_allocation: float = Field(default=0.20, alias="ETF_WEIGHT_ALLOCATION")
     etf_dip_min_pct: float = Field(default=5.0, alias="ETF_DIP_MIN_PCT")
     etf_dip_max_pct: float = Field(default=10.0, alias="ETF_DIP_MAX_PCT")
     etf_ter_low_pct: float = Field(default=0.10, alias="ETF_TER_LOW_PCT")

@@ -114,7 +114,7 @@ def test_etf_allocation_score_all_branches() -> None:
         == 0.0
     )
 
-    # Underweight gap within bounds (gap = 5%, alloc_gap_max_pct = 10% -> 0.5)
+    # Underweight gap within bounds (gap = 5%, target = 10% -> 0.5)
     assert (
         strategy.calculate_allocation_score(
             target_allocation_pct=10.0, current_allocation_pct=5.0
@@ -122,10 +122,10 @@ def test_etf_allocation_score_all_branches() -> None:
         == 0.5
     )
 
-    # Underweight gap exceeding max bound (gap = 15% -> capped at 1.0)
+    # Relative gap example: Target 2%, Current 0% -> 1.0 (all missing)
     assert (
         strategy.calculate_allocation_score(
-            target_allocation_pct=20.0, current_allocation_pct=5.0
+            target_allocation_pct=2.0, current_allocation_pct=0.0
         )
         == 1.0
     )

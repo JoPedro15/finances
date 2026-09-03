@@ -61,8 +61,8 @@ graph TD
 
 ### 1. Deterministic Opportunity Engine & Strategy Scoring (`src/core/opportunity_evaluation/`)
 Rather than relying solely on AI outputs, the system uses deterministic multi-factor scoring strategies:
-* **Stock Strategy** (`stock_strategy.py`): Evaluates price pullbacks from recent peaks using a trapezoidal sweet-spot curve (penalizing falling knives), forward vs. trailing P/E growth ratios, positioning relative to the 52-week range, and target allocation gaps.
-* **ETF Strategy** (`etf_strategy.py`): Evaluates technical discount sweet-spots, cost efficiency via Total Expense Ratio (TER), and current vs. target allocation gaps.
+* **Stock Strategy** (`stock_strategy.py`): Evaluates price pullbacks from recent peaks using a trapezoidal sweet-spot curve (penalizing falling knives), forward vs. trailing P/E growth ratios, positioning relative to the 52-week range, and **normalized relative target allocation gaps** (percentage of the target missing).
+* **ETF Strategy** (`etf_strategy.py`): Evaluates technical discount sweet-spots, cost efficiency via Total Expense Ratio (TER), and **normalized relative target allocation gaps**.
 * **Exposure Penalty Multipliers**: Multiplicatively scales down the `total_score` of assets that breach configured sector, country, or single-company concentration thresholds.
 
 ### 2. Look-Through Portfolio Exposure Policies (`src/core/exposure.py`)
@@ -122,14 +122,14 @@ GDRIVE_REPORTS_FOLDER_ID=your_reports_folder_id
 GDRIVE_DATABASE_FOLDER_ID=your_database_folder_id
 
 # Scoring Strategy Weights (Must sum to 1.0)
-STOCK_WEIGHT_DIP=0.30
-STOCK_WEIGHT_FORWARD_PE=0.30
+STOCK_WEIGHT_DIP=0.35
+STOCK_WEIGHT_FORWARD_PE=0.35
 STOCK_WEIGHT_52W_RANGE=0.15
-STOCK_WEIGHT_ALLOCATION=0.25
+STOCK_WEIGHT_ALLOCATION=0.15
 
-ETF_WEIGHT_DIP=0.40
+ETF_WEIGHT_DIP=0.60
 ETF_WEIGHT_TER=0.20
-ETF_WEIGHT_ALLOCATION=0.40
+ETF_WEIGHT_ALLOCATION=0.20
 
 # Exposure Policy Limits
 MAX_COUNTRY_ALLOCATION_PCT=60.0
