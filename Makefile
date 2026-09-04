@@ -41,7 +41,7 @@ security-check:
 # Runs unit tests using Pytest with branch coverage reporting.
 test:
 	@echo "Running unit tests with coverage..."
-	PYTHONPATH=src $(PYTHON) -m pytest --cov=src --cov=main --cov-report=term-missing $(TESTS_DIR)
+	PYTHONPATH=src $(PYTHON) -m pytest --cov=src --cov=main --cov-report=term-missing --cov-report=xml --cov-report=html $(TESTS_DIR)
 
 # Orchestrates the full CI quality gate combining linting, security checks, and unit tests.
 quality: lint security-check test
