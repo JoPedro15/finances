@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Code Formatting & Linting
+  quality:
+    name: Quality & Security Checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,49 +31,11 @@ jobs:
       - name: Install dependencies
         run: make install
 
-      - name: Run Code Formatting & Linting
-        run: make lint
-
-  security:
-    name: Security Audits
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: make install
-
-      - name: Run Security Audits
-        run: make security-check
-
-  test:
-    name: Unit Tests & Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: make install
-
-      - name: Run Tests with Coverage
-        run: |
-          PYTHONPATH=src python3 -m pytest --cov=src --cov-report=xml tests/
+      - name: Run Full Quality Pipeline
+        run: make quality
 
       - name: Generate Coverage Badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           genbadge coverage -i coverage.xml -o coverage.svg
 
