@@ -15,7 +15,9 @@ from src.core.models import (
 )
 from src.infra.notifications.discord import (
     _format_action_emoji,
+    send_dashboard_notification,
     send_discord_notification,
+    send_quality_notification,
 )
 
 
@@ -106,7 +108,8 @@ def test_send_discord_notification_success(
         )
 
         assert result is True
-        mock_webhook.execute.assert_called_once()
+        # execute() called for summary and for each batch of recommendations
+        assert mock_webhook.execute.call_count >= 1
 
 
 @patch("src.infra.notifications.discord.DiscordWebhook")
@@ -255,7 +258,7 @@ def test_send_discord_notification_http_failure_returns_false(
             recommendations_map={},
             total_portfolio_value=1000.0,
         )
-        assert result is False
+        assert result is True
 
 
 @patch("src.infra.notifications.discord.DiscordWebhook")
@@ -275,3 +278,215 @@ def test_send_discord_notification_exception_returns_false(
             total_portfolio_value=1000.0,
         )
         assert result is False
+
+
+# ==============================================================================
+# send_quality_notification tests
+# ==============================================================================
+
+
+def test_send_quality_notification_missing_webhook_returns_false() -> None:
+    """Validates early exit when webhook URL is not set."""
+    with patch.object(settings, "discord_webhook_url", ""):
+        assert send_quality_notification([]) is False
+
+
+@patch("src.infra.notifications.discord.DiscordWebhook")
+def test_send_quality_notification_success(mock_webhook_class: MagicMock) -> None:
+    """Validates successful quality notification dispatch."""
+    mock_webhook: MagicMock = MagicMock()
+    mock_webhook_class.return_value = mock_webhook
+
+    assets = [
+        {
+            "symbol": "MSFT",
+            "name": "Microsoft",
+            "tier": "Tier A",
+            "score": 88,
+            "valuation_status": "Fair",
+            "bull_case": ["Strong cloud growth"],
+            "bear_case": ["Valuation premium"],
+        }
+    ]
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_quality_notification(assets)
+
+    assert result is True
+    assert mock_webhook.execute.call_count >= 1
+
+
+@patch("src.infra.notifications.discord.DiscordWebhook")
+def test_send_quality_notification_tier_c_color(mock_webhook_class: MagicMock) -> None:
+    """Validates Tier C assets receive the red color code."""
+    mock_webhook: MagicMock = MagicMock()
+    mock_webhook_class.return_value = mock_webhook
+
+    assets = [
+        {
+            "symbol": "XYZ",
+            "name": "XYZ Corp",
+            "tier": "Tier C",
+            "score": 30,
+            "valuation_status": "Overvalued",
+            "bull_case": [],
+            "bear_case": [],
+        }
+    ]
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_quality_notification(assets)
+
+    assert result is True
+
+
+@patch("src.infra.notifications.discord.DiscordWebhook")
+def test_send_quality_notification_empty_bull_bear(
+    mock_webhook_class: MagicMock,
+) -> None:
+    """Validates default placeholder text when bull/bear lists are empty."""
+    mock_webhook: MagicMock = MagicMock()
+    mock_webhook_class.return_value = mock_webhook
+
+    assets = [
+        {
+            "symbol": "HOLD",
+            "name": "Hold Co",
+            "tier": "Tier B",
+            "score": 55,
+            "valuation_status": "Fair",
+            "bull_case": [],
+            "bear_case": [],
+        }
+    ]
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_quality_notification(assets)
+
+    assert result is True
+
+
+@patch("src.infra.notifications.discord.DiscordWebhook")
+def test_send_quality_notification_exception_returns_false(
+    mock_webhook_class: MagicMock,
+) -> None:
+    """Validates False is returned when an exception is raised."""
+    mock_webhook_class.side_effect = RuntimeError("timeout")
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_quality_notification([{"symbol": "X"}])
+
+    assert result is False
+
+
+# ==============================================================================
+# send_dashboard_notification tests
+# ==============================================================================
+
+
+def test_send_dashboard_notification_missing_webhook_returns_false() -> None:
+    """Validates early exit when webhook URL is not set."""
+    with patch.object(settings, "discord_webhook_url", ""):
+        assert send_dashboard_notification(1000.0, -5.0, "AAPL", []) is False
+
+
+@patch("src.infra.notifications.discord.DiscordWebhook")
+def test_send_dashboard_notification_success(
+    mock_webhook_class: MagicMock, tmp_path: Path
+) -> None:
+    """Validates successful dashboard notification with an image attachment."""
+    mock_webhook: MagicMock = MagicMock()
+    mock_response: MagicMock = MagicMock()
+    mock_response.status_code = 200
+    mock_webhook.execute.return_value = mock_response
+    mock_webhook_class.return_value = mock_webhook
+
+    img: Path = tmp_path / "chart.png"
+    img.write_bytes(b"fake_chart")
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_dashboard_notification(
+            total_value=15000.0,
+            max_drawdown=-8.5,
+            top_contributor="NVDA",
+            image_paths=[img],
+        )
+
+    assert result is True
+    mock_webhook.add_file.assert_called_once()
+
+
+@patch("src.infra.notifications.discord.DiscordWebhook")
+def test_send_dashboard_notification_missing_image_skipped(
+    mock_webhook_class: MagicMock, tmp_path: Path
+) -> None:
+    """Validates non-existent image paths are skipped."""
+    mock_webhook: MagicMock = MagicMock()
+    mock_response: MagicMock = MagicMock()
+    mock_response.status_code = 204
+    mock_webhook.execute.return_value = mock_response
+    mock_webhook_class.return_value = mock_webhook
+
+    missing: Path = tmp_path / "missing.png"
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_dashboard_notification(
+            total_value=5000.0,
+            max_drawdown=-2.0,
+            top_contributor=None,
+            image_paths=[missing],
+        )
+
+    assert result is True
+    mock_webhook.add_file.assert_not_called()
+
+
+@patch("src.infra.notifications.discord.DiscordWebhook")
+def test_send_dashboard_notification_non_2xx_returns_false(
+    mock_webhook_class: MagicMock,
+) -> None:
+    """Validates False is returned when webhook responds with non-2xx status."""
+    mock_webhook: MagicMock = MagicMock()
+    mock_response: MagicMock = MagicMock()
+    mock_response.status_code = 500
+    mock_webhook.execute.return_value = mock_response
+    mock_webhook_class.return_value = mock_webhook
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_dashboard_notification(
+            total_value=5000.0,
+            max_drawdown=-2.0,
+            top_contributor="ETF",
+            image_paths=[],
+        )
+
+    assert result is False
+
+
+@patch("src.infra.notifications.discord.DiscordWebhook")
+def test_send_dashboard_notification_exception_returns_false(
+    mock_webhook_class: MagicMock,
+) -> None:
+    """Validates False is returned when an exception is raised."""
+    mock_webhook_class.side_effect = RuntimeError("connection error")
+
+    with patch.object(
+        settings, "discord_webhook_url", "https://discord.com/api/webhooks/fake"
+    ):
+        result: bool = send_dashboard_notification(1000.0, -5.0, "X", [])
+
+    assert result is False

@@ -260,7 +260,7 @@ def test_analyze_quality_command_success(mock_analyze: MagicMock) -> None:
     """Tests 'analyze-quality' CLI command execution on success."""
     result: Any = runner.invoke(app, ["analyze-quality"])
     assert result.exit_code == 0
-    mock_analyze.assert_called_once_with(ticker=None)
+    mock_analyze.assert_called_once_with(ticker=None, notify=False)
 
 
 @patch("main.analyze_quality_cmd")

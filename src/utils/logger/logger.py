@@ -39,9 +39,7 @@ class Logger:
 
     def warning(self, message: str) -> None:
         """Warning alert highlighted in yellow."""
-        print(
-            f"[{self._WARNING}WARNING:{self._get_timestamp()}]{self._ENDC} {message}"
-        )
+        print(f"[{self._WARNING}WARNING:{self._get_timestamp()}]{self._ENDC} {message}")
 
     def error(self, message: str, exception: Exception | None = None) -> None:
         """

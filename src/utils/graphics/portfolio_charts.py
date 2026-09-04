@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+from datetime import datetime
 
 import matplotlib.dates as mdates
-from datetime import datetime
+import matplotlib.pyplot as plt
 
 from src.core.models import DashboardOverview
 
@@ -59,15 +60,15 @@ class PortfolioChartExporter:
         fig, ax = plt.subplots(figsize=(10, 6))
 
         ax.plot(
-            parsed_dates,
+            parsed_dates,  # type: ignore[arg-type]
             values,
             label="Portfolio Value (€)",
             color="#1f77b4",
             linewidth=2.5,
-            marker='o',
+            marker="o",
             markersize=4,
-            markerfacecolor='white',
-            markeredgewidth=1.5
+            markerfacecolor="white",
+            markeredgewidth=1.5,
         )
 
         ax.set_title("Portfolio Valuation History", fontsize=14, fontweight="bold")
@@ -76,8 +77,8 @@ class PortfolioChartExporter:
         ax.grid(True, linestyle=":", alpha=0.4)
 
         # Format X-axis to show only unique Months
-        ax.xaxis.set_major_locator(mdates.MonthLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+        ax.xaxis.set_major_locator(mdates.MonthLocator())  # type: ignore[no-untyped-call]
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))  # type: ignore[no-untyped-call]
 
         ax.legend(loc="upper left")
 
@@ -109,9 +110,12 @@ class PortfolioChartExporter:
             return output_path
 
         sorted_date_strings = sorted(list(all_dates_set))
+
         # Create dummy point objects for parsing
         class Pt:
-            def __init__(self, d: str): self.date = d
+            def __init__(self, d: str):
+                self.date = d
+
         all_series_dates = self._parse_dates([Pt(d) for d in sorted_date_strings])
 
         # Sort class series to ensure consistent order
@@ -121,16 +125,16 @@ class PortfolioChartExporter:
             has_data = True
             # Create a map for quick lookup
             data_map = {pt.date: pt.value for pt in class_series.value_history}
-            # Align values to the global timeline, defaulting to 0.0 if no data for that date
+            # Align values to the global timeline, defaulting to 0.0
             aligned_values = [data_map.get(date, 0.0) for date in sorted_date_strings]
 
             ax.plot(
-                all_series_dates,
+                all_series_dates,  # type: ignore[arg-type]
                 aligned_values,
                 label=f"{class_series.asset_type}",
                 linewidth=2.5,
-                marker='o',
-                markersize=3
+                marker="o",
+                markersize=3,
             )
 
         if not has_data:
@@ -144,8 +148,8 @@ class PortfolioChartExporter:
         ax.legend(loc="upper left")
 
         # Format X-axis
-        ax.xaxis.set_major_locator(mdates.MonthLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+        ax.xaxis.set_major_locator(mdates.MonthLocator())  # type: ignore[no-untyped-call]
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))  # type: ignore[no-untyped-call]
 
         plt.xticks(rotation=45)
         plt.tight_layout()

@@ -22,9 +22,7 @@ from src.core.models import Asset, ETFDetails, StockDetails
 from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import SqlitePortfolioRepository
 from src.infra.database.connection import DEFAULT_DB_PATH
-from src.infra.notifications.discord import send_discord_notification
 from src.infra.notifications.discord import (
-    send_dashboard_notification,
     send_quality_notification,
 )
 from src.utils.logger.logger import logger

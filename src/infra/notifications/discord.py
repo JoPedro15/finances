@@ -5,6 +5,7 @@ alerts to Discord webhooks.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from discord_webhook import DiscordEmbed, DiscordWebhook  # type: ignore[import-untyped]
 
@@ -59,14 +60,18 @@ def send_quality_notification(evaluated_assets: list[dict[str, Any]]) -> bool:
             )
 
         matrix_lines.append("```")
-        embed.add_embed_field(name="📋 Quality Matrix", value="\n".join(matrix_lines), inline=False)
+        embed.add_embed_field(
+            name="📋 Quality Matrix", value="\n".join(matrix_lines), inline=False
+        )
 
         webhook.add_embed(embed)
         webhook.execute()
 
         # Detailed Asset Diagnostics Cards in batches
         for i in range(0, len(evaluated_assets), 9):
-            batch_webhook = DiscordWebhook(url=webhook_url, username="Project Finance Bot")
+            batch_webhook = DiscordWebhook(
+                url=webhook_url, username="Project Finance Bot"
+            )
             batch = evaluated_assets[i : i + 9]
 
             for item in batch:
@@ -86,8 +91,12 @@ def send_quality_notification(evaluated_assets: list[dict[str, Any]]) -> bool:
                 bear_list = "\n".join([f"• {b}" for b in item.get("bear_case", [])])
 
                 # Sane default if bull/bear lists are empty to avoid 400 error
-                bull_content = bull_list if bull_list.strip() else "• No catalysts identified."
-                bear_content = bear_list if bear_list.strip() else "• No risks identified."
+                bull_content = (
+                    bull_list if bull_list.strip() else "• No catalysts identified."
+                )
+                bear_content = (
+                    bear_list if bear_list.strip() else "• No risks identified."
+                )
 
                 content = (
                     f"**Tier:** `{tier}`  │  **Score:** `{item['score']}/100`\n"
@@ -100,7 +109,6 @@ def send_quality_notification(evaluated_assets: list[dict[str, Any]]) -> bool:
                 batch_webhook.add_embed(diag_embed)
 
             batch_webhook.execute()
-
 
         return True
     except Exception as err:
@@ -196,8 +204,7 @@ def send_discord_notification(
 
         # Build Untruncated Decision Matrix Text
         hdr: str = (
-            f"{'Rank':<4} {'Symbol':<10} {'Type':<6} "
-            f"{'Score':>7} {'AI Action':<9}"
+            f"{'Rank':<4} {'Symbol':<10} {'Type':<6} " f"{'Score':>7} {'AI Action':<9}"
         )
         matrix_lines: list[str] = [
             "```text",
@@ -245,7 +252,9 @@ def send_discord_notification(
 
         if active_recs:
             for i in range(0, len(active_recs), 9):
-                batch_webhook = DiscordWebhook(url=webhook_url, username="Project Finance Bot")
+                batch_webhook = DiscordWebhook(
+                    url=webhook_url, username="Project Finance Bot"
+                )
                 batch = active_recs[i : i + 9]
 
                 for symbol, rec in batch:
@@ -257,7 +266,9 @@ def send_discord_notification(
                     conf_text: str = f"{rec.confidence_score * 100:.0f}%"
 
                     color_code: int = (
-                        COLOR_GREEN if rec.action == RecommendationAction.BUY else COLOR_RED
+                        COLOR_GREEN
+                        if rec.action == RecommendationAction.BUY
+                        else COLOR_RED
                     )
 
                     card_embed = DiscordEmbed(

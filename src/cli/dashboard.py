@@ -151,9 +151,11 @@ def show_dashboard(
         # Dispatch Discord notification if explicitly requested
         if notify:
             send_dashboard_notification(
-                total_value=overview.portfolio_history.value_history[-1].value
-                if overview.portfolio_history.value_history
-                else 0.0,
+                total_value=(
+                    overview.portfolio_history.value_history[-1].value
+                    if overview.portfolio_history.value_history
+                    else 0.0
+                ),
                 max_drawdown=overview.max_drawdown_percent,
                 top_contributor=overview.top_growth_contributor,
                 image_paths=[val_path, class_path],
