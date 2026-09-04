@@ -100,13 +100,15 @@ sync-fundamentals:
 
 # Fully updates finances.db with fundamental data, portfolio snapshot, exposure checks, and opportunity analysis before or after trading.
 update-finances:
-	PYTHONPATH=src python3 main.py pull-config
-	PYTHONPATH=. python3 src/migrate_json_to_sqlite.py
-	PYTHONPATH=src python3 main.py sync-fundamentals
-	PYTHONPATH=src python3 main.py save-snapshot
-	python3 main.py exposure-check
-	PYTHONPATH=src python3 -m cli.opportunity
-	PYTHONPATH=src python3 main.py push-config
+	PYTHONPATH=src $(PYTHON) main.py pull-config
+	PYTHONPATH=. $(PYTHON) src/migrate_json_to_sqlite.py
+	PYTHONPATH=src $(PYTHON) main.py sync-fundamentals
+	PYTHONPATH=src $(PYTHON) main.py save-snapshot
+	$(PYTHON) main.py exposure-check
+	PYTHONPATH=src $(PYTHON) main.py analyze-quality --notify
+	PYTHONPATH=src $(PYTHON) main.py opportunity_evaluation --notify
+	PYTHONPATH=src $(PYTHON) main.py dashboard show --export-plots --notify
+	PYTHONPATH=src $(PYTHON) main.py push-config
 
 # Orchestrates portfolio opportunity_evaluation ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
 # Accepts optional CLI flags via FLAGS variable (e.g., make opportunity FLAGS="--skip-ai -v"):
@@ -125,7 +127,7 @@ analyze-quality:
 # Displays historical performance dashboard and analytics executive summary.
 # Accepts optional CLI flags via FLAGS variable (e.g., make dashboard FLAGS="--export-plots" or FLAGS="-t AAPL"):
 dashboard:
-	PYTHONPATH=src $(PYTHON) main.py dashboard show $(if $(TICKER),-t $(TICKER)) $(FLAGS)
+	PYTHONPATH=src $(PYTHON) main.py dashboard show $(if $(TICKER),-t $(TICKER)) $(FLAGS) --export-plots
 
 # Projects portfolio growth over 10, 20, and 30-year horizons.
 # Example usage: make project-growth FLAGS="--monthly-contribution 500 --compare-scenarios"

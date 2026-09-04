@@ -355,10 +355,17 @@ def analyze_quality_cli(
             )
         ),
     ] = None,
+    notify: Annotated[
+        bool,
+        typer.Option(
+            "--notify",
+            help="Dispatch results to Discord webhook if configured.",
+        ),
+    ] = False,
 ) -> None:
     """Evaluates absolute quality tiers and metrics for assets."""
     try:
-        analyze_quality_cmd(ticker=ticker)
+        analyze_quality_cmd(ticker=ticker, notify=notify)
     except typer.Exit:
         raise
     except Exception as err:
@@ -547,6 +554,13 @@ def opportunity_cmd(
             help="Display detailed score factors breakdown.",
         ),
     ] = False,
+    notify: Annotated[
+        bool,
+        typer.Option(
+            "--notify",
+            help="Dispatch results to Discord webhook if configured.",
+        ),
+    ] = False,
 ) -> None:
     """Ranks targets and provides AI-driven recommendations."""
     recommend_rebalance(
@@ -555,6 +569,7 @@ def opportunity_cmd(
         db_path=db_path,
         skip_ai=skip_ai,
         verbose=verbose,
+        notify=notify,
     )
 
 

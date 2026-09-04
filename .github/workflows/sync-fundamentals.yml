@@ -33,19 +33,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Run Sequential Portfolio Pipeline
+      - name: Run Full Portfolio Pipeline
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
           GDRIVE_SERVICE_ACCOUNT_FILE: 'secrets/service_account.json'
+          GDRIVE_CONFIG_FOLDER_ID: ${{ secrets.GDRIVE_CONFIG_FOLDER_ID }}
+          GDRIVE_DATABASE_FOLDER_ID: ${{ secrets.GDRIVE_DATABASE_FOLDER_ID }}
+          GDRIVE_REPORTS_FOLDER_ID: ${{ secrets.GDRIVE_REPORTS_FOLDER_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           mkdir -p secrets
-          echo '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > secrets/service_account.json
-          python main.py pull-config
-          python main.py sync-fundamentals
-          python main.py save-snapshot
-          python main.py analyze-quality
-          python main.py opportunity_evaluation
-          python main.py push-config
+          echo "$GDRIVE_SERVICE_ACCOUNT_JSON" > secrets/service_account.json
+          make update-finances
 
       - name: Commit updated database and reports
         uses: stefanzweifel/git-auto-commit-action@v5
