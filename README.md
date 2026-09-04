@@ -18,7 +18,7 @@
 
 The **Finances Portfolio Tracker & Opportunity Engine** is an enterprise-grade command-line interface (CLI) application engineered to track personal investment portfolios, monitor real-time prices, audit look-through exposures, evaluate fundamental quality tiers, export visual performance analytics, dispatch Discord rebalance alerts, and execute **deterministic multi-factor rebalancing powered by Google Gemini AI**.
 
-Designed with strict separation of concerns, the system utilizes Google Drive as a **Cloud Single Source of Truth (SSoT)** for dynamic datasets (`finances.db`, active portfolios, wishlist targets, and cached fundamentals). It seamlessly blends real-time market data retrieval, multi-currency conversion, relational SQLite persistence, and quantitative scoring models.
+Designed with strict separation of concerns, the system utilizes Google Drive as a **Cloud Single Source of Truth (SSoT)** for dynamic datasets (`finances.db`, active portfolios, wishlist targets, and cached sync-fundamentals). It seamlessly blends real-time market data retrieval, multi-currency conversion, relational SQLite persistence, and quantitative scoring models.
 
 ---
 
@@ -42,7 +42,7 @@ graph TD
 
 | Layer                    | Path                                | Description                                                                                                                  |
 |:-------------------------|:------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------|
-| **CLI & Presentation**   | `src/cli/` & `main.py`              | Typer-powered CLI entrypoints (`dashboard`, `opportunity_evaluation`, `analyze-quality`, `fundamentals`, `project-growth`).  |
+| **CLI & Presentation**   | `src/cli/` & `main.py`              | Typer-powered CLI entrypoints (`dashboard`, `opportunity_evaluation`, `analyze-quality`, `sync-fundamentals`, `project-growth`).  |
 | **Core Domain Models**   | `src/core/models.py`                | Immutable domain dataclasses (`Asset`, `Quotation`, `PortfolioSnapshot`, `GrowthMilestone`, `GrowthProjectionResult`, etc.). |
 | **Projections Engine**   | `src/core/projections.py`           | Financial mathematics for long-term compound growth forecasting with inflation adjustment logic.                             |
 | **Scoring Strategies**   | `src/core/opportunity_evaluation/`  | Strategy pattern orchestrating asset priority scoring (`dip_score`, `cost_score`, `allocation_score`) with penalty factors.  |
@@ -70,7 +70,7 @@ Rather than relying solely on AI outputs, the system uses deterministic multi-fa
 * **Policy Constraints**: Enforces default thresholds for Country Allocation (Max 60%), Tech Sector Allocation (Max 50%), Other Sectors (Max 15%), and Single Company Exposure (Max 15%).
 
 ### 3. Absolute Quality Tier Evaluation (`src/cli/quality.py` & `src/core/analysis.py`)
-* **Fundamental Scoring**: Evaluates asset fundamentals on a 0–100 scale, assigning Tier A, Tier B, or Tier C classifications based on profit margins, YoY revenue expansion, balance sheet leverage (Debt-to-Equity), and earnings trajectory.
+* **Fundamental Scoring**: Evaluates asset sync-fundamentals on a 0–100 scale, assigning Tier A, Tier B, or Tier C classifications based on profit margins, YoY revenue expansion, balance sheet leverage (Debt-to-Equity), and earnings trajectory.
 * **Diagnostic Reporting**: Outputs visual terminal summary cards detailing Bull Case catalysts, Bear Case risks, and explicit Valuation Status (`Undervalued`, `Fair Value`, `Overvalued`).
 
 ### 4. Historical Analytics & Performance Dashboard (`src/cli/dashboard.py` & `src/core/portfolio_analytics.py`)
@@ -148,7 +148,7 @@ The central `finances.db` SQLite database is managed via transactional connectio
 
 * `assets`: Stores registered holdings (ISIN, Yahoo ticker, quantity, average buy price, asset type).
 * `snapshots` & `asset_snapshots`: Records timestamped portfolio valuation history and multi-currency exchange rates.
-* `stock_fundamental_history`: Tracks historical equity fundamentals (P/E ratios, dividend yield, 52w range, quality tier, quality score).
+* `stock_fundamental_history`: Tracks historical equity sync-fundamentals (P/E ratios, dividend yield, 52w range, quality tier, quality score).
 * `etf_fundamental_history`: Stores historical ETF metadata (TER, holdings JSON, sector/country breakdown JSON, quality tier, quality score).
 * `opportunities` & `opportunity_asset_metrics`: Logs historical rebalancing runs, factor scores, and AI recommendations.
 
@@ -175,7 +175,7 @@ The application is controlled via a rich Typer CLI interface defined in `main.py
 **Full Routine Update (Recommended)**:
 
 ```bash
-# Executes complete cycle: pull config -> sync fundamentals -> save snapshot -> check exposure -> analyze quality -> analyze opportunity -> dashboard + charts -> push config
+# Executes complete cycle: pull config -> sync sync-fundamentals -> save snapshot -> check exposure -> analyze quality -> analyze opportunity -> dashboard + charts -> push config
 # All results and charts are automatically dispatched to Discord
 make update-finances
 ```
@@ -247,7 +247,7 @@ make push-config
 make sync-portfolio
 
 # Synchronize live fundamental snapshots into SQLite history
-make sync-fundamentals
+make sync-sync-fundamentals
 ```
 
 ---
@@ -280,7 +280,6 @@ The quality pipeline executes:
 ## CI/CD Pipelines
 
 * **CI Quality & Security Pipeline** (`.github/workflows/ci.yml`): Triggered on push or PR to `main`. Executes Black, Ruff, Mypy, Bandit, Pip-Audit, and Pytest with branch coverage, automatically updating the `coverage.svg` badge.
-* **Weekly Portfolio Pipeline** (`.github/workflows/sync-fundamentals.yml`): Scheduled every Sunday at 00:00 UTC. Automatically synchronizes live fundamentals, captures valuation snapshots, runs quality analysis, executes opportunity rebalancing with Gemini AI, and commits updated database state.
 
 ---
 
