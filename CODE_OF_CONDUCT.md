@@ -10,6 +10,7 @@ Examples of behavior that contributes to a positive environment:
 * Encouraging active participation and ensuring every contributor's opinion is heard and considered.
 * Demonstrating empathy, respect, and kindness toward other people.
 * Being open to differing viewpoints, technical perspectives, and constructive feedback.
+* **Professional Responsibility:** Avoid providing unsolicited financial advice or making fraudulent claims about the software's performance.
 * Accepting responsibility and gracefully apologizing when mistakes are made.
 
 Examples of unacceptable behavior:
@@ -18,6 +19,8 @@ Examples of unacceptable behavior:
 * Trolling, insulting or derogatory comments, and personal or political attacks.
 * Public or private harassment.
 * Publishing others' private information, such as a physical or email address, without explicit permission.
+* **Malicious Intent:** Attempting to inject code that exfiltrates user secrets or sensitive financial data.
+
 
 ## Enforcement Responsibilities
 

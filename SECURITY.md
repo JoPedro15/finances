@@ -29,3 +29,5 @@ This repository enforces automated Static Application Security Testing (SAST) an
 * **SAST Analysis:** Automated static code scans using `bandit` (`make security-check`).
 * **Dependency Auditing:** Automated checks against known CVE databases using `pip-audit`.
 * **Secrets Protection:** Environment variables (`.env`) and GCP OAuth tokens (`secrets/credentials.json`, `secrets/token.json`) are strictly excluded from source control via `.gitignore`.
+## ⚠️ User Responsibility
+**Security of Credentials:** You are solely responsible for the protection of your `GEMINI_API_KEY`, Google Cloud credentials, and Discord Webhooks. The author is NOT responsible for any financial loss or unauthorized access resulting from leaked secrets or improper server configuration.
