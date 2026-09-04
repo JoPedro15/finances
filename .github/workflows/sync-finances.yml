@@ -1,4 +1,4 @@
-name: Weekly Portfolio Pipeline
+name: Finance Weekly Sync
 
 on:
   schedule:
@@ -44,7 +44,11 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           mkdir -p secrets
-          echo "$GDRIVE_SERVICE_ACCOUNT_JSON" > secrets/service_account.json
+          if [ -n "$GDRIVE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "$GDRIVE_SERVICE_ACCOUNT_JSON" > secrets/service_account.json
+          else
+            echo "Warning: GDRIVE_SERVICE_ACCOUNT_JSON is not set or empty."
+          fi
           make update-finances
 
       - name: Commit updated database and reports
