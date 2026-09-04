@@ -175,8 +175,9 @@ The application is controlled via a rich Typer CLI interface defined in `main.py
 **Full Routine Update (Recommended)**:
 
 ```bash
-# Executes complete cycle: pull config -> migrate JSON -> sync fundamentals -> save snapshot -> check exposure -> analyze opportunity -> push config
-make update-finance
+# Executes complete cycle: pull config -> sync fundamentals -> save snapshot -> check exposure -> analyze quality -> analyze opportunity -> dashboard + charts -> push config
+# All results and charts are automatically dispatched to Discord
+make update-finances
 ```
 
 **Portfolio Performance & Analytics**:

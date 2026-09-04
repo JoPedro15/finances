@@ -22,6 +22,9 @@ from src.core.models import Asset, ETFDetails, StockDetails
 from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import SqlitePortfolioRepository
 from src.infra.database.connection import DEFAULT_DB_PATH
+from src.infra.notifications.discord import (
+    send_quality_notification,
+)
 from src.utils.logger.logger import logger
 
 OUTPUT_DIR: Path = Path("output")
@@ -296,6 +299,13 @@ def analyze_quality_cmd(
         ),
     ] = DATA_DIR
     / "portfolio_targets.json",
+    notify: Annotated[
+        bool,
+        typer.Option(
+            "--notify",
+            help="Dispatch results to Discord webhook if configured.",
+        ),
+    ] = False,
 ) -> None:
     """Evaluates absolute quality tiers, comprehensive fundamental metrics,
     diagnostic Bull/Bear cases, and valuation status for target portfolio assets.
@@ -579,3 +589,7 @@ def analyze_quality_cmd(
 
     export_quality_report(evaluated_report_items)
     save_quality_to_database(evaluated_report_items)
+
+    # Dispatch Discord notification if explicitly requested
+    if notify:
+        send_quality_notification(evaluated_report_items)

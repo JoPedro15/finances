@@ -20,6 +20,7 @@ from src.infra.database.finance_sql_extraction import (
     FinanceSQLExtractor,
     PortfolioHistoricalRecord,
 )
+from src.infra.notifications.discord import send_dashboard_notification
 from src.utils.graphics.portfolio_charts import PortfolioChartExporter
 
 app: typer.Typer = typer.Typer(
@@ -65,6 +66,13 @@ def show_dashboard(
             "--export-plots",
             "-p",
             help="Export PNG performance charts to output directory.",
+        ),
+    ] = False,
+    notify: Annotated[
+        bool,
+        typer.Option(
+            "--notify",
+            help="Dispatch summary and charts to Discord webhook if configured.",
         ),
     ] = False,
 ) -> None:
@@ -139,3 +147,16 @@ def show_dashboard(
             f"  • {val_path}\n"
             f"  • {class_path}"
         )
+
+        # Dispatch Discord notification if explicitly requested
+        if notify:
+            send_dashboard_notification(
+                total_value=(
+                    overview.portfolio_history.value_history[-1].value
+                    if overview.portfolio_history.value_history
+                    else 0.0
+                ),
+                max_drawdown=overview.max_drawdown_percent,
+                top_contributor=overview.top_growth_contributor,
+                image_paths=[val_path, class_path],
+            )

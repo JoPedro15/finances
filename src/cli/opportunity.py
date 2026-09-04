@@ -39,6 +39,7 @@ from src.core.repositories import SqliteHistoryRepository, SqliteOpportunityRepo
 from src.infra.ai.client import GeminiClient
 from src.infra.database.connection import DEFAULT_DB_PATH
 from src.infra.gdrive.service import GDriveService
+from src.infra.notifications.discord import send_discord_notification
 from src.utils.logger.logger import logger
 
 OUTPUT_DIR: Path = Path("output")
@@ -910,6 +911,13 @@ def recommend_rebalance(
             help="Display detailed quantitative score factors breakdown.",
         ),
     ] = False,
+    notify: Annotated[
+        bool,
+        typer.Option(
+            "--notify",
+            help="Dispatch results to Discord webhook if configured.",
+        ),
+    ] = False,
 ) -> None:
     """Ranks targets and provides AI-driven rebalancing recommendations."""
     targets_raw: list[dict[str, Any]] = load_json_data(targets_file)
@@ -1031,6 +1039,14 @@ def recommend_rebalance(
             )
         except Exception as err:
             logger.error(f"Failed to save opportunity report to database: {err}")
+
+    # Dispatch Discord notification if explicitly requested
+    if notify and not skip_ai:
+        send_discord_notification(
+            ranked_assets=ranked_scores,
+            recommendations_map=recommendations_map,
+            total_portfolio_value=total_val,
+        )
 
 
 if __name__ == "__main__":

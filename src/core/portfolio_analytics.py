@@ -100,7 +100,8 @@ class PortfolioAnalyticsEngine:
         )
 
         for rec in asset_records:
-            class_values[rec.asset_type][rec.snapshot_date] += rec.value_eur
+            asset_type = rec.asset_type.upper() if rec.asset_type else "UNKNOWN"
+            class_values[asset_type][rec.snapshot_date] += rec.value_eur
 
         result: list[AssetClassTimeSeries] = []
         for a_type, dates_map in class_values.items():
