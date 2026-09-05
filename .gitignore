@@ -40,7 +40,7 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Output Reports (CSV & Markdown)
+# Output Reports (CSV & HTML)
 output/
 
 # Project-specific Data & Logs (Cloud SSOT)

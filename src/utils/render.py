@@ -16,7 +16,7 @@ _jinja_env: jinja2.Environment = jinja2.Environment(
 
 def render_html(
     template_name: str,
-    context: dict,
+    context: dict[str, object],
     html_path: Path,
 ) -> None:
     """Renders a Jinja2 template to HTML, overwriting existing file."""

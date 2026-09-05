@@ -204,84 +204,50 @@ def _etf_item(**overrides: Any) -> dict[str, Any]:
     return item
 
 
-def test_export_quality_report_creates_file(tmp_path: Path) -> None:
-    """Validates Markdown file is created with expected content."""
-    export_quality_report([_stock_item()], output_dir=tmp_path)
-    md_file = tmp_path / "quality_report.md"
-    assert md_file.exists()
-    content = md_file.read_text(encoding="utf-8")
-    assert "Apple" in content
-    assert "Tier A" in content
-    assert "Fair Value" in content
+def test_export_quality_report_creates_html(tmp_path: Path) -> None:
+    """HTML file is created with expected content."""
+    with patch("src.utils.render.render_html") as mock_render:
+        export_quality_report([_stock_item()], output_dir=tmp_path)
+    mock_render.assert_called_once()
+    args = mock_render.call_args[0]
+    assert args[0] == "quality_report.html.j2"
+    assert args[2] == tmp_path / "quality_report.html"
 
 
-def test_export_quality_report_stock_sections(tmp_path: Path) -> None:
-    """Validates stock-specific Markdown sections are present."""
-    export_quality_report([_stock_item()], output_dir=tmp_path)
-    content = (tmp_path / "quality_report.md").read_text(encoding="utf-8")
-    assert "Trailing P/E" in content
-    assert "Dividend Yield" in content
-    assert "52w Range" in content
-    assert "Strong margins" in content
-
-
-def test_export_quality_report_etf_sections(tmp_path: Path) -> None:
-    """Validates ETF-specific Markdown sections are present."""
-    export_quality_report([_etf_item()], output_dir=tmp_path)
-    content = (tmp_path / "quality_report.md").read_text(encoding="utf-8")
-    assert "Total Expense Ratio" in content
-    assert "Top Holdings" in content
-    assert "Sector Breakdown" in content
-    assert "Country Breakdown" in content
+def test_export_quality_report_passes_assets_to_template(tmp_path: Path) -> None:
+    """Template context contains the evaluated assets list."""
+    with patch("src.utils.render.render_html") as mock_render:
+        export_quality_report([_stock_item(), _etf_item()], output_dir=tmp_path)
+    ctx = mock_render.call_args[0][1]
+    assert len(ctx["assets"]) == 2
 
 
 def test_export_quality_report_empty_list(tmp_path: Path) -> None:
-    """Validates Markdown file is created even with no assets."""
-    export_quality_report([], output_dir=tmp_path)
-    md_file = tmp_path / "quality_report.md"
-    assert md_file.exists()
-    assert "Evaluated Assets Summary" in md_file.read_text(encoding="utf-8")
+    """render_html is still called with an empty assets list."""
+    with patch("src.utils.render.render_html") as mock_render:
+        export_quality_report([], output_dir=tmp_path)
+    ctx = mock_render.call_args[0][1]
+    assert ctx["assets"] == []
 
 
-def test_export_quality_report_missing_optional_fields(tmp_path: Path) -> None:
-    """Validates N/A fallback when optional metric fields are absent."""
-    item: dict[str, Any] = {
-        "name": "NoData",
-        "symbol": "NDT",
-        "asset_type": "STOCK",
-        "tier": "Tier C",
-        "score": 0,
-        "valuation_status": "N/A",
-        "bull_case": [],
-        "bear_case": [],
-    }
-    export_quality_report([item], output_dir=tmp_path)
-    content = (tmp_path / "quality_report.md").read_text(encoding="utf-8")
-    assert "N/A" in content
+def test_export_quality_report_generated_at_present(tmp_path: Path) -> None:
+    """Template context includes a generated_at timestamp string."""
+    with patch("src.utils.render.render_html") as mock_render:
+        export_quality_report([_stock_item()], output_dir=tmp_path)
+    ctx = mock_render.call_args[0][1]
+    assert "generated_at" in ctx
+    assert len(ctx["generated_at"]) > 0
 
 
 @patch("src.cli.quality.logger")
-def test_export_quality_report_write_error_logged(
+def test_export_quality_report_render_error_logged(
     mock_logger: MagicMock, tmp_path: Path
 ) -> None:
-    """Validates error is logged when file write fails."""
-    bad_path = tmp_path / "no_perms"
-    bad_path.mkdir()
-    bad_path.chmod(0o444)
-    try:
-        export_quality_report([_stock_item()], output_dir=bad_path)
-        mock_logger.error.assert_called_once()
-        assert "Failed to export" in mock_logger.error.call_args[0][0]
-    finally:
-        bad_path.chmod(0o755)
-
-
-def test_export_quality_report_mixed_assets(tmp_path: Path) -> None:
-    """Validates report with both stock and ETF items."""
-    export_quality_report([_stock_item(), _etf_item()], output_dir=tmp_path)
-    content = (tmp_path / "quality_report.md").read_text(encoding="utf-8")
-    assert "AAPL" in content
-    assert "EUNL.DE" in content
+    """Error is logged when render_html raises."""
+    with patch("src.utils.render.render_html", side_effect=RuntimeError("render fail")):
+        export_quality_report([_stock_item()], output_dir=tmp_path)
+    mock_logger.error.assert_called_once()
+    assert "Failed to export" in mock_logger.error.call_args[0][0]
 
 
 # ==============================================================================
