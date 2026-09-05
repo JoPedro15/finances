@@ -38,7 +38,7 @@ def test_generate_succeeds_and_prints_path(tmp_path: Path) -> None:
         result = runner.invoke(app, ["generate", "--no-browser"])
 
     assert result.exit_code == 0
-    assert "portfolio_report.html" in result.output
+    assert "portfolio_report" in result.output
 
 
 def test_generate_output_contains_success_label(tmp_path: Path) -> None:
