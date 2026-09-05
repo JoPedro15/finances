@@ -563,6 +563,31 @@ class SqliteOpportunityRepository:
             logger.warning(f"Failed to load asset history for '{symbol}': {e}")
             return []
 
+    def load_latest_top_opportunities(self, limit: int = 5) -> list[dict[str, Any]]:
+        """Loads the top-N ranked assets from the most recent opportunity run."""
+        if not self.db_path.exists():
+            return []
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT oam.symbol, oam.asset_type, oam.rank,
+                           oam.price_eur, oam.quant_score, oam.ai_action
+                    FROM opportunity_asset_metrics oam
+                    JOIN opportunities o ON oam.opportunity_id = o.id
+                    WHERE o.id = (SELECT MAX(id) FROM opportunities)
+                    ORDER BY oam.rank ASC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.warning(f"Failed to load top opportunities: {e}")
+            return []
+
     def save_stock_fundamentals(
         self,
         asset_id: int,

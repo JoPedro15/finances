@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Quality Evaluation Report — {{ generated_at }}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0d1117; color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      font-size: 13px; line-height: 1.6; padding: 32px;
+    }
+    .page { max-width: 1000px; margin: 0 auto; }
+    .report-header { border-bottom: 1px solid #30363d; padding-bottom: 18px; margin-bottom: 28px; }
+    .report-header h1 { font-size: 24px; font-weight: 700; color: #58a6ff; }
+    .report-meta { margin-top: 5px; color: #8b949e; font-size: 12px; }
+    h2 { font-size: 15px; font-weight: 600; color: #e6edf3; border-left: 3px solid #58a6ff;
+         padding-left: 10px; margin-bottom: 14px; margin-top: 28px; }
+
+    /* Summary table */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead tr { background: #161b22; }
+    th { text-align: left; padding: 9px 11px; font-size: 10px; text-transform: uppercase;
+         letter-spacing: 0.5px; color: #8b949e; border-bottom: 1px solid #30363d; }
+    th.right, td.right { text-align: right; }
+    th.center, td.center { text-align: center; }
+    tbody tr { border-bottom: 1px solid #21262d; }
+    tbody tr:last-child { border-bottom: none; }
+    td { padding: 9px 11px; color: #c9d1d9; }
+
+    .tag { display: inline-block; padding: 1px 6px; border-radius: 4px;
+           font-size: 10px; font-weight: 600; text-transform: uppercase; }
+    .tag-stock { background: #1f3a5f; color: #58a6ff; }
+    .tag-etf   { background: #1f3a3a; color: #39d353; }
+
+    .tier-a { color: #3fb950; font-weight: 700; }
+    .tier-b { color: #d29922; font-weight: 700; }
+    .tier-c { color: #f85149; font-weight: 700; }
+
+    .val-fair        { color: #8b949e; }
+    .val-undervalued { color: #3fb950; font-weight: 600; }
+    .val-overvalued  { color: #f85149; font-weight: 600; }
+
+    /* Asset cards */
+    .asset-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+                  padding: 16px 20px; margin-bottom: 12px; }
+    .asset-card.tier-a-card { border-left: 3px solid #3fb950; }
+    .asset-card.tier-b-card { border-left: 3px solid #d29922; }
+    .asset-card.tier-c-card { border-left: 3px solid #f85149; }
+
+    .asset-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .asset-name  { font-size: 15px; font-weight: 700; color: #e6edf3; }
+    .asset-score { font-size: 13px; font-weight: 700; }
+
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .metrics-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
+                              color: #8b949e; margin-bottom: 6px; }
+    .metric-row { display: flex; justify-content: space-between; font-size: 12px;
+                  padding: 3px 0; border-bottom: 1px solid #21262d; }
+    .metric-row:last-child { border-bottom: none; }
+    .metric-key { color: #8b949e; }
+    .metric-val { color: #c9d1d9; font-weight: 500; }
+
+    .cases-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .case-title { font-size: 11px; font-weight: 600; margin-bottom: 5px; }
+    .case-bull .case-title { color: #3fb950; }
+    .case-bear .case-title { color: #f85149; }
+    .case-item { font-size: 12px; color: #8b949e; padding: 2px 0; }
+    .case-item::before { content: "• "; }
+
+    .valuation-badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
+                       font-size: 11px; font-weight: 600; margin-top: 10px; }
+    .val-badge-fair        { background: #21262d; color: #8b949e; }
+    .val-badge-undervalued { background: #1f3a3a; color: #3fb950; }
+    .val-badge-overvalued  { background: #3a1f1f; color: #f85149; }
+
+    .report-footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid #30363d;
+                     font-size: 11px; color: #8b949e; text-align: center; }
+
+    @page { size: A4; margin: 14mm 12mm; }
+    @media print {
+      body { background: #0d1117; color: #c9d1d9; padding: 0; }
+      .metrics-grid, .cases-grid { display: block; }
+      .metrics-grid > div, .cases-grid > div { margin-bottom: 8px; }
+      h2 { page-break-after: avoid; }
+      .asset-card { page-break-inside: avoid; }
+      tbody tr { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="report-header">
+    <h1>Independent Fundamental Health &amp; Quality Report</h1>
+    <div class="report-meta">Generated: {{ generated_at }}</div>
+  </div>
+
+  <!-- Summary table -->
+  <h2>Evaluated Assets Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Asset Name</th>
+        <th class="center">Ticker</th>
+        <th class="center">Type</th>
+        <th class="center">Quality Tier</th>
+        <th class="right">Score</th>
+        <th>Valuation</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in assets %}
+      <tr>
+        <td>{{ a.name }}</td>
+        <td class="center"><strong>{{ a.symbol }}</strong></td>
+        <td class="center"><span class="tag {{ 'tag-etf' if a.asset_type == 'ETF' else 'tag-stock' }}">{{ a.asset_type }}</span></td>
+        <td class="center"><span class="tier-{{ a.tier|lower|replace('tier ','') }}">{{ a.tier }}</span></td>
+        <td class="right" style="font-weight:600;">{{ a.score }}/100</td>
+        <td><span class="val-{{ a.valuation_status|lower|replace(' ','') }}">{{ a.valuation_status }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Detailed cards -->
+  <h2>Detailed Asset Diagnostics</h2>
+  {% for a in assets %}
+  {% set tier_cls = 'tier-a-card' if 'A' in a.tier else ('tier-c-card' if 'C' in a.tier else 'tier-b-card') %}
+  <div class="asset-card {{ tier_cls }}">
+    <div class="asset-header">
+      <div class="asset-name">{{ a.name }} ({{ a.symbol }})</div>
+      <span class="tag {{ 'tag-etf' if a.asset_type == 'ETF' else 'tag-stock' }}">{{ a.asset_type }}</span>
+      <span class="tier-{{ a.tier|lower|replace('tier ','') }}">{{ a.tier }}</span>
+      <span class="asset-score" style="color:#58a6ff;">{{ a.score }}/100</span>
+      {% set val_badge_cls = 'val-badge-undervalued' if a.valuation_status == 'Undervalued' else ('val-badge-overvalued' if a.valuation_status == 'Overvalued' else 'val-badge-fair') %}
+      <span class="valuation-badge {{ val_badge_cls }}">{{ a.valuation_status }}</span>
+    </div>
+
+    {% if a.asset_type == 'ETF' %}
+    <div class="metrics-grid">
+      <div>
+        <div class="metrics-section-title">ETF Structure</div>
+        <div class="metric-row"><span class="metric-key">TER</span><span class="metric-val">{{ a.ter_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">Top Holdings</span><span class="metric-val" style="font-size:11px;">{{ a.holdings_str }}</span></div>
+      </div>
+      <div>
+        <div class="metrics-section-title">Exposure</div>
+        <div class="metric-row"><span class="metric-key">Sectors</span><span class="metric-val" style="font-size:11px;">{{ a.sectors_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">Countries</span><span class="metric-val" style="font-size:11px;">{{ a.countries_str }}</span></div>
+      </div>
+    </div>
+    {% else %}
+    <div class="metrics-grid">
+      <div>
+        <div class="metrics-section-title">Valuation</div>
+        <div class="metric-row"><span class="metric-key">Trailing P/E</span><span class="metric-val">{{ a.tr_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">Forward P/E</span><span class="metric-val">{{ a.fw_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">PEG Ratio</span><span class="metric-val">{{ a.peg_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">Price/Book</span><span class="metric-val">{{ a.pb_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">Div Yield</span><span class="metric-val">{{ a.div_str }}</span></div>
+      </div>
+      <div>
+        <div class="metrics-section-title">Fundamentals</div>
+        <div class="metric-row"><span class="metric-key">Beta</span><span class="metric-val">{{ a.beta_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">Profit Margin</span><span class="metric-val">{{ a.margin_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">Rev Growth</span><span class="metric-val">{{ a.rev_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">Earn Growth</span><span class="metric-val">{{ a.earn_str }}</span></div>
+        <div class="metric-row"><span class="metric-key">52w Range</span><span class="metric-val" style="font-size:11px;">{{ a.low_str }} / {{ a.peak_str }}</span></div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="cases-grid">
+      <div class="case-bull">
+        <div class="case-title">Bull Case</div>
+        {% for b in a.bull_case %}<div class="case-item">{{ b }}</div>{% endfor %}
+      </div>
+      <div class="case-bear">
+        <div class="case-title">Bear Case</div>
+        {% for b in a.bear_case %}<div class="case-item">{{ b }}</div>{% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="report-footer">
+    Generated by finances portfolio tracker &nbsp;|&nbsp; For personal use only. Not financial advice.
+  </div>
+</div>
+</body>
+</html>

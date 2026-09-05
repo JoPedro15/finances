@@ -38,7 +38,6 @@ from src.core.providers import ETFProvider, StockProvider
 from src.core.repositories import SqliteHistoryRepository, SqliteOpportunityRepository
 from src.infra.ai.client import GeminiClient
 from src.infra.database.connection import DEFAULT_DB_PATH
-from src.infra.gdrive.service import GDriveService
 from src.infra.notifications.discord import send_discord_notification
 from src.utils.logger.logger import logger
 
@@ -271,13 +270,12 @@ def export_outputs(
     has_ai: bool,
     output_dir: Path = OUTPUT_DIR,
 ) -> None:
-    """Exports both CSV matrix and Markdown report with static
-    filenames and uploads them to Google Drive."""
+    """Exports CSV matrix and HTML/PDF report with static filenames
+    and uploads them to Google Drive."""
     formatted_date_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path: Path = output_dir / "opportunity_output.csv"
-    md_path: Path = output_dir / "opportunity_report.md"
 
     csv_fieldnames: list[str] = [
         "rank",
@@ -337,227 +335,149 @@ def export_outputs(
     except Exception as err:
         logger.error(f"Failed to export CSV to '{csv_path}': {err}")
 
-    score_map: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
-    stock_weights_str: str = (
-        f"Dip: `{settings.stock_weight_dip:.2f}` | "
-        f"Forward P/E: `{settings.stock_weight_forward_pe:.2f}` | "
-        f"52w Range: `{settings.stock_weight_52w_range:.2f}` | "
-        f"Gap: `{settings.stock_weight_allocation:.2f}`"
-    )
-    etf_weights_str: str = (
-        f"Dip: `{settings.etf_weight_dip:.2f}` | "
-        f"TER/Cost: `{settings.etf_weight_ter:.2f}` | "
-        f"Gap: `{settings.etf_weight_allocation:.2f}`"
-    )
-    penalty_weights_str: str = (
-        f"Sector Penalty: `{settings.exposure_sector_penalty_weight:.2f}` | "
-        f"Country Penalty: `{settings.exposure_country_penalty_weight:.2f}`"
-    )
-
-    md_lines: list[str] = [
-        "# Portfolio Opportunity Evaluation & Rebalancing Report",
-        f"*Generated on: {formatted_date_str}*\n",
-        "## portfolio & Strategy Summary\n",
-        f"- **Total Portfolio Value:** {total_val:,.2f} EUR",
-        f"- **Target Assets Evaluated:** {len(ranked_scores)}\n",
-        "### Active Strategy Weights",
-        f"- **Stocks Formula:** {stock_weights_str}",
-        f"- **ETFs Formula:** {etf_weights_str}",
-        f"- **Exposure Penalties:** {penalty_weights_str}\n",
-        "---",
-        "\n## Portfolio Rebalancing & Opportunity Matrix\n",
-        (
-            "| Rank | Symbol | Type | Price (€) | Current % | "
-            "Target % | Score | AI Action | Urgency | Conf. |"
-        ),
-        "| :---: | :---: | :---: | ---: | ---: | ---: | ---: | :---: | :---: | ---: |",
-    ]
-
-    for rank, score in enumerate(ranked_scores, start=1):
-        target_item = asset_dict_map[score.symbol]
-        price = float(target_item["current_price"])
-        curr_pct = float(target_item["current_allocation_pct"])
-        targ_pct = float(target_item["target_allocation_pct"])
-        rec = recommendations_map.get(score.symbol)
-
-        action_str = rec.action.value if rec and rec.action else "N/A"
-        urgency_str = rec.urgency_level.value if rec and rec.urgency_level else "N/A"
-        conf_str = f"{rec.confidence_score * 100:.0f}%" if rec else "N/A"
-
-        md_lines.append(
-            f"| {rank} | {score.symbol} | {score.asset_type.value.upper()} | "
-            f"{price:,.2f} | {curr_pct:.1f}% | {targ_pct:.1f}% | "
-            f"{score.total_score:.3f} | {action_str} | {urgency_str} | {conf_str} |"
-        )
-
-    active_recs: list[tuple[str, RebalanceRecommendation]] = [
-        (sym, r)
-        for sym, r in recommendations_map.items()
-        if r.action in (RecommendationAction.BUY, RecommendationAction.SELL)
-    ]
-
-    if has_ai and active_recs:
-        md_lines.extend(["\n---", "\n## Actionable Advisory Insights\n"])
-
-        for symbol, rec in active_recs:
-            target_item = asset_dict_map[symbol]
-            curr_price = float(target_item.get("current_price", 0.0))
-            peak_price = float(target_item.get("peak_price", 0.0))
-            low_52w = target_item.get("low_52w")
-
-            curr_alloc = float(target_item.get("current_allocation_pct", 0.0))
-            targ_alloc = float(target_item.get("target_allocation_pct", 0.0))
-            delta_pct = targ_alloc - curr_alloc
-            delta_str = f"+{delta_pct:.1f}%" if delta_pct >= 0 else f"{delta_pct:.1f}%"
-
-            conf_pct_str = f"{rec.confidence_score * 100:.0f}%"
-            action_val = rec.action.value if rec.action else "N/A"
-            urgency_val = (
-                rec.urgency_level.value if rec and rec.urgency_level else "N/A"
-            )
-
-            md_lines.extend(
-                [
-                    f"### 🔹 {symbol}",
-                    f"- **Action:** {action_val}",
-                    f"- **Urgency:** {urgency_val}",
-                    f"- **Confidence:** {conf_pct_str}",
-                    f"- **Price:** {curr_price:,.2f} EUR "
-                    f"(52w Peak: {peak_price:,.2f} EUR)",
-                    f"- **Allocation Gap:** Current {curr_alloc:.1f}% vs "
-                    f"Target {targ_alloc:.1f}% (Δ Target: {delta_str})\n",
-                ]
-            )
-
-            if target_item.get("asset_type") == "ETF":
-                ter_val = target_item.get("ter")
-                ter_str = f"{ter_val:.2f}%" if ter_val is not None else "N/A"
-
-                holdings_list = target_item.get("top_holdings", [])
-                holdings_str = (
-                    ", ".join(
-                        [
-                            f"{h.get('name', '')} "
-                            f"({float(h.get('weight_pct', 0.0)):.1f}%)"
-                            for h in holdings_list[:5]
-                        ]
-                    )
-                    if holdings_list
-                    else "N/A"
-                )
-
-                sectors_list = target_item.get("sector_breakdown", [])
-                sectors_str = (
-                    ", ".join(
-                        [
-                            f"{s.get('sector_name') or s.get('name', '')} "
-                            f"({s.get('weight_pct', 0):.1f}%)"
-                            for s in sectors_list[:4]
-                        ]
-                    )
-                    if sectors_list
-                    else "N/A"
-                )
-
-                countries_list = target_item.get("country_breakdown", [])
-                countries_str = (
-                    ", ".join(
-                        [
-                            f"{c.get('country_name') or c.get('name', '')} "
-                            f"({c.get('weight_pct', 0):.1f}%)"
-                            for c in countries_list[:4]
-                        ]
-                    )
-                    if countries_list
-                    else "N/A"
-                )
-
-                md_lines.extend(
-                    [
-                        "#### Valuation & ETF Metrics",
-                        f"- **Total Expense Ratio (TER):** {ter_str}",
-                        f"- **Top Holdings:** {holdings_str}",
-                        f"- **Sector Breakdown:** {sectors_str}",
-                        f"- **Country Breakdown:** {countries_str}\n",
-                    ]
-                )
-            else:
-                tr_pe = target_item.get("trailing_pe")
-                fw_pe = target_item.get("forward_pe")
-                peg = target_item.get("peg_ratio")
-                pb = target_item.get("price_to_book")
-                div_yield = target_item.get("dividend_yield_pct")
-                beta = target_item.get("beta")
-                margin = target_item.get("profit_margins_pct")
-                rev_growth = target_item.get("revenue_growth_pct")
-                earn_growth = target_item.get("earnings_growth_pct")
-                debt_eq = target_item.get("total_debt_to_equity")
-
-                tr_str = f"{tr_pe:.1f}" if tr_pe else "N/A"
-                fw_str = f"{fw_pe:.1f}" if fw_pe else "N/A"
-                peg_str = f"{peg:.2f}" if peg else "N/A"
-                pb_str = f"{pb:.2f}" if pb else "N/A"
-                div_str = f"{div_yield:.2f}%" if div_yield else "N/A"
-                beta_str = f"{beta:.2f}" if beta else "N/A"
-                margin_str = f"{margin:.1f}%" if margin else "N/A"
-                rev_str = f"{rev_growth:.1f}%" if rev_growth else "N/A"
-                earn_str = f"{earn_growth:.1f}%" if earn_growth else "N/A"
-                debt_str = f"{debt_eq:.1f}" if debt_eq else "N/A"
-
-                low_str = f"{low_52w:,.2f} EUR" if low_52w else "N/A"
-                peak_str = f"{peak_price:,.2f} EUR" if peak_price else "N/A"
-
-                md_lines.extend(
-                    [
-                        "#### Valuation & Fundamental Metrics",
-                        f"- **Trailing P/E:** {tr_str} | **Forward P/E:** {fw_str} | "
-                        f"**PEG Ratio:** {peg_str} | **Price/Book:** {pb_str}",
-                        f"- **Div Yield:** {div_str} | **Beta:** {beta_str} | "
-                        f"**Profit Margin:** {margin_str}",
-                        f"- **Rev Growth:** {rev_str} | **Earn Growth:** {earn_str} | "
-                        f"**Debt/Equity:** {debt_str}",
-                        f"- **52w Range (Low / High):** {low_str} / {peak_str}\n",
-                    ]
-                )
-
-            score_info = score_map.get(symbol)
-            if score_info:
-                md_lines.extend(
-                    [
-                        "#### Factor Scores",
-                        f"- **Dip Score:** {score_info.dip_score:.2f}",
-                        f"- **Valuation/Cost Score:** {score_info.cost_score:.2f}",
-                        f"- **Gap Score:** {score_info.allocation_score:.2f}",
-                        f"- **Quant Total:** **{score_info.total_score:.3f}**\n",
-                    ]
-                )
-
-            md_lines.extend([f"> *{rec.reasoning}*\n", "---\n"])
-
+    # HTML only (overwrite fixed filename)
     try:
-        with open(md_path, mode="w", encoding="utf-8") as md_file:
-            md_file.write("\n".join(md_lines))
-        logger.success(
-            f"Successfully exported opportunity report Markdown to '{md_path}'."
-        )
-    except Exception as err:
-        logger.error(f"Failed to export Markdown report to '{md_path}': {err}")
+        from src.utils.render import render_html
 
-    if settings.gdrive_reports_folder_id and "pytest" not in sys.modules:
-        try:
-            drive_service: GDriveService = GDriveService(
-                folder_id=settings.gdrive_reports_folder_id
+        assets_ctx: list[dict[str, Any]] = []
+        for rank, score in enumerate(ranked_scores, start=1):
+            t = asset_dict_map[score.symbol]
+            rec = recommendations_map.get(score.symbol)
+            assets_ctx.append(
+                {
+                    "rank": rank,
+                    "symbol": score.symbol,
+                    "asset_type": score.asset_type.value.upper(),
+                    "price_eur": float(t.get("current_price", 0.0)),
+                    "current_pct": float(t.get("current_allocation_pct", 0.0)),
+                    "target_pct": float(t.get("target_allocation_pct", 0.0)),
+                    "score": float(score.total_score),
+                    "ai_action": rec.action.value if rec and rec.action else None,
+                    "ai_urgency": (
+                        rec.urgency_level.value if rec and rec.urgency_level else None
+                    ),
+                    "ai_conf": f"{rec.confidence_score * 100:.0f}%" if rec else None,
+                }
             )
-            drive_service.upload_file(csv_path, overwrite=True)
-            drive_service.upload_file(md_path, overwrite=True)
-            logger.success(
-                "Successfully backed up opportunity reports to "
-                "Google Drive reports folder."
-            )
-        except Exception as err:
-            logger.warning(
-                f"Failed to back up opportunity reports to Google Drive: {err}"
-            )
+
+        advisories_ctx: list[dict[str, Any]] = []
+        if has_ai:
+            active = [
+                (s, r)
+                for s, r in recommendations_map.items()
+                if r.action in (RecommendationAction.BUY, RecommendationAction.SELL)
+            ]
+            score_map_ctx: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
+            for symbol, rec in active:
+                t = asset_dict_map[symbol]
+                si = score_map_ctx.get(symbol)
+                curr_alloc = float(t.get("current_allocation_pct", 0.0))
+                targ_alloc = float(t.get("target_allocation_pct", 0.0))
+                adv: dict[str, Any] = {
+                    "symbol": symbol,
+                    "asset_type": t.get("asset_type", "STOCK").upper(),
+                    "action": rec.action.value,
+                    "urgency": rec.urgency_level.value if rec.urgency_level else "N/A",
+                    "confidence": f"{rec.confidence_score * 100:.0f}%",
+                    "price": float(t.get("current_price", 0.0)),
+                    "peak": float(t.get("peak_price", 0.0)),
+                    "curr_alloc": curr_alloc,
+                    "targ_alloc": targ_alloc,
+                    "delta": targ_alloc - curr_alloc,
+                    "dip_score": si.dip_score if si else 0.0,
+                    "cost_score": si.cost_score if si else 0.0,
+                    "gap_score": si.allocation_score if si else 0.0,
+                    "total_score": si.total_score if si else 0.0,
+                    "reasoning": rec.reasoning,
+                }
+                if adv["asset_type"] == "ETF":
+                    ter_v = t.get("ter")
+                    hl = t.get("top_holdings", [])
+                    sc = t.get("sector_breakdown", [])
+                    co = t.get("country_breakdown", [])
+                    adv.update(
+                        {
+                            "ter_str": f"{ter_v:.2f}%" if ter_v is not None else "N/A",
+                            "holdings_str": ", ".join(
+                                f"{h.get('name','')} ({h.get('weight_pct',0):.1f}%)"
+                                for h in hl[:5]
+                            )
+                            or "N/A",
+                            "sectors_str": ", ".join(
+                                f"{s.get('sector_name') or s.get('name', '')}"
+                                f" ({s.get('weight_pct', 0):.1f}%)"
+                                for s in sc[:4]
+                            )
+                            or "N/A",
+                            "countries_str": ", ".join(
+                                f"{c.get('country_name') or c.get('name', '')}"
+                                f" ({c.get('weight_pct', 0):.1f}%)"
+                                for c in co[:4]
+                            )
+                            or "N/A",
+                        }
+                    )
+                else:
+
+                    def _f(v: Any, fmt: str = ".1f") -> str:
+                        return format(v, fmt) if v is not None else "N/A"
+
+                    adv.update(
+                        {
+                            "tr_pe": _f(t.get("trailing_pe")),
+                            "fwd_pe": _f(t.get("forward_pe")),
+                            "peg": _f(t.get("peg_ratio"), ".2f"),
+                            "pb": _f(t.get("price_to_book"), ".2f"),
+                            "div_yield": (
+                                f"{t['dividend_yield_pct']:.2f}%"
+                                if t.get("dividend_yield_pct")
+                                else "N/A"
+                            ),
+                            "beta": _f(t.get("beta"), ".2f"),
+                            "margin": (
+                                f"{t['profit_margins_pct']:.1f}%"
+                                if t.get("profit_margins_pct")
+                                else "N/A"
+                            ),
+                            "rev_growth": (
+                                f"{t['revenue_growth_pct']:.1f}%"
+                                if t.get("revenue_growth_pct")
+                                else "N/A"
+                            ),
+                            "earn_growth": (
+                                f"{t['earnings_growth_pct']:.1f}%"
+                                if t.get("earnings_growth_pct")
+                                else "N/A"
+                            ),
+                            "debt_eq": _f(t.get("total_debt_to_equity")),
+                        }
+                    )
+                advisories_ctx.append(adv)
+
+        html_ctx: dict[str, Any] = {
+            "generated_at": formatted_date_str,
+            "total_value_eur": total_val,
+            "assets": assets_ctx,
+            "has_ai": has_ai,
+            "advisories": advisories_ctx,
+            "w_stock_dip": settings.stock_weight_dip,
+            "w_stock_pe": settings.stock_weight_forward_pe,
+            "w_stock_52w": settings.stock_weight_52w_range,
+            "w_stock_gap": settings.stock_weight_allocation,
+            "w_etf_dip": settings.etf_weight_dip,
+            "w_etf_ter": settings.etf_weight_ter,
+            "w_etf_gap": settings.etf_weight_allocation,
+            "w_sector_pen": settings.exposure_sector_penalty_weight,
+            "w_country_pen": settings.exposure_country_penalty_weight,
+        }
+        render_html(
+            "opportunity_report.html.j2",
+            html_ctx,
+            output_dir / "opportunity_report.html",
+        )
+        logger.success("Successfully exported opportunity report HTML.")
+    except Exception as err:
+        logger.error(f"Failed to export opportunity report HTML: {err}")
 
 
 def _display_rebalance_results(

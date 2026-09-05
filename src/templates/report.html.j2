@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portfolio Executive Report — {{ generated_at }}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 32px;
+    }
+
+    .page { max-width: 960px; margin: 0 auto; }
+
+    /* Header */
+    .report-header {
+      border-bottom: 1px solid #30363d;
+      padding-bottom: 20px;
+      margin-bottom: 32px;
+    }
+    .report-header h1 {
+      font-size: 26px;
+      font-weight: 700;
+      color: #58a6ff;
+      letter-spacing: -0.3px;
+    }
+    .report-meta { margin-top: 6px; color: #8b949e; font-size: 12px; }
+
+    /* Section heading */
+    h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #e6edf3;
+      border-left: 3px solid #58a6ff;
+      padding-left: 10px;
+      margin-bottom: 16px;
+      margin-top: 32px;
+    }
+
+    /* KPI cards — CSS Grid for browser, table fallback for PDF */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    .kpi-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 16px 20px;
+    }
+    .kpi-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #8b949e;
+      margin-bottom: 6px;
+    }
+    .kpi-value { font-size: 22px; font-weight: 700; color: #e6edf3; }
+    .kpi-value.positive { color: #3fb950; }
+    .kpi-value.negative { color: #f85149; }
+    .kpi-sub { font-size: 11px; color: #8b949e; margin-top: 4px; }
+
+    /* Charts — CSS Grid for browser */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    .chart-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .chart-card img { width: 100%; height: auto; display: block; border-radius: 4px; }
+    .chart-caption { font-size: 11px; color: #8b949e; margin-top: 8px; text-align: center; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: #161b22; }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8b949e;
+      border-bottom: 1px solid #30363d;
+    }
+    th.right, td.right { text-align: right; }
+    tbody tr { border-bottom: 1px solid #21262d; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #161b22; }
+    td { padding: 10px 12px; color: #c9d1d9; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .tag-stock { background: #1f3a5f; color: #58a6ff; }
+    .tag-etf   { background: #1f3a3a; color: #39d353; }
+
+    .positive { color: #3fb950; }
+    .negative { color: #f85149; }
+
+    .ai-buy  { color: #3fb950; font-weight: 600; }
+    .ai-sell { color: #f85149; font-weight: 600; }
+    .ai-hold { color: #d29922; font-weight: 600; }
+    .ai-none { color: #8b949e; }
+
+    .report-footer {
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px solid #30363d;
+      font-size: 11px;
+      color: #8b949e;
+      text-align: center;
+    }
+
+    /* PDF / print: replace Grid with table-based layout */
+    @page { size: A4; margin: 15mm 12mm; }
+    @media print {
+      body { background: #0d1117; color: #c9d1d9; padding: 0; }
+      .kpi-row, .charts-row { display: table; width: 100%; table-layout: fixed; border-spacing: 8px 0; }
+      .kpi-card, .chart-card { display: table-cell; vertical-align: top; }
+      h2 { page-break-after: avoid; }
+      tbody tr { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="report-header">
+    <h1>Portfolio Executive Report</h1>
+    <div class="report-meta">
+      Generated: {{ generated_at }} &nbsp;|&nbsp;
+      Period: {{ period_start }} – {{ period_end }}
+    </div>
+  </div>
+
+  <!-- Executive Summary -->
+  <h2>Executive Summary</h2>
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Portfolio Value</div>
+      <div class="kpi-value">€{{ "%.2f"|format(total_value_eur) }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Return</div>
+      <div class="kpi-value {% if total_roi_percent >= 0 %}positive{% else %}negative{% endif %}">
+        {{ "%+.2f"|format(total_roi_percent) }}%
+      </div>
+      <div class="kpi-sub">€{{ "%+.2f"|format(total_roi_eur) }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Max Drawdown</div>
+      <div class="kpi-value {% if max_drawdown_percent < 0 %}negative{% endif %}">
+        {{ "%.2f"|format(max_drawdown_percent) }}%
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Portfolio Composition</div>
+      {% for c in composition %}
+      <div style="margin-top:6px;">
+        <span class="tag {% if c.asset_type == 'ETF' %}tag-etf{% else %}tag-stock{% endif %}" style="margin-right:6px;">{{ c.asset_type }}</span>
+        <span style="color:#e6edf3;font-weight:600;">€{{ "%.2f"|format(c.value_eur) }}</span>
+        <span class="kpi-sub" style="display:inline;">&nbsp;({{ "%.1f"|format(c.share_percent) }}%)</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Performance Charts -->
+  <h2>Performance Charts</h2>
+  <div class="charts-row">
+    <div class="chart-card">
+      {% if chart_valuation_b64 %}
+      <img src="data:image/png;base64,{{ chart_valuation_b64 }}" alt="Portfolio Valuation History">
+      {% endif %}
+      <div class="chart-caption">Portfolio Valuation History</div>
+    </div>
+    <div class="chart-card">
+      {% if chart_class_b64 %}
+      <img src="data:image/png;base64,{{ chart_class_b64 }}" alt="Asset Class Evolution">
+      {% endif %}
+      <div class="chart-caption">Asset Class Valuation Evolution</div>
+    </div>
+  </div>
+
+  <!-- Asset Positions -->
+  <h2>Asset Positions</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Name</th>
+        <th>Type</th>
+        <th class="right">Qty</th>
+        <th class="right">Value (€)</th>
+        <th class="right">Cost Basis (€)</th>
+        <th class="right">ROI (€)</th>
+        <th class="right">ROI (%)</th>
+        <th class="right">Share</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in asset_summaries|sort(attribute='latest_value_eur', reverse=True) %}
+      <tr>
+        <td><strong>{{ s.ticker }}</strong></td>
+        <td>{{ s.name }}</td>
+        <td>
+          <span class="tag {% if s.asset_type|upper == 'ETF' %}tag-etf{% else %}tag-stock{% endif %}">
+            {{ s.asset_type }}
+          </span>
+        </td>
+        <td class="right">{{ "%.4f"|format(s.latest_quantity) }}</td>
+        <td class="right">{{ "%.2f"|format(s.latest_value_eur) }}</td>
+        <td class="right">{{ "%.2f"|format(s.cost_basis_eur) }}</td>
+        <td class="right {{ 'positive' if s.roi_eur >= 0 else 'negative' }}">
+          {{ "%+.2f"|format(s.roi_eur) }}
+        </td>
+        <td class="right {{ 'positive' if s.roi_percent >= 0 else 'negative' }}">
+          {{ "%+.2f"|format(s.roi_percent) }}%
+        </td>
+        <td class="right">{{ "%.1f"|format(s.portfolio_share_percent) }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Opportunity Watchlist -->
+  {% if has_opportunities %}
+  <h2>Top-5 Opportunity Watchlist</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Rank</th>
+        <th>Symbol</th>
+        <th>Type</th>
+        <th class="right">Price (€)</th>
+        <th class="right">Quant Score</th>
+        <th>AI Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for opp in opportunities %}
+      <tr>
+        <td>#{{ opp.rank }}</td>
+        <td><strong>{{ opp.symbol }}</strong></td>
+        <td>
+          <span class="tag {% if opp.asset_type|upper == 'ETF' %}tag-etf{% else %}tag-stock{% endif %}">
+            {{ opp.asset_type }}
+          </span>
+        </td>
+        <td class="right">€{{ "%.2f"|format(opp.price_eur) }}</td>
+        <td class="right">{{ "%.2f"|format(opp.quant_score) }}</td>
+        <td>
+          {% if opp.ai_action %}
+            <span class="ai-{{ opp.ai_action|lower }}">{{ opp.ai_action }}</span>
+          {% else %}
+            <span class="ai-none">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <!-- Growth Projections -->
+  <h2>Growth Projections</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Scenario</th>
+        <th class="right">Rate</th>
+        <th class="right">10Y Value</th>
+        <th class="right">10Y Real</th>
+        <th class="right">20Y Value</th>
+        <th class="right">20Y Real</th>
+        <th class="right">30Y Value</th>
+        <th class="right">30Y Real</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in growth_scenarios %}
+      <tr>
+        <td><strong>{{ s.name }}</strong></td>
+        <td class="right">{{ "%.0f"|format(s.annual_return_pct) }}%</td>
+        {% for m in s.milestones %}
+        <td class="right positive">€{{ "{:,.0f}".format(m.projected_value) }}</td>
+        <td class="right" style="color:#8b949e;">€{{ "{:,.0f}".format(m.inflation_adjusted_value) }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Footer -->
+  <div class="report-footer">
+    Generated by finances portfolio tracker &nbsp;|&nbsp; For personal use only. Not financial advice.
+  </div>
+
+</div>
+</body>
+</html>
