@@ -16,6 +16,7 @@ from src.cli.fundamentals import sync_portfolio_fundamentals
 from src.cli.opportunity import recommend_rebalance
 from src.cli.projection_presenter import ProjectionPresenter
 from src.cli.quality import analyze_quality_cmd
+from src.cli.report import app as report_app
 from src.config import DATA_DIR, settings
 from src.core.exposure import ExposureEngine
 from src.core.models import (
@@ -55,6 +56,7 @@ app: typer.Typer = typer.Typer(
 )
 
 app.add_typer(dashboard_app, name="dashboard")
+app.add_typer(report_app, name="report")
 
 console: Console = Console()
 

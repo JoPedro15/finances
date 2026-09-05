@@ -49,86 +49,22 @@ def export_quality_report(
     evaluated_assets: list[dict[str, Any]],
     output_dir: Path = OUTPUT_DIR,
 ) -> None:
-    """Exports independent comprehensive quality evaluation report
-
-    to Markdown format in output dir.
-    """
+    """Exports independent comprehensive quality evaluation report as HTML."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    md_path: Path = output_dir / "quality_report.md"
     timestamp_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    md_lines: list[str] = [
-        "# Independent Fundamental Health & Quality Evaluation Report",
-        f"*Generated on: {timestamp_str}*\n",
-        "## Evaluated Assets Summary\n",
-        ("| Asset Name | Ticker | Type | Quality Tier | Score | Valuation Status |"),
-        "| :--- | :---: | :---: | :---: | ---: | :--- |",
-    ]
-
-    for item in evaluated_assets:
-        md_lines.append(
-            f"| {item['name']} | {item['symbol']} | {item['asset_type']} | "
-            f"{item['tier']} | {item['score']}/100 | {item['valuation_status']} |"
-        )
-
-    md_lines.append("\n---")
-    md_lines.append("\n## Detailed Asset Diagnostics & Metrics\n")
-
-    for item in evaluated_assets:
-        md_lines.extend(
-            [
-                f"### {item['name']} ({item['symbol']})",
-                f"- **Asset Type:** {item['asset_type']} | "
-                f"**Quality Tier:** {item['tier']} | **Score:** {item['score']}/100",
-                f"- **Valuation Status:** {item['valuation_status']}\n",
-            ]
-        )
-
-        if item["asset_type"] == "ETF":
-            md_lines.extend(
-                [
-                    "#### ETF Structure & Valuation Metrics",
-                    f"- **Total Expense Ratio (TER):** {item.get('ter_str', 'N/A')}",
-                    f"- **Top Holdings:** {item.get('holdings_str', 'N/A')}",
-                    f"- **Sector Breakdown:** {item.get('sectors_str', 'N/A')}",
-                    f"- **Country Breakdown:** {item.get('countries_str', 'N/A')}\n",
-                ]
-            )
-        else:
-            md_lines.extend(
-                [
-                    "#### Valuation & Fundamental Metrics",
-                    f"- **Trailing P/E:** {item.get('tr_str', 'N/A')} | "
-                    f"**Forward P/E:** {item.get('fw_str', 'N/A')} | "
-                    f"**PEG:** {item.get('peg_str', 'N/A')} | "
-                    f"**P/B:** {item.get('pb_str', 'N/A')}",
-                    f"- **Dividend Yield:** {item.get('div_str', 'N/A')} | "
-                    f"**Beta:** {item.get('beta_str', 'N/A')} | "
-                    f"**Profit Margin:** {item.get('margin_str', 'N/A')}",
-                    f"- **Revenue Growth:** {item.get('rev_str', 'N/A')} | "
-                    f"**Earnings Growth:** {item.get('earn_str', 'N/A')} | "
-                    f"**Debt/Equity:** {item.get('debt_str', 'N/A')}",
-                    f"- **52w Range (Low / High):** {item.get('low_str', 'N/A')} / "
-                    f"{item.get('peak_str', 'N/A')}\n",
-                ]
-            )
-
-        md_lines.append("#### 🟢 Bull Case (Catalysts & Strengths)")
-        for bull in item.get("bull_case", []):
-            md_lines.append(f"- {bull}")
-
-        md_lines.append("\n#### 🔴 Bear Case (Risks & Pressures)")
-        for bear in item.get("bear_case", []):
-            md_lines.append(f"- {bear}")
-
-        md_lines.append("\n---\n")
-
+    html_path: Path = output_dir / "quality_report.html"
     try:
-        with open(md_path, mode="w", encoding="utf-8") as md_file:
-            md_file.write("\n".join(md_lines))
-        logger.success(f"Successfully exported quality report Markdown to '{md_path}'.")
+        from src.utils.render import render_html
+
+        render_html(
+            "quality_report.html.j2",
+            {"generated_at": timestamp_str, "assets": evaluated_assets},
+            html_path,
+        )
+        logger.success(f"Successfully exported quality report HTML to '{html_path}'.")
     except Exception as err:
-        logger.error(f"Failed to export quality report Markdown to '{md_path}': {err}")
+        logger.error(f"Failed to export quality report HTML: {err}")
 
 
 def save_quality_to_database(

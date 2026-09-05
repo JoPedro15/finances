@@ -6,7 +6,7 @@ SOURCES = main.py src/
 TESTS_DIR = tests/
 ALL_SOURCES = $(SOURCES) $(TESTS_DIR)
 
-.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config save-snapshot etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality dashboard update-finance project-growth
+.PHONY: help install format lint security-check test quality clean sync-portfolio push-config pull-config save-snapshot etf-details stock-details migrate analyze-opportunity sync-fundamentals exposure analyze-quality dashboard update-finance project-growth report
 
 # ==============================================================================
 # 🛠️ Setup, Maintenance & Quality Gates
@@ -105,9 +105,10 @@ update-finances:
 	PYTHONPATH=src $(PYTHON) main.py sync-fundamentals
 	PYTHONPATH=src $(PYTHON) main.py save-snapshot
 	$(PYTHON) main.py exposure-check
-	PYTHONPATH=src $(PYTHON) main.py analyze-quality --notify
-	PYTHONPATH=src $(PYTHON) main.py opportunity_evaluation --notify
-	PYTHONPATH=src $(PYTHON) main.py dashboard show --export-plots --notify
+	PYTHONPATH=src $(PYTHON) main.py analyze-quality
+	PYTHONPATH=src $(PYTHON) main.py opportunity_evaluation
+	PYTHONPATH=src $(PYTHON) main.py dashboard show --export-plots
+	PYTHONPATH=src $(PYTHON) main.py report generate --no-browser
 	PYTHONPATH=src $(PYTHON) main.py push-config
 
 # Orchestrates portfolio opportunity_evaluation ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
@@ -133,3 +134,8 @@ dashboard:
 # Example usage: make project-growth FLAGS="--monthly-contribution 500 --compare-scenarios"
 project-growth:
 	PYTHONPATH=src $(PYTHON) main.py project-growth $(FLAGS) --compare-scenarios --monthly-contribution 500
+
+# Generates a dark-theme HTML executive portfolio report in output/reports/.
+# Use FLAGS="--no-browser" to suppress browser launch (e.g. in CI).
+report:
+	PYTHONPATH=src $(PYTHON) main.py report generate $(FLAGS)

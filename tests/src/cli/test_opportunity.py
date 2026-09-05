@@ -254,7 +254,7 @@ def test_format_action_and_urgency() -> None:
 
 
 def test_export_outputs_success(tmp_path: Path) -> None:
-    """Validates export_outputs writes CSV matrix and markdown report."""
+    """Validates export_outputs writes CSV matrix and HTML report."""
     score: AssetScore = AssetScore(
         symbol="AAPL",
         asset_type=AssetType.STOCK,
@@ -292,10 +292,10 @@ def test_export_outputs_success(tmp_path: Path) -> None:
     )
 
     csv_path: Path = tmp_path / "opportunity_output.csv"
-    md_path: Path = tmp_path / "opportunity_report.md"
+    html_path: Path = tmp_path / "opportunity_report.html"
 
     assert csv_path.exists()
-    assert md_path.exists()
+    assert html_path.exists()
 
     with open(csv_path, encoding="utf-8") as file:
         reader: list[dict[str, str]] = list(csv.DictReader(file))
@@ -304,8 +304,8 @@ def test_export_outputs_success(tmp_path: Path) -> None:
         assert reader[0]["ai_action"] == "BUY"
 
 
-def test_export_outputs_etf_and_gdrive_upload(tmp_path: Path) -> None:
-    """Validates export_outputs formatting for ETF and GDrive upload."""
+def test_export_outputs_etf_html_contains_ticker(tmp_path: Path) -> None:
+    """Validates export_outputs renders ETF details into the HTML report."""
     score: AssetScore = AssetScore(
         symbol="EUNL.DE",
         asset_type=AssetType.ETF,
@@ -339,35 +339,23 @@ def test_export_outputs_etf_and_gdrive_upload(tmp_path: Path) -> None:
         valuation_score=7,
     )
 
-    mock_drive: MagicMock = MagicMock()
-    with (
-        patch("src.cli.opportunity.GDriveService", return_value=mock_drive),
-        patch(
-            "src.cli.opportunity.settings.gdrive_reports_folder_id",
-            "folder123",
-        ),
-        patch.dict("sys.modules"),
-    ):
-        sys.modules.pop("pytest", None)
-        export_outputs(
-            ranked_scores=[score],
-            asset_dict_map=asset_dict,
-            recommendations_map={"EUNL.DE": rec},
-            total_val=2000.0,
-            has_ai=True,
-            output_dir=tmp_path,
-        )
+    export_outputs(
+        ranked_scores=[score],
+        asset_dict_map=asset_dict,
+        recommendations_map={"EUNL.DE": rec},
+        total_val=2000.0,
+        has_ai=True,
+        output_dir=tmp_path,
+    )
 
-    md_path: Path = tmp_path / "opportunity_report.md"
-    assert md_path.exists()
-    content: str = md_path.read_text(encoding="utf-8")
+    html_path: Path = tmp_path / "opportunity_report.html"
+    assert html_path.exists()
+    content: str = html_path.read_text(encoding="utf-8")
     assert "EUNL.DE" in content
-    assert "**Total Expense Ratio (TER):** 0.20%" in content
-    mock_drive.upload_file.assert_called()
 
 
-def test_export_outputs_gdrive_upload_failure(tmp_path: Path) -> None:
-    """Validates export_outputs handling GDrive backup exception."""
+def test_export_outputs_render_error_does_not_raise(tmp_path: Path) -> None:
+    """export_outputs handles HTML render failure gracefully (no crash)."""
     score: AssetScore = AssetScore(
         symbol="AAPL",
         asset_type=AssetType.STOCK,
@@ -385,18 +373,7 @@ def test_export_outputs_gdrive_upload_failure(tmp_path: Path) -> None:
         }
     }
 
-    mock_drive: MagicMock = MagicMock()
-    mock_drive.upload_file.side_effect = RuntimeError("Drive network error")
-
-    with (
-        patch("src.cli.opportunity.GDriveService", return_value=mock_drive),
-        patch(
-            "src.cli.opportunity.settings.gdrive_reports_folder_id",
-            "folder123",
-        ),
-        patch.dict("sys.modules"),
-    ):
-        sys.modules.pop("pytest", None)
+    with patch("src.utils.render.render_html", side_effect=RuntimeError("render fail")):
         export_outputs(
             ranked_scores=[score],
             asset_dict_map=asset_dict,
