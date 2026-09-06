@@ -35,16 +35,16 @@ jobs:
         run: make quality
 
       - name: Generate Coverage Badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: always()
         run: |
           genbadge coverage -i coverage.xml -o coverage.svg
 
       - name: Commit Updated Badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "docs: update coverage badge [skip ci]"
           file_pattern: coverage.svg
+          branch: ${{ github.head_ref }}
 
       - name: Upload Test Artifacts
         if: always()
