@@ -47,7 +47,7 @@ def _format_tier(tier: str) -> Text:
 
 def export_quality_report(
     evaluated_assets: list[dict[str, Any]],
-    output_dir: Path = OUTPUT_DIR,
+    output_dir: Path = Path("output/reports"),
 ) -> None:
     """Exports independent comprehensive quality evaluation report as HTML."""
     output_dir.mkdir(parents=True, exist_ok=True)

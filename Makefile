@@ -119,7 +119,7 @@ update-finances:
 #   -v, --verbose           : Display granular factor score breakdowns (Dip Sc, Cost Sc, Gap Sc)
 #   -o, --output-csv PATH   : CSV export destination path (default: output/opportunity_output_22_08_2026.csv)
 analyze-opportunity:
-	PYTHONPATH=src $(PYTHON) -m cli.opportunity --skip-ai
+	PYTHONPATH=src $(PYTHON) -m cli.opportunity
 
 # Evaluates absolute quality tiers, comprehensive fundamental metrics, and diagnostic Bull/Bear cases.
 analyze-quality:

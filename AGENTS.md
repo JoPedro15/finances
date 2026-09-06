@@ -14,6 +14,7 @@ This document outlines the mandatory operating procedures, coding standards, and
 - **Constructive Critical Thinking**: Challenge the user when a decision seems wrong or a better technical solution exists. Do not default to passive agreement.
 - **Impact & Realistic Planning**: Prioritize highest-impact tasks and keep implementation plans realistic.
 - **No Destructive Operations**: Never overwrite or delete configuration files, SQLite databases (`finances.db`), or credentials (`.env`, `secrets/`) without explicit user instruction.
+- **No Direct Commits/PRs to Main**: AI agents are strictly prohibited from performing git commits or opening Pull Requests targeting the `main` branch. All branch merges and commits to `main` must be performed exclusively by the user.
 
 ---
 
