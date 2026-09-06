@@ -204,6 +204,53 @@
     </div>
   </div>
 
+  <!-- Risk & Exposure -->
+  {% if exposure_plots and (exposure_plots.exposure_sector or exposure_plots.exposure_country or exposure_plots.exposure_company) %}
+  <h2>Risk &amp; Look-Through Exposure</h2>
+  <div class="charts-row" style="grid-template-columns: repeat(3, 1fr);">
+    {% if exposure_plots.exposure_sector %}
+    <div class="chart-card">
+      <img src="data:image/png;base64,{{ exposure_plots.exposure_sector }}" alt="Sector Exposure">
+      <div class="chart-caption">Consolidated Sector Exposure</div>
+    </div>
+    {% endif %}
+    {% if exposure_plots.exposure_country %}
+    <div class="chart-card">
+      <img src="data:image/png;base64,{{ exposure_plots.exposure_country }}" alt="Country Exposure">
+      <div class="chart-caption">Consolidated Country Exposure</div>
+    </div>
+    {% endif %}
+    {% if exposure_plots.exposure_company %}
+    <div class="chart-card">
+      <img src="data:image/png;base64,{{ exposure_plots.exposure_company }}" alt="Company Exposure">
+      <div class="chart-caption">Top Look-Through Holdings</div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Fundamental Health Summary -->
+  {% if quality_kpis and quality_kpis.total %}
+  <h2>Fundamental Health &amp; Quality Status</h2>
+  <div class="kpi-row">
+    <div class="kpi-card" style="border-top: 3px solid #3fb950;">
+      <div class="kpi-label">Tier A (High Quality)</div>
+      <div class="kpi-value" style="color: #3fb950;">{{ quality_kpis.tier_a }}</div>
+      <div class="kpi-sub">Out of {{ quality_kpis.total }} evaluated</div>
+    </div>
+    <div class="kpi-card" style="border-top: 3px solid #d29922;">
+      <div class="kpi-label">Tier B (Medium Quality)</div>
+      <div class="kpi-value" style="color: #d29922;">{{ quality_kpis.tier_b }}</div>
+      <div class="kpi-sub">Out of {{ quality_kpis.total }} evaluated</div>
+    </div>
+    <div class="kpi-card" style="border-top: 3px solid #f85149;">
+      <div class="kpi-label">Tier C (Low Quality / Speculative)</div>
+      <div class="kpi-value" style="color: #f85149;">{{ quality_kpis.tier_c }}</div>
+      <div class="kpi-sub">Out of {{ quality_kpis.total }} evaluated</div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Asset Positions -->
   <h2>Asset Positions</h2>
   <table>

@@ -291,8 +291,8 @@ def test_export_outputs_success(tmp_path: Path) -> None:
         output_dir=tmp_path,
     )
 
-    csv_path: Path = tmp_path / "opportunity_output.csv"
-    html_path: Path = tmp_path / "opportunity_report.html"
+    csv_path: Path = tmp_path / "tables/opportunity_output.csv"
+    html_path: Path = tmp_path / "reports/opportunity_report.html"
 
     assert csv_path.exists()
     assert html_path.exists()
@@ -348,7 +348,7 @@ def test_export_outputs_etf_html_contains_ticker(tmp_path: Path) -> None:
         output_dir=tmp_path,
     )
 
-    html_path: Path = tmp_path / "opportunity_report.html"
+    html_path: Path = tmp_path / "reports/opportunity_report.html"
     assert html_path.exists()
     content: str = html_path.read_text(encoding="utf-8")
     assert "EUNL.DE" in content

@@ -193,9 +193,70 @@ class PortfolioReportGenerator:
             "composition": composition,
             "chart_valuation_b64": chart_valuation_b64,
             "chart_class_b64": chart_class_b64,
+            "exposure_plots": self._load_exposure_plots(),
+            "quality_kpis": self._build_quality_kpis(),
             "opportunities": opportunities,
             "has_opportunities": len(opportunities) > 0,
             "growth_scenarios": self._build_growth_scenarios(),
+        }
+
+    def _load_exposure_plots(self) -> dict[str, str]:
+        """Loads exposure chart images as base64 strings."""
+        plots_dir = Path("output/plots")
+        plots = {}
+        for name in ["exposure_sector.png", "exposure_country.png", "exposure_company.png"]:
+            path = plots_dir / name
+            if path.exists():
+                with open(path, "rb") as f:
+                    plots[name.split(".")[0]] = base64.b64encode(f.read()).decode("utf-8")
+        return plots
+
+    def _build_quality_kpis(self) -> dict[str, Any]:
+        """Fetches the latest quality evaluation metrics."""
+        from collections import Counter
+        from src.infra.database.connection import get_db_context
+        from src.infra.database.schema import initialize_database
+
+        assets_data = []
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+
+                # Get the most recent stock fundamental snapshots
+                cursor.execute("""
+                    SELECT a.yahoo_ticker as ticker, sfh.quality_tier, sfh.quality_score
+                    FROM stock_fundamental_history sfh
+                    JOIN assets a ON sfh.asset_id = a.id
+                    WHERE sfh.id IN (
+                        SELECT MAX(id) FROM stock_fundamental_history GROUP BY asset_id
+                    )
+                """)
+                assets_data.extend([dict(r) for r in cursor.fetchall()])
+
+                # Get the most recent ETF fundamental snapshots
+                cursor.execute("""
+                    SELECT a.yahoo_ticker as ticker, efh.quality_tier, efh.quality_score
+                    FROM etf_fundamental_history efh
+                    JOIN assets a ON efh.asset_id = a.id
+                    WHERE efh.id IN (
+                        SELECT MAX(id) FROM etf_fundamental_history GROUP BY asset_id
+                    )
+                """)
+                assets_data.extend([dict(r) for r in cursor.fetchall()])
+        except Exception:
+            return {}
+
+        if not assets_data:
+            return {}
+
+        tiers = Counter(a.get("quality_tier", "Unknown") for a in assets_data)
+
+        return {
+            "total": len(assets_data),
+            "tier_a": tiers.get("Tier A", 0),
+            "tier_b": tiers.get("Tier B", 0),
+            "tier_c": tiers.get("Tier C", 0),
         }
 
     def generate(self, open_browser: bool = True) -> Path:

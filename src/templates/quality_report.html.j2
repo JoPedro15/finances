@@ -63,6 +63,17 @@
 
     .cases-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
     .case-title { font-size: 11px; font-weight: 600; margin-bottom: 5px; }
+
+    /* New KPIs and Exposure sections */
+    .kpi-container { display: flex; gap: 16px; margin-bottom: 24px; }
+    .kpi-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; flex: 1; text-align: center; }
+    .kpi-value { font-size: 22px; font-weight: 700; color: #58a6ff; margin-bottom: 4px; }
+    .kpi-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .exposure-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .exposure-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center; }
+    .exposure-card img { max-width: 100%; height: auto; border-radius: 4px; }
+    .exposure-title { font-size: 12px; font-weight: 600; color: #8b949e; margin-bottom: 12px; text-transform: uppercase; }
     .case-bull .case-title { color: #3fb950; }
     .case-bear .case-title { color: #f85149; }
     .case-item { font-size: 12px; color: #8b949e; padding: 2px 0; }
@@ -95,6 +106,61 @@
     <h1>Independent Fundamental Health &amp; Quality Report</h1>
     <div class="report-meta">Generated: {{ generated_at }}</div>
   </div>
+
+  <!-- Dashboard Overview -->
+  {% if kpis %}
+  <div class="kpi-container">
+    <div class="kpi-box">
+      <div class="kpi-value">{{ kpis.total }}</div>
+      <div class="kpi-label">Total Assets Analyzed</div>
+    </div>
+    <div class="kpi-box" style="border-top: 3px solid #3fb950;">
+      <div class="kpi-value" style="color: #3fb950;">{{ kpis.tier_a }}</div>
+      <div class="kpi-label">Tier A Assets</div>
+    </div>
+    <div class="kpi-box" style="border-top: 3px solid #d29922;">
+      <div class="kpi-value" style="color: #d29922;">{{ kpis.tier_b }}</div>
+      <div class="kpi-label">Tier B Assets</div>
+    </div>
+    <div class="kpi-box" style="border-top: 3px solid #f85149;">
+      <div class="kpi-value" style="color: #f85149;">{{ kpis.tier_c }}</div>
+      <div class="kpi-label">Tier C Assets</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value" style="color: #3fb950;">{{ kpis.undervalued }}</div>
+      <div class="kpi-label">Undervalued</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value" style="color: #f85149;">{{ kpis.overvalued }}</div>
+      <div class="kpi-label">Overvalued</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Look-Through Exposure (Visuals) -->
+  {% if exposure_plots and (exposure_plots.exposure_sector or exposure_plots.exposure_country or exposure_plots.exposure_company) %}
+  <h2>Look-Through Exposure Analysis</h2>
+  <div class="exposure-container">
+    {% if exposure_plots.exposure_sector %}
+    <div class="exposure-card">
+      <div class="exposure-title">Sector Allocation</div>
+      <img src="data:image/png;base64,{{ exposure_plots.exposure_sector }}" alt="Sector Exposure">
+    </div>
+    {% endif %}
+    {% if exposure_plots.exposure_country %}
+    <div class="exposure-card">
+      <div class="exposure-title">Geographic Exposure</div>
+      <img src="data:image/png;base64,{{ exposure_plots.exposure_country }}" alt="Country Exposure">
+    </div>
+    {% endif %}
+    {% if exposure_plots.exposure_company %}
+    <div class="exposure-card">
+      <div class="exposure-title">Top Holdings Exposure</div>
+      <img src="data:image/png;base64,{{ exposure_plots.exposure_company }}" alt="Company Exposure">
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <!-- Summary table -->
   <h2>Evaluated Assets Summary</h2>

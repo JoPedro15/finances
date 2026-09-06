@@ -275,7 +275,7 @@ def export_outputs(
     formatted_date_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path: Path = Path("output/tables/opportunity_output.csv")
+    csv_path: Path = output_dir / "tables/opportunity_output.csv"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     csv_fieldnames: list[str] = [
@@ -472,7 +472,7 @@ def export_outputs(
             "w_country_pen": settings.exposure_country_penalty_weight,
         }
 
-        report_path: Path = Path("output/reports/opportunity_report.html")
+        report_path: Path = output_dir / "reports/opportunity_report.html"
         report_path.parent.mkdir(parents=True, exist_ok=True)
 
         render_html(

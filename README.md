@@ -70,6 +70,7 @@ Rather than relying solely on AI outputs, the system uses deterministic multi-fa
 ### 2. Look-Through Portfolio Exposure Policies (`src/core/exposure.py`)
 * **Look-Through Aggregation**: Unpacks underlying ETF holdings (via JustETF data) and merges them with direct equity positions to determine true portfolio-wide concentration.
 * **Policy Constraints**: Enforces default thresholds for Country Allocation (Max 60%), Tech Sector Allocation (Max 50%), Other Sectors (Max 15%), and Single Company Exposure (Max 15%).
+* **Visual Audit Charts**: Generates and exports explicit pie charts visualizing consolidated sector, country, and holding exposures (`make exposure`).
 
 ### 3. Absolute Quality Tier Evaluation (`src/cli/quality.py` & `src/core/analysis.py`)
 * **Fundamental Scoring**: Evaluates asset sync-fundamentals on a 0–100 scale, assigning Tier A, Tier B, or Tier C classifications based on profit margins, YoY revenue expansion, balance sheet leverage (Debt-to-Equity), and earnings trajectory.
@@ -87,10 +88,10 @@ Rather than relying solely on AI outputs, the system uses deterministic multi-fa
 * **Historical Performance Baseline**: Automatically computes the Compound Annual Growth Rate (CAGR) from SQLite history. For periods under 1 year, it intelligently uses Absolute Return to maintain realistic baseline projections.
 
 ### 6. HTML Executive Report Generator (`src/infra/report_generator.py`)
-* **Self-Contained Dark-Theme HTML**: Generates `portfolio_report.html` in `output/reports/` using Jinja2 templates with all charts embedded as base64 data URIs — no external dependencies at render time.
-* **Report Sections**: Executive KPI summary (total value, ROI, max drawdown), portfolio valuation chart, asset class evolution chart, positions table, top-5 opportunity watchlist, and 3-scenario long-term growth projections (Conservative / Moderate / Aggressive).
-* **Fixed-Filename Overwrite**: Reports always overwrite the same filename, making them easy to bookmark and re-open after each `make update-finances` run.
-* **Shared Rendering Helper**: `src/utils/render.py` provides a single `render_html()` function used by all three report types (portfolio, opportunity, quality), ensuring consistent Jinja2 environment and autoescape configuration.
+* **C-Level Executive Dashboard**: Generates the central `portfolio_report.html` in `output/reports/` using Jinja2 templates, serving as a master aggregator for all portfolio dimensions.
+* **Self-Contained Data URIs**: All generated graphics (Valuation curves, look-through Exposure pie charts) are strictly embedded as base64 — ensuring the HTML file has zero external local dependencies and is easily sharable.
+* **Unified Report Sections**: Features Executive KPIs (Total Value, ROI, Drawdown), Fundamental Health Tiers summary, Look-Through Risco Exposure, AI Top-5 Opportunity Watchlist, and 3-scenario Growth Projections.
+* **Independent Reports**: The system also generates localized reports like `opportunity_report.html` and `quality_report.html` for deep-dive diagnostics.
 
 ### 7. Gemini AI Batch Advisory (`src/infra/ai/`)
 * **Enterprise Client (`GeminiClient`)**: Powered by Google Gemini AI via the Google GenAI SDK, featuring exponential backoff retry mechanisms for transient errors and quotas.
@@ -200,7 +201,7 @@ make report
 make report FLAGS="--no-browser"
 ```
 
-The report is written to `output/reports/portfolio_report.html` and overwrites the previous file on each run. It embeds portfolio valuation charts, asset positions, the top-5 opportunity watchlist, and 3-scenario growth projections.
+The report is written to `output/reports/portfolio_report.html` and acts as the central **C-Level Dashboard**. It dynamically embeds portfolio valuation history, fundamental quality tier KPIs, visual look-through exposure charts, the Top-5 AI-recommended opportunity watchlist, and compound growth projections.
 
 **Portfolio Performance & Analytics**:
 

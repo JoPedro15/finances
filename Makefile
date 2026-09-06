@@ -100,16 +100,16 @@ sync-fundamentals:
 
 # Fully updates finances.db with fundamental data, portfolio snapshot, exposure checks, and opportunity analysis before or after trading.
 update-finances:
-	PYTHONPATH=src $(PYTHON) main.py pull-config
-	PYTHONPATH=. $(PYTHON) src/migrate_json_to_sqlite.py
-	PYTHONPATH=src $(PYTHON) main.py sync-fundamentals
-	PYTHONPATH=src $(PYTHON) main.py save-snapshot
-	$(PYTHON) main.py exposure-check
-	PYTHONPATH=src $(PYTHON) main.py analyze-quality
-	PYTHONPATH=src $(PYTHON) main.py opportunity_evaluation
-	PYTHONPATH=src $(PYTHON) main.py dashboard show --export-plots
-	PYTHONPATH=src $(PYTHON) main.py report generate --no-browser
-	PYTHONPATH=src $(PYTHON) main.py push-config
+	$(MAKE) pull-config
+	$(MAKE) migrate
+	$(MAKE) sync-fundamentals
+	$(MAKE) save-snapshot
+	$(MAKE) exposure
+	$(MAKE) analyze-quality
+	$(MAKE) analyze-opportunity
+	$(MAKE) dashboard FLAGS="--export-plots"
+	$(MAKE) report FLAGS="--no-browser"
+	$(MAKE) push-config
 
 # Orchestrates portfolio opportunity_evaluation ranking, quantitative scoring, and Google Gemini AI rebalancing analysis.
 # Accepts optional CLI flags via FLAGS variable (e.g., make opportunity FLAGS="--skip-ai -v"):
