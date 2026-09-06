@@ -90,7 +90,9 @@ class PortfolioDashboardPresenter:
     def export_assets_csv(
         self,
         summaries: list[AssetPerformanceSummary],
-        output_path: Path = Path("output/tables/asset_positions_performance_breakdown.csv"),
+        output_path: Path = Path(
+            "output/tables/asset_positions_performance_breakdown.csv"
+        ),
     ) -> Path:
         """Exports individual product positions to a CSV file."""
         output_path.parent.mkdir(parents=True, exist_ok=True)

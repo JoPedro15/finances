@@ -204,16 +204,23 @@ class PortfolioReportGenerator:
         """Loads exposure chart images as base64 strings."""
         plots_dir = Path("output/plots")
         plots = {}
-        for name in ["exposure_sector.png", "exposure_country.png", "exposure_company.png"]:
+        for name in [
+            "exposure_sector.png",
+            "exposure_country.png",
+            "exposure_company.png",
+        ]:
             path = plots_dir / name
             if path.exists():
                 with open(path, "rb") as f:
-                    plots[name.split(".")[0]] = base64.b64encode(f.read()).decode("utf-8")
+                    plots[name.split(".")[0]] = base64.b64encode(f.read()).decode(
+                        "utf-8"
+                    )
         return plots
 
     def _build_quality_kpis(self) -> dict[str, Any]:
         """Fetches the latest quality evaluation metrics."""
         from collections import Counter
+
         from src.infra.database.connection import get_db_context
         from src.infra.database.schema import initialize_database
 

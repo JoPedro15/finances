@@ -73,7 +73,11 @@ def export_quality_report(
     # Load exposure plots as base64
     plots_dir = Path("output/plots")
     exposure_plots = {}
-    for plot_name in ["exposure_sector.png", "exposure_country.png", "exposure_company.png"]:
+    for plot_name in [
+        "exposure_sector.png",
+        "exposure_country.png",
+        "exposure_company.png",
+    ]:
         plot_path = plots_dir / plot_name
         if plot_path.exists():
             with open(plot_path, "rb") as f:
