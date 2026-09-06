@@ -35,6 +35,7 @@ from src.core.repositories import (
 from src.core.snapshot import get_snapshot, save_snapshot
 from src.infra.database.connection import DEFAULT_DB_PATH
 from src.infra.gdrive.service import GDriveService
+from src.utils.graphics.allocation import generate_exposure_pie_chart
 from src.utils.logger.logger import logger
 
 # Configuration files mapped to GDRIVE_CONFIG_FOLDER_ID
@@ -422,6 +423,7 @@ def stock_details_cmd(
         stock_assets: list[Asset] = [
             a for a in assets if str(a.asset_type).upper() == "STOCK"
         ]
+
         if not stock_assets:
             logger.warning("No active stock holdings found in portfolio.")
             return
@@ -465,8 +467,16 @@ def check_exposure() -> None:
             companies
         )
 
-    card_text: Text = Text()
+    # Generate charts
+    generate_exposure_pie_chart(sectors, "Sector Exposure", "exposure_sector.png")
+    generate_exposure_pie_chart(countries, "Country Exposure", "exposure_country.png")
+    generate_exposure_pie_chart(
+        dict(sorted(companies.items(), key=lambda x: x[1], reverse=True)[:10]),
+        "Top 10 Company Exposure",
+        "exposure_company.png",
+    )
 
+    card_text: Text = Text()
     card_text.append("Consolidated Sector Exposure:\n", style="bold underline")
     for sector, pct in sorted(sectors.items(), key=lambda x: x[1], reverse=True):
         is_tech: bool = "technology" in sector.lower() or "tech" in sector.lower()

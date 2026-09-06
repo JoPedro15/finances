@@ -10,10 +10,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns  # type: ignore[import-untyped]
 
-from src.config import DATA_DIR
 from src.utils.logger.logger import logger
 
-PLOTS_DIR: Path = DATA_DIR / "plots"
+PLOTS_DIR: Path = Path("output/plots")
 
 
 def generate_allocation_chart(
@@ -89,4 +88,40 @@ def generate_allocation_chart(
 
     except Exception as e:
         logger.error(f"Failed to generate allocation chart: {e}")
+        return None
+
+
+def generate_exposure_pie_chart(
+    data: dict[str, float], title: str, file_name: str
+) -> Path | None:
+    """Generates a pie chart for exposure data (Country, Sector, Company)."""
+    try:
+        PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+        file_path: Path = PLOTS_DIR / file_name
+
+        # Sort and limit to top 10 for readability if needed
+        sorted_data = dict(sorted(data.items(), key=lambda x: x[1], reverse=True))
+        labels = list(sorted_data.keys())
+        sizes = list(sorted_data.values())
+
+        plt.figure(figsize=(10, 8))
+        plt.pie(
+            sizes,
+            labels=labels,
+            autopct="%1.1f%%",
+            startangle=140,
+            colors=sns.color_palette("pastel"),
+        )
+        plt.title(title, fontsize=14, fontweight="bold")
+        plt.axis("equal")
+        plt.tight_layout()
+
+        plt.savefig(file_path, dpi=300)
+        plt.close()
+
+        logger.success(f"Exposure chart '{title}' generated at '{file_path}'.")
+        return file_path
+
+    except Exception as e:
+        logger.error(f"Failed to generate exposure pie chart: {e}")
         return None

@@ -47,11 +47,42 @@ def _format_tier(tier: str) -> Text:
 
 def export_quality_report(
     evaluated_assets: list[dict[str, Any]],
-    output_dir: Path = OUTPUT_DIR,
+    output_dir: Path = Path("output/reports"),
 ) -> None:
     """Exports independent comprehensive quality evaluation report as HTML."""
+    import base64
+    from collections import Counter
+
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Compute KPIs
+    total_assets = len(evaluated_assets)
+    tiers = Counter(a.get("tier", "Unknown") for a in evaluated_assets)
+    valuation_status = Counter(a.get("valuation", "Unknown") for a in evaluated_assets)
+
+    kpis = {
+        "total": total_assets,
+        "tier_a": tiers.get("Tier A", 0),
+        "tier_b": tiers.get("Tier B", 0),
+        "tier_c": tiers.get("Tier C", 0),
+        "undervalued": valuation_status.get("Undervalued", 0),
+        "overvalued": valuation_status.get("Overvalued", 0),
+    }
+
+    # Load exposure plots as base64
+    plots_dir = Path("output/plots")
+    exposure_plots = {}
+    for plot_name in [
+        "exposure_sector.png",
+        "exposure_country.png",
+        "exposure_company.png",
+    ]:
+        plot_path = plots_dir / plot_name
+        if plot_path.exists():
+            with open(plot_path, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+                exposure_plots[plot_name.split(".")[0]] = encoded
 
     html_path: Path = output_dir / "quality_report.html"
     try:
@@ -59,7 +90,12 @@ def export_quality_report(
 
         render_html(
             "quality_report.html.j2",
-            {"generated_at": timestamp_str, "assets": evaluated_assets},
+            {
+                "generated_at": timestamp_str,
+                "assets": evaluated_assets,
+                "kpis": kpis,
+                "exposure_plots": exposure_plots,
+            },
             html_path,
         )
         logger.success(f"Successfully exported quality report HTML to '{html_path}'.")
