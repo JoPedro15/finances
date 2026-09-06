@@ -97,7 +97,22 @@ class StockProvider:
                 if val is None:
                     return None
                 try:
-                    return float(val)
+                    parsed_val: float = float(val)
+                    # Filter out zero or negative valuation metrics returned by yfinance
+                    if (
+                        key
+                        in (
+                            "priceToBook",
+                            "trailingPE",
+                            "forwardPE",
+                            "marketCap",
+                            "pegRatio",
+                            "totalDebtToEquity",
+                        )
+                        and parsed_val <= 0
+                    ):
+                        return None
+                    return parsed_val
                 except (ValueError, TypeError):
                     return None
 
