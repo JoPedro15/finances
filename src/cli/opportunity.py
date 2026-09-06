@@ -30,7 +30,6 @@ from src.core.models import (
     RebalanceRecommendation,
     RecommendationAction,
     StockDetails,
-    UrgencyLevel,
 )
 from src.core.opportunity_evaluation.base import AssetScore
 from src.core.opportunity_evaluation.engine import PortfolioOpportunityEngine
@@ -192,6 +191,12 @@ def enrich_target_asset(
     if not country_val and asset_type == "STOCK":
         country_val = "United States"
 
+    price_to_book_val: float | None = (
+        stock_details.price_to_book if stock_details else None
+    )
+    if price_to_book_val is not None and price_to_book_val <= 0:
+        price_to_book_val = None
+
     return {
         "symbol": symbol,
         "isin": isin,
@@ -210,7 +215,7 @@ def enrich_target_asset(
         "trailing_pe": stock_details.pe_ratio if stock_details else None,
         "forward_pe": stock_details.forward_pe if stock_details else None,
         "peg_ratio": stock_details.peg_ratio if stock_details else None,
-        "price_to_book": stock_details.price_to_book if stock_details else None,
+        "price_to_book": price_to_book_val,
         "dividend_yield_pct": (
             stock_details.dividend_yield_pct if stock_details else None
         ),
@@ -240,28 +245,6 @@ def enrich_target_asset(
     }
 
 
-def _format_action(action: RecommendationAction | None) -> Text:
-    """Formats recommendation action with color coding."""
-    if action == RecommendationAction.BUY:
-        return Text("BUY", style="bold green")
-    if action == RecommendationAction.SELL:
-        return Text("SELL", style="bold red")
-    if action == RecommendationAction.HOLD:
-        return Text("HOLD", style="bold yellow")
-    return Text("N/A", style="dim")
-
-
-def _format_urgency(urgency: UrgencyLevel | None) -> Text:
-    """Formats urgency level with color coding."""
-    if urgency == UrgencyLevel.HIGH:
-        return Text("HIGH", style="bold red")
-    if urgency == UrgencyLevel.MEDIUM:
-        return Text("MED", style="yellow")
-    if urgency == UrgencyLevel.LOW:
-        return Text("LOW", style="green")
-    return Text("N/A", style="dim")
-
-
 def export_outputs(
     ranked_scores: list[AssetScore],
     asset_dict_map: dict[str, dict[str, Any]],
@@ -270,8 +253,8 @@ def export_outputs(
     has_ai: bool,
     output_dir: Path = OUTPUT_DIR,
 ) -> None:
-    """Exports CSV matrix and HTML/PDF report with static filenames
-    and uploads them to Google Drive."""
+    """Exports CSV matrix and HTML report ordered by rank
+    including all recommendation cards."""
     formatted_date_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -336,14 +319,15 @@ def export_outputs(
     except Exception as err:
         logger.error(f"Failed to export CSV to '{csv_path}': {err}")
 
-    # HTML only (overwrite fixed filename)
     try:
         from src.utils.render import render_html
 
         assets_ctx: list[dict[str, Any]] = []
         for rank, score in enumerate(ranked_scores, start=1):
-            t = asset_dict_map[score.symbol]
-            rec = recommendations_map.get(score.symbol)
+            t: dict[str, Any] = asset_dict_map[score.symbol]
+            ctx_rec: RebalanceRecommendation | None = recommendations_map.get(
+                score.symbol
+            )
             assets_ctx.append(
                 {
                     "rank": rank,
@@ -353,33 +337,43 @@ def export_outputs(
                     "current_pct": float(t.get("current_allocation_pct", 0.0)),
                     "target_pct": float(t.get("target_allocation_pct", 0.0)),
                     "score": float(score.total_score),
-                    "ai_action": rec.action.value if rec and rec.action else None,
-                    "ai_urgency": (
-                        rec.urgency_level.value if rec and rec.urgency_level else None
+                    "ai_action": (
+                        ctx_rec.action.value if ctx_rec and ctx_rec.action else None
                     ),
-                    "ai_conf": f"{rec.confidence_score * 100:.0f}%" if rec else None,
+                    "ai_urgency": (
+                        ctx_rec.urgency_level.value
+                        if ctx_rec and ctx_rec.urgency_level
+                        else None
+                    ),
+                    "ai_conf": (
+                        f"{ctx_rec.confidence_score * 100:.0f}%" if ctx_rec else None
+                    ),
                 }
             )
 
         advisories_ctx: list[dict[str, Any]] = []
-        if has_ai:
-            active = [
-                (s, r)
-                for s, r in recommendations_map.items()
-                if r.action in (RecommendationAction.BUY, RecommendationAction.SELL)
-            ]
+        if has_ai and recommendations_map:
             score_map_ctx: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
-            for symbol, rec in active:
+            for score in ranked_scores:
+                symbol: str = score.symbol
+                adv_rec: RebalanceRecommendation | None = recommendations_map.get(
+                    symbol
+                )
+                if not adv_rec or not adv_rec.action:
+                    continue
+
                 t = asset_dict_map[symbol]
-                si = score_map_ctx.get(symbol)
-                curr_alloc = float(t.get("current_allocation_pct", 0.0))
-                targ_alloc = float(t.get("target_allocation_pct", 0.0))
+                si: AssetScore | None = score_map_ctx.get(symbol)
+                curr_alloc: float = float(t.get("current_allocation_pct", 0.0))
+                targ_alloc: float = float(t.get("target_allocation_pct", 0.0))
                 adv: dict[str, Any] = {
                     "symbol": symbol,
-                    "asset_type": t.get("asset_type", "STOCK").upper(),
-                    "action": rec.action.value,
-                    "urgency": rec.urgency_level.value if rec.urgency_level else "N/A",
-                    "confidence": f"{rec.confidence_score * 100:.0f}%",
+                    "asset_type": str(t.get("asset_type", "STOCK")).upper(),
+                    "action": adv_rec.action.value,
+                    "urgency": (
+                        adv_rec.urgency_level.value if adv_rec.urgency_level else "N/A"
+                    ),
+                    "confidence": f"{adv_rec.confidence_score * 100:.0f}%",
                     "price": float(t.get("current_price", 0.0)),
                     "peak": float(t.get("peak_price", 0.0)),
                     "curr_alloc": curr_alloc,
@@ -389,30 +383,31 @@ def export_outputs(
                     "cost_score": si.cost_score if si else 0.0,
                     "gap_score": si.allocation_score if si else 0.0,
                     "total_score": si.total_score if si else 0.0,
-                    "reasoning": rec.reasoning,
+                    "reasoning": adv_rec.reasoning,
                 }
                 if adv["asset_type"] == "ETF":
-                    ter_v = t.get("ter")
-                    hl = t.get("top_holdings", [])
-                    sc = t.get("sector_breakdown", [])
-                    co = t.get("country_breakdown", [])
+                    ter_v: float | None = t.get("ter")
+                    hl: list[dict[str, Any]] = t.get("top_holdings", [])
+                    sc: list[dict[str, Any]] = t.get("sector_breakdown", [])
+                    co: list[dict[str, Any]] = t.get("country_breakdown", [])
                     adv.update(
                         {
                             "ter_str": f"{ter_v:.2f}%" if ter_v is not None else "N/A",
                             "holdings_str": ", ".join(
-                                f"{h.get('name','')} ({h.get('weight_pct',0):.1f}%)"
+                                f"{h.get('name','')}"
+                                f" ({float(h.get('weight_pct', 0)):.1f}%)"
                                 for h in hl[:5]
                             )
                             or "N/A",
                             "sectors_str": ", ".join(
                                 f"{s.get('sector_name') or s.get('name', '')}"
-                                f" ({s.get('weight_pct', 0):.1f}%)"
+                                f" ({float(s.get('weight_pct', 0)):.1f}%)"
                                 for s in sc[:4]
                             )
                             or "N/A",
                             "countries_str": ", ".join(
                                 f"{c.get('country_name') or c.get('name', '')}"
-                                f" ({c.get('weight_pct', 0):.1f}%)"
+                                f" ({float(c.get('weight_pct', 0)):.1f}%)"
                                 for c in co[:4]
                             )
                             or "N/A",
@@ -485,6 +480,23 @@ def export_outputs(
         logger.error(f"Failed to export opportunity report HTML: {err}")
 
 
+def _format_action(action: RecommendationAction | None) -> Text:
+    if action == RecommendationAction.BUY:
+        return Text("BUY", style="bold green")
+    if action == RecommendationAction.SELL:
+        return Text("SELL", style="bold red")
+    return Text(action.value.upper() if action else "N/A", style="bold yellow")
+
+
+def _format_urgency(urgency: Any) -> Text:
+    val: str = urgency.value.upper() if urgency else "N/A"
+    if val == "HIGH":
+        return Text(val, style="bold red")
+    if val == "MEDIUM":
+        return Text(val, style="yellow")
+    return Text(val, style="dim")
+
+
 def _display_rebalance_results(
     ranked_scores: list[AssetScore],
     asset_dict_map: dict[str, dict[str, Any]],
@@ -493,7 +505,8 @@ def _display_rebalance_results(
     has_ai: bool,
     verbose: bool = False,
 ) -> None:
-    """Renders opportunity strategy coefficients, matrix, and expanded action cards."""
+    """Renders opportunity strategy coefficients, matrix, and expanded
+    action cards ordered by rank."""
     console.print()
 
     stock_weights: str = (
@@ -629,169 +642,174 @@ def _display_rebalance_results(
 
     score_map: dict[str, AssetScore] = {s.symbol: s for s in ranked_scores}
     if has_ai and recommendations_map:
-        active_recs: list[tuple[str, RebalanceRecommendation]] = [
-            (sym, r)
-            for sym, r in recommendations_map.items()
-            if r.action in (RecommendationAction.BUY, RecommendationAction.SELL)
-        ]
+        console.print("[bold cyan]ACTIONABLE AI ADVISORY INSIGHTS[/bold cyan]")
+        for score in ranked_scores:
+            symbol: str = score.symbol
+            rec = recommendations_map.get(symbol)
+            if not rec or not rec.action:
+                continue
 
-        if active_recs:
-            console.print("[bold cyan]ACTIONABLE AI ADVISORY INSIGHTS[/bold cyan]")
-            for symbol, rec in active_recs:
-                target_item = asset_dict_map[symbol]
-                act_text: Text = _format_action(rec.action)
-                urg_text: Text = _format_urgency(rec.urgency_level)
-                confidence_val_str: str = f"{rec.confidence_score * 100:.0f}%"
+            target_item = asset_dict_map[symbol]
+            act_text: Text = _format_action(rec.action)
+            urg_text: Text = _format_urgency(rec.urgency_level)
+            confidence_val_str: str = f"{rec.confidence_score * 100:.0f}%"
 
-                curr_price: float = float(target_item.get("current_price", 0.0))
-                peak_price: float = float(target_item.get("peak_price", 0.0))
-                low_52w: float | None = target_item.get("low_52w")
+            curr_price: float = float(target_item.get("current_price", 0.0))
+            peak_price: float = float(target_item.get("peak_price", 0.0))
+            low_52w: float | None = target_item.get("low_52w")
 
-                curr_alloc: float = float(
-                    target_item.get("current_allocation_pct", 0.0)
+            curr_alloc: float = float(target_item.get("current_allocation_pct", 0.0))
+            targ_alloc: float = float(target_item.get("target_allocation_pct", 0.0))
+
+            delta_pct: float = targ_alloc - curr_alloc
+            delta_str: str = (
+                f"+{delta_pct:.1f}%" if delta_pct >= 0 else f"{delta_pct:.1f}%"
+            )
+
+            val_lines: str = ""
+            if target_item.get("asset_type") == "ETF":
+                ter_val: float | None = target_item.get("ter")
+                ter_str: str = f"{ter_val:.2f}%" if ter_val is not None else "N/A"
+
+                holdings_list: list[dict[str, Any]] = target_item.get(
+                    "top_holdings", []
                 )
-                targ_alloc: float = float(target_item.get("target_allocation_pct", 0.0))
-
-                delta_pct: float = targ_alloc - curr_alloc
-                delta_str: str = (
-                    f"+{delta_pct:.1f}%" if delta_pct >= 0 else f"{delta_pct:.1f}%"
-                )
-
-                val_lines: str = ""
-                if target_item.get("asset_type") == "ETF":
-                    ter_val = target_item.get("ter")
-                    ter_str = f"{ter_val:.2f}%" if ter_val is not None else "N/A"
-
-                    holdings_list = target_item.get("top_holdings", [])
-                    holdings_str = (
-                        ", ".join(
-                            [
-                                f"{h.get('name', '')} ({h.get('weight_pct', 0):.1f}%)"
-                                for h in holdings_list[:5]
-                            ]
-                        )
-                        if holdings_list
-                        else "N/A"
+                holdings_str: str = (
+                    ", ".join(
+                        [
+                            f"{h.get('name', '')} "
+                            f"({float(h.get('weight_pct', 0)):.1f}%)"
+                            for h in holdings_list[:5]
+                        ]
                     )
-
-                    sectors_list = target_item.get("sector_breakdown", [])
-                    sectors_str = (
-                        ", ".join(
-                            [
-                                f"{s.get('sector_name') or s.get('name', '')} "
-                                f"({float(s.get('weight_pct', 0.0)):.1f}%)"
-                                for s in sectors_list[:4]
-                            ]
-                        )
-                        if sectors_list
-                        else "N/A"
-                    )
-
-                    countries_list = target_item.get("country_breakdown", [])
-                    countries_str = (
-                        ", ".join(
-                            [
-                                f"{c.get('country_name') or c.get('name', '')} "
-                                f"({float(c.get('weight_pct', 0.0)):.1f}%)"
-                                for c in countries_list[:4]
-                            ]
-                        )
-                        if countries_list
-                        else "N/A"
-                    )
-
-                    val_lines = (
-                        f"• [bold]Valuation & ETF Metrics:[/bold]\n"
-                        f"  - Total Expense Ratio (TER): [cyan]{ter_str}[/cyan]\n"
-                        f"  - Top Holdings: [cyan]{holdings_str}[/cyan]\n"
-                        f"  - Sector Breakdown: [cyan]{sectors_str}[/cyan]\n"
-                        f"  - Country Breakdown: [cyan]{countries_str}[/cyan]"
-                    )
-                else:
-                    tr_pe = target_item.get("trailing_pe")
-                    fw_pe = target_item.get("forward_pe")
-                    peg = target_item.get("peg_ratio")
-                    pb = target_item.get("price_to_book")
-                    div_yield = target_item.get("dividend_yield_pct")
-                    beta = target_item.get("beta")
-                    margin = target_item.get("profit_margins_pct")
-                    rev_growth = target_item.get("revenue_growth_pct")
-                    earn_growth = target_item.get("earnings_growth_pct")
-                    debt_eq = target_item.get("total_debt_to_equity")
-
-                    tr_str = f"{tr_pe:.1f}" if tr_pe else "N/A"
-                    fw_str = f"{fw_pe:.1f}" if fw_pe else "N/A"
-                    peg_str = f"{peg:.2f}" if peg else "N/A"
-                    pb_str = f"{pb:.2f}" if pb else "N/A"
-                    div_str = f"{div_yield:.2f}%" if div_yield else "N/A"
-                    beta_str = f"{beta:.2f}" if beta else "N/A"
-                    margin_str = f"{margin:.1f}%" if margin else "N/A"
-                    rev_str = f"{rev_growth:.1f}%" if rev_growth else "N/A"
-                    earn_str = f"{earn_growth:.1f}%" if earn_growth else "N/A"
-                    debt_str = f"{debt_eq:.1f}" if debt_eq else "N/A"
-
-                    low_str = f"{low_52w:,.2f} EUR" if low_52w else "N/A"
-                    peak_str = f"{peak_price:,.2f} EUR" if peak_price else "N/A"
-                    val_lines = (
-                        f"• [bold]Valuation & Fundamental Metrics:[/bold]\n"
-                        f"  - Trailing P/E: [cyan]{tr_str}[/cyan] | "
-                        f"Forward P/E: [cyan]{fw_str}[/cyan] | "
-                        f"PEG: [cyan]{peg_str}[/cyan] | P/B: [cyan]{pb_str}[/cyan]\n"
-                        f"  - Div Yield: [cyan]{div_str}[/cyan] | "
-                        f"Beta: [cyan]{beta_str}[/cyan] | "
-                        f"Profit Margin: [cyan]{margin_str}[/cyan]\n"
-                        f"  - Rev Growth: [cyan]{rev_str}[/cyan] | "
-                        f"Earn Growth: [cyan]{earn_str}[/cyan] | "
-                        f"Debt/Equity: [cyan]{debt_str}[/cyan]\n"
-                        f"  - 52w Range (Low / High): [cyan]{low_str}[/cyan] / "
-                        f"[cyan]{peak_str}[/cyan]"
-                    )
-
-                score_info: AssetScore | None = score_map.get(symbol)
-                factor_lines: str = ""
-                if score_info:
-                    cost_sc_str: str = f"{score_info.cost_score:.2f}"
-                    tot_sc_str: str = f"{score_info.total_score:.3f}"
-                    factor_lines = (
-                        f"• [bold]Factor Scores:[/bold]\n"
-                        f"  - Dip Score: "
-                        f"[cyan]{score_info.dip_score:.2f}[/cyan]\n"
-                        f"  - Valuation/Cost Score: "
-                        f"[cyan]{cost_sc_str}[/cyan]\n"
-                        f"  - Gap Score: "
-                        f"[cyan]{score_info.allocation_score:.2f}[/cyan]\n"
-                        f"  - Quant Total: "
-                        f"[bold blue]{tot_sc_str}[/bold blue]"
-                    )
-
-                divider: str = "─" * 67
-                panel_content: str = (
-                    f"[bold]Action:[/bold] {act_text.markup}  │  "
-                    f"[bold]Urgency:[/bold] {urg_text.markup}  │  "
-                    f"[bold]Confidence:[/bold] {confidence_val_str}\n"
-                    f"{divider}\n"
-                    f"• [bold]Price:[/bold] {curr_price:,.2f} EUR "
-                    f"(52w Peak: {peak_price:,.2f} EUR)\n"
-                    f"• [bold]Allocation Gap:[/bold] Current {curr_alloc:.1f}% "
-                    f"vs Target {targ_alloc:.1f}% "
-                    f"(Δ Target: [yellow]{delta_str}[/yellow])\n"
-                    f"{val_lines}\n"
-                    f"{factor_lines}\n"
-                    f"{divider}\n"
-                    f"[italic]{rec.reasoning}[/italic]"
+                    if holdings_list
+                    else "N/A"
                 )
 
-                border_style: str = (
-                    "green" if rec.action == RecommendationAction.BUY else "red"
+                sectors_list: list[dict[str, Any]] = target_item.get(
+                    "sector_breakdown", []
                 )
-                card: Panel = Panel(
-                    panel_content,
-                    title=f"[bold cyan]🔹 {symbol}[/bold cyan]",
-                    border_style=border_style,
-                    expand=False,
+                sectors_str: str = (
+                    ", ".join(
+                        [
+                            f"{s.get('sector_name') or s.get('name', '')} "
+                            f"({float(s.get('weight_pct', 0.0)):.1f}%)"
+                            for s in sectors_list[:4]
+                        ]
+                    )
+                    if sectors_list
+                    else "N/A"
                 )
-                console.print(card)
-            console.print()
+
+                countries_list: list[dict[str, Any]] = target_item.get(
+                    "country_breakdown", []
+                )
+                countries_str: str = (
+                    ", ".join(
+                        [
+                            f"{c.get('country_name') or c.get('name', '')} "
+                            f"({float(c.get('weight_pct', 0.0)):.1f}%)"
+                            for c in countries_list[:4]
+                        ]
+                    )
+                    if countries_list
+                    else "N/A"
+                )
+
+                val_lines = (
+                    f"• [bold]Valuation & ETF Metrics:[/bold]\n"
+                    f"  - Total Expense Ratio (TER): [cyan]{ter_str}[/cyan]\n"
+                    f"  - Top Holdings: [cyan]{holdings_str}[/cyan]\n"
+                    f"  - Sector Breakdown: [cyan]{sectors_str}[/cyan]\n"
+                    f"  - Country Breakdown: [cyan]{countries_str}[/cyan]"
+                )
+            else:
+                tr_pe: float | None = target_item.get("trailing_pe")
+                fw_pe: float | None = target_item.get("forward_pe")
+                peg: float | None = target_item.get("peg_ratio")
+                pb: float | None = target_item.get("price_to_book")
+                div_yield: float | None = target_item.get("dividend_yield_pct")
+                beta: float | None = target_item.get("beta")
+                margin: float | None = target_item.get("profit_margins_pct")
+                rev_growth: float | None = target_item.get("revenue_growth_pct")
+                earn_growth: float | None = target_item.get("earnings_growth_pct")
+                debt_eq: float | None = target_item.get("total_debt_to_equity")
+
+                tr_str: str = f"{tr_pe:.1f}" if tr_pe else "N/A"
+                fw_str: str = f"{fw_pe:.1f}" if fw_pe else "N/A"
+                peg_str: str = f"{peg:.2f}" if peg else "N/A"
+                pb_str: str = f"{pb:.2f}" if pb else "N/A"
+                div_str: str = f"{div_yield:.2f}%" if div_yield else "N/A"
+                beta_str: str = f"{beta:.2f}" if beta else "N/A"
+                margin_str: str = f"{margin:.1f}%" if margin else "N/A"
+                rev_str: str = f"{rev_growth:.1f}%" if rev_growth else "N/A"
+                earn_str: str = f"{earn_growth:.1f}%" if earn_growth else "N/A"
+                debt_str: str = f"{debt_eq:.1f}" if debt_eq else "N/A"
+
+                low_str: str = f"{low_52w:,.2f} EUR" if low_52w else "N/A"
+                peak_str: str = f"{peak_price:,.2f} EUR" if peak_price else "N/A"
+                val_lines = (
+                    f"• [bold]Valuation & Fundamental Metrics:[/bold]\n"
+                    f"  - Trailing P/E: [cyan]{tr_str}[/cyan] | "
+                    f"Forward P/E: [cyan]{fw_str}[/cyan] | "
+                    f"PEG: [cyan]{peg_str}[/cyan] | P/B: [cyan]{pb_str}[/cyan]\n"
+                    f"  - Div Yield: [cyan]{div_str}[/cyan] | "
+                    f"Beta: [cyan]{beta_str}[/cyan] | "
+                    f"Profit Margin: [cyan]{margin_str}[/cyan]\n"
+                    f"  - Rev Growth: [cyan]{rev_str}[/cyan] | "
+                    f"Earn Growth: [cyan]{earn_str}[/cyan] | "
+                    f"Debt/Equity: [cyan]{debt_str}[/cyan]\n"
+                    f"  - 52w Range (Low / High): [cyan]{low_str}[/cyan] / "
+                    f"[cyan]{peak_str}[/cyan]"
+                )
+
+            score_info: AssetScore | None = score_map.get(symbol)
+            factor_lines: str = ""
+            if score_info:
+                cost_sc_str: str = f"{score_info.cost_score:.2f}"
+                tot_sc_str: str = f"{score_info.total_score:.3f}"
+                factor_lines = (
+                    f"• [bold]Factor Scores:[/bold]\n"
+                    f"  - Dip Score: "
+                    f"[cyan]{score_info.dip_score:.2f}[/cyan]\n"
+                    f"  - Valuation/Cost Score: "
+                    f"[cyan]{cost_sc_str}[/cyan]\n"
+                    f"  - Gap Score: "
+                    f"[cyan]{score_info.allocation_score:.2f}[/cyan]\n"
+                    f"  - Quant Total: "
+                    f"[bold blue]{tot_sc_str}[/bold blue]"
+                )
+
+            divider: str = "─" * 67
+            panel_content: str = (
+                f"[bold]Action:[/bold] {act_text.markup}  │  "
+                f"[bold]Urgency:[/bold] {urg_text.markup}  │  "
+                f"[bold]Confidence:[/bold] {confidence_val_str}\n"
+                f"{divider}\n"
+                f"• [bold]Price:[/bold] {curr_price:,.2f} EUR "
+                f"(52w Peak: {peak_price:,.2f} EUR)\n"
+                f"• [bold]Allocation Gap:[/bold] Current {curr_alloc:.1f}% "
+                f"vs Target {targ_alloc:.1f}% "
+                f"(Δ Target: [yellow]{delta_str}[/yellow])\n"
+                f"{val_lines}\n"
+                f"{factor_lines}\n"
+                f"{divider}\n"
+                f"[italic]{rec.reasoning}[/italic]"
+            )
+
+            border_style: str = (
+                "green"
+                if rec.action == RecommendationAction.BUY
+                else "red" if rec.action == RecommendationAction.SELL else "yellow"
+            )
+            card: Panel = Panel(
+                panel_content,
+                title=f"[bold cyan]🔹 {symbol}[/bold cyan]",
+                border_style=border_style,
+                expand=False,
+            )
+            console.print(card)
+        console.print()
 
 
 @app.command(name="rebalance")
