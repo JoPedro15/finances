@@ -31,15 +31,15 @@ class Logger:
 
     def info(self, message: str) -> None:
         """Standard informational message."""
-        print(f"[INFO: {self._get_timestamp()}] {message}")
+        print(f"[INFO {self._get_timestamp()}] {message}")
 
     def success(self, message: str) -> None:
         """Success message highlighted in green."""
-        print(f"[{self._GREEN}SUCCESS: {self._get_timestamp()}]{self._ENDC} {message}")
+        print(f"[{self._GREEN}SUCCESS {self._get_timestamp()}]{self._ENDC} {message}")
 
     def warning(self, message: str) -> None:
         """Warning alert highlighted in yellow."""
-        print(f"[{self._WARNING}WARNING:{self._get_timestamp()}]{self._ENDC} {message}")
+        print(f"[{self._WARNING}WARNING {self._get_timestamp()}]{self._ENDC} {message}")
 
     def error(self, message: str, exception: Exception | None = None) -> None:
         """
@@ -48,7 +48,7 @@ class Logger:
         """
         error_msg: str = f"{message} | Error: {exception}" if exception else message
         print(
-            f"[{self._FAIL}ERROR:{self._get_timestamp()}]{self._ENDC} {error_msg}",
+            f"[{self._FAIL}ERROR {self._get_timestamp()}]{self._ENDC} {error_msg}",
             file=sys.stderr,
         )
 

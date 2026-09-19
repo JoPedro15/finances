@@ -49,6 +49,28 @@ def migrate_json_to_sqlite(
             ]
             sql_p_repo.save_assets(normalized_assets)
             logger.success(f"Migrated {len(assets)} portfolio assets to SQLite.")
+
+            # Remove assets from the DB that are no longer in portfolio.json
+            from src.infra.database.connection import get_db_context
+
+            json_isins: set[str] = {a.isin for a in assets if a.isin}
+            with get_db_context(str(sqlite_db)) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT isin, yahoo_ticker FROM assets WHERE isin IS NOT NULL"
+                )
+                db_isins: list[tuple[str, str]] = cursor.fetchall()
+                removed: list[str] = []
+                for row in db_isins:
+                    isin, ticker = row[0], row[1]
+                    if isin not in json_isins:
+                        cursor.execute("DELETE FROM assets WHERE isin = ?", (isin,))
+                        removed.append(ticker or isin)
+                if removed:
+                    logger.success(
+                        f"Removed {len(removed)} stale asset(s) from SQLite: "
+                        + ", ".join(removed)
+                    )
         else:
             logger.warning(f"No assets found in '{p_json_path}'.")
     except Exception as e:

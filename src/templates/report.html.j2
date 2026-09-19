@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Portfolio Executive Report — {{ generated_at }}</title>
+  <title>Portfolio Report — {{ generated_at }}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -23,65 +23,67 @@
     .report-header {
       border-bottom: 1px solid #30363d;
       padding-bottom: 20px;
-      margin-bottom: 32px;
+      margin-bottom: 24px;
     }
-    .report-header h1 {
-      font-size: 26px;
-      font-weight: 700;
-      color: #58a6ff;
-      letter-spacing: -0.3px;
-    }
+    .report-header h1 { font-size: 26px; font-weight: 700; color: #58a6ff; letter-spacing: -0.3px; }
     .report-meta { margin-top: 6px; color: #8b949e; font-size: 12px; }
+
+    /* Tab navigation */
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid #30363d;
+      margin-bottom: 28px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #8b949e;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: #c9d1d9; }
+    .tab-btn.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+    /* Tab panes */
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
 
     /* Section heading */
     h2 {
-      font-size: 16px;
-      font-weight: 600;
-      color: #e6edf3;
-      border-left: 3px solid #58a6ff;
-      padding-left: 10px;
-      margin-bottom: 16px;
-      margin-top: 32px;
+      font-size: 15px; font-weight: 600; color: #e6edf3;
+      border-left: 3px solid #58a6ff; padding-left: 10px;
+      margin-bottom: 16px; margin-top: 32px;
     }
+    h3 { font-size: 13px; font-weight: 600; color: #e6edf3; margin-bottom: 10px; margin-top: 20px; }
 
-    /* KPI cards — CSS Grid for browser, table fallback for PDF */
+    /* KPI cards */
     .kpi-row {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 16px;
       margin-bottom: 8px;
     }
-    .kpi-card {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      padding: 16px 20px;
-    }
-    .kpi-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      color: #8b949e;
-      margin-bottom: 6px;
-    }
+    .kpi-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px 20px; }
+    .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #8b949e; margin-bottom: 6px; }
     .kpi-value { font-size: 22px; font-weight: 700; color: #e6edf3; }
     .kpi-value.positive { color: #3fb950; }
     .kpi-value.negative { color: #f85149; }
     .kpi-sub { font-size: 11px; color: #8b949e; margin-top: 4px; }
 
-    /* Charts — CSS Grid for browser */
+    /* Charts */
     .charts-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 16px;
       margin-bottom: 8px;
     }
-    .chart-card {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      padding: 16px;
-    }
+    .chart-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
     .chart-card img { width: 100%; height: auto; display: block; border-radius: 4px; }
     .chart-caption { font-size: 11px; color: #8b949e; margin-top: 8px; text-align: center; }
 
@@ -89,28 +91,21 @@
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     thead tr { background: #161b22; }
     th {
-      text-align: left;
-      padding: 10px 12px;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #8b949e;
+      text-align: left; padding: 10px 12px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e;
       border-bottom: 1px solid #30363d;
     }
     th.right, td.right { text-align: right; }
+    th.center, td.center { text-align: center; }
     tbody tr { border-bottom: 1px solid #21262d; }
     tbody tr:last-child { border-bottom: none; }
     tbody tr:hover { background: #161b22; }
     td { padding: 10px 12px; color: #c9d1d9; }
 
+    /* Tags */
     .tag {
-      display: inline-block;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
+      display: inline-block; padding: 2px 7px; border-radius: 4px;
+      font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
     }
     .tag-stock { background: #1f3a5f; color: #58a6ff; }
     .tag-etf   { background: #1f3a3a; color: #39d353; }
@@ -118,28 +113,136 @@
     .positive { color: #3fb950; }
     .negative { color: #f85149; }
 
-    .ai-buy  { color: #3fb950; font-weight: 600; }
-    .ai-sell { color: #f85149; font-weight: 600; }
-    .ai-hold { color: #d29922; font-weight: 600; }
-    .ai-none { color: #8b949e; }
+    /* Quality tier colours */
+    .tier-a { color: #3fb950; font-weight: 700; }
+    .tier-b { color: #d29922; font-weight: 700; }
+    .tier-c { color: #f85149; font-weight: 700; }
 
+    .val-fair        { color: #8b949e; }
+    .val-undervalued { color: #3fb950; font-weight: 600; }
+    .val-overvalued  { color: #f85149; font-weight: 600; }
+
+    /* Quality asset cards */
+    .asset-card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 16px 20px; margin-bottom: 12px;
+    }
+    .asset-card.tier-a-card { border-left: 3px solid #3fb950; }
+    .asset-card.tier-b-card { border-left: 3px solid #d29922; }
+    .asset-card.tier-c-card { border-left: 3px solid #f85149; }
+    .asset-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .asset-name  { font-size: 15px; font-weight: 700; color: #e6edf3; }
+    .asset-score { font-size: 13px; font-weight: 700; }
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .metrics-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #8b949e; margin-bottom: 6px; }
+    .metric-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #21262d; }
+    .metric-row:last-child { border-bottom: none; }
+    .metric-key { color: #8b949e; }
+    .metric-val { color: #c9d1d9; font-weight: 500; }
+    .cases-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .case-title { font-size: 11px; font-weight: 600; margin-bottom: 5px; }
+    .case-bull .case-title { color: #3fb950; }
+    .case-bear .case-title { color: #f85149; }
+    .case-item { font-size: 12px; color: #8b949e; padding: 2px 0; }
+    .case-item::before { content: "• "; }
+    .valuation-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-top: 2px; }
+    .val-badge-fair        { background: #21262d; color: #8b949e; }
+    .val-badge-undervalued { background: #1f3a3a; color: #3fb950; }
+    .val-badge-overvalued  { background: #3a1f1f; color: #f85149; }
+
+    /* Quality KPI container */
+    .kpi-container { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .kpi-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 100px; text-align: center; }
+    .kpi-box .kpi-value { font-size: 22px; font-weight: 700; color: #58a6ff; margin-bottom: 4px; }
+    .kpi-box .kpi-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Exposure */
+    .exposure-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .exposure-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center; }
+    .exposure-card img { max-width: 100%; height: auto; border-radius: 4px; }
+    .exposure-title { font-size: 12px; font-weight: 600; color: #8b949e; margin-bottom: 12px; text-transform: uppercase; }
+
+    /* Opportunity: summary cards */
+    .summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 8px; }
+    .summary-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 18px; }
+    .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; margin-bottom: 5px; }
+    .card-value { font-size: 20px; font-weight: 700; color: #e6edf3; }
+
+    /* Opportunity: weights box */
+    .weights-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 18px; margin-bottom: 8px; font-size: 12px; }
+    .weights-box .wrow { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 6px; }
+    .weights-box .witem { color: #8b949e; }
+    .weights-box .witem span { color: #c9d1d9; font-weight: 600; }
+
+    /* Opportunity: action/urgency */
+    .action-buy  { color: #3fb950; font-weight: 700; }
+    .action-sell { color: #f85149; font-weight: 700; }
+    .action-hold { color: #d29922; font-weight: 700; }
+    .action-na   { color: #8b949e; }
+    .urg-high   { color: #f85149; font-weight: 600; }
+    .urg-medium { color: #d29922; font-weight: 600; }
+    .urg-low    { color: #3fb950; font-weight: 600; }
+
+    /* Lightbox */
+    .lightbox-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85); z-index: 1000;
+      align-items: center; justify-content: center;
+      cursor: zoom-out;
+    }
+    .lightbox-overlay.open { display: flex; }
+    .lightbox-overlay img {
+      max-width: 92vw; max-height: 92vh;
+      border-radius: 6px; box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+    }
+    .chart-card img, .exposure-card img {
+      cursor: zoom-in;
+      transition: opacity 0.15s;
+    }
+    .chart-card img:hover, .exposure-card img:hover { opacity: 0.85; }
+
+    /* Advisory insight cards */
+    .advisory-card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 16px 20px; margin-bottom: 14px;
+    }
+    .advisory-card.adv-buy  { border-left: 3px solid #3fb950; }
+    .advisory-card.adv-sell { border-left: 3px solid #f85149; }
+    .advisory-card.adv-hold { border-left: 3px solid #d29922; }
+    .advisory-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .advisory-symbol { font-size: 15px; font-weight: 700; color: #e6edf3; }
+    .advisory-badges { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .adv-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .adv-badge-buy  { background: #1f3a1f; color: #3fb950; }
+    .adv-badge-sell { background: #3a1f1f; color: #f85149; }
+    .adv-badge-hold { background: #3a2f0a; color: #d29922; }
+    .adv-badge-conf { background: #1f2a3f; color: #58a6ff; }
+    .adv-divider { border: none; border-top: 1px solid #21262d; margin: 10px 0; }
+    .adv-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #8b949e; margin-bottom: 6px; }
+    .adv-metrics-row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; }
+    .adv-metric { color: #8b949e; }
+    .adv-metric span { color: #c9d1d9; font-weight: 500; }
+    .adv-reasoning { font-size: 12px; color: #8b949e; font-style: italic; margin-top: 6px; line-height: 1.5; }
+
+    /* Footer */
     .report-footer {
-      margin-top: 48px;
-      padding-top: 16px;
-      border-top: 1px solid #30363d;
-      font-size: 11px;
-      color: #8b949e;
-      text-align: center;
+      margin-top: 48px; padding-top: 16px; border-top: 1px solid #30363d;
+      font-size: 11px; color: #8b949e; text-align: center;
     }
 
-    /* PDF / print: replace Grid with table-based layout */
+    /* Print */
     @page { size: A4; margin: 15mm 12mm; }
     @media print {
       body { background: #0d1117; color: #c9d1d9; padding: 0; }
-      .kpi-row, .charts-row { display: table; width: 100%; table-layout: fixed; border-spacing: 8px 0; }
-      .kpi-card, .chart-card { display: table-cell; vertical-align: top; }
+      .tab-nav { display: none; }
+      .tab-pane { display: block !important; page-break-before: always; }
+      .tab-pane:first-child { page-break-before: auto; }
+      .kpi-row, .charts-row, .summary-row { display: table; width: 100%; table-layout: fixed; border-spacing: 8px 0; }
+      .kpi-card, .chart-card, .summary-card { display: table-cell; vertical-align: top; }
+      .metrics-grid, .cases-grid { display: block; }
+      .metrics-grid > div, .cases-grid > div { margin-bottom: 8px; }
       h2 { page-break-after: avoid; }
-      tbody tr { page-break-inside: avoid; }
+      .asset-card, tbody tr { page-break-inside: avoid; }
     }
   </style>
 </head>
@@ -148,223 +251,460 @@
 
   <!-- Header -->
   <div class="report-header">
-    <h1>Portfolio Executive Report</h1>
+    <h1>Portfolio Report</h1>
     <div class="report-meta">
-      Generated: {{ generated_at }} &nbsp;|&nbsp;
-      Period: {{ period_start }} – {{ period_end }}
+      Generated: {{ generated_at }}
+      {% if period_start and period_end %}&nbsp;|&nbsp; Period: {{ period_start }} – {{ period_end }}{% endif %}
     </div>
   </div>
 
-  <!-- Executive Summary -->
-  <h2>Executive Summary</h2>
-  <div class="kpi-row">
-    <div class="kpi-card">
-      <div class="kpi-label">Total Portfolio Value</div>
-      <div class="kpi-value">€{{ "%.2f"|format(total_value_eur) }}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Total Return</div>
-      <div class="kpi-value {% if total_roi_percent >= 0 %}positive{% else %}negative{% endif %}">
-        {{ "%+.2f"|format(total_roi_percent) }}%
+  <!-- Tab navigation -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="portfolio">Portfolio</button>
+    <button class="tab-btn" data-tab="quality">Quality</button>
+    <button class="tab-btn" data-tab="opportunity">Opportunity</button>
+  </nav>
+
+  <!-- ═══════════════════ TAB: PORTFOLIO ═══════════════════ -->
+  <div class="tab-pane active" id="tab-portfolio">
+
+    <h2>Executive Summary</h2>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Portfolio Value</div>
+        <div class="kpi-value">€{{ "%.2f"|format(total_value_eur) }}</div>
       </div>
-      <div class="kpi-sub">€{{ "%+.2f"|format(total_roi_eur) }}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Max Drawdown</div>
-      <div class="kpi-value {% if max_drawdown_percent < 0 %}negative{% endif %}">
-        {{ "%.2f"|format(max_drawdown_percent) }}%
+      <div class="kpi-card">
+        <div class="kpi-label">Total Return</div>
+        <div class="kpi-value {% if total_roi_percent >= 0 %}positive{% else %}negative{% endif %}">
+          {{ "%+.2f"|format(total_roi_percent) }}%
+        </div>
+        <div class="kpi-sub">€{{ "%+.2f"|format(total_roi_eur) }}</div>
       </div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Portfolio Composition</div>
-      {% for c in composition %}
-      <div style="margin-top:6px;">
-        <span class="tag {% if c.asset_type == 'ETF' %}tag-etf{% else %}tag-stock{% endif %}" style="margin-right:6px;">{{ c.asset_type }}</span>
-        <span style="color:#e6edf3;font-weight:600;">€{{ "%.2f"|format(c.value_eur) }}</span>
-        <span class="kpi-sub" style="display:inline;">&nbsp;({{ "%.1f"|format(c.share_percent) }}%)</span>
+      <div class="kpi-card">
+        <div class="kpi-label">Max Drawdown</div>
+        <div class="kpi-value {% if max_drawdown_percent < 0 %}negative{% endif %}">
+          {{ "%.2f"|format(max_drawdown_percent) }}%
+        </div>
       </div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <!-- Performance Charts -->
-  <h2>Performance Charts</h2>
-  <div class="charts-row">
-    <div class="chart-card">
-      {% if chart_valuation_b64 %}
-      <img src="data:image/png;base64,{{ chart_valuation_b64 }}" alt="Portfolio Valuation History">
-      {% endif %}
-      <div class="chart-caption">Portfolio Valuation History</div>
-    </div>
-    <div class="chart-card">
-      {% if chart_class_b64 %}
-      <img src="data:image/png;base64,{{ chart_class_b64 }}" alt="Asset Class Evolution">
-      {% endif %}
-      <div class="chart-caption">Asset Class Valuation Evolution</div>
-    </div>
-  </div>
-
-  <!-- Risk & Exposure -->
-  {% if exposure_plots and (exposure_plots.exposure_sector or exposure_plots.exposure_country or exposure_plots.exposure_company) %}
-  <h2>Risk &amp; Look-Through Exposure</h2>
-  <div class="charts-row" style="grid-template-columns: repeat(3, 1fr);">
-    {% if exposure_plots.exposure_sector %}
-    <div class="chart-card">
-      <img src="data:image/png;base64,{{ exposure_plots.exposure_sector }}" alt="Sector Exposure">
-      <div class="chart-caption">Consolidated Sector Exposure</div>
-    </div>
-    {% endif %}
-    {% if exposure_plots.exposure_country %}
-    <div class="chart-card">
-      <img src="data:image/png;base64,{{ exposure_plots.exposure_country }}" alt="Country Exposure">
-      <div class="chart-caption">Consolidated Country Exposure</div>
-    </div>
-    {% endif %}
-    {% if exposure_plots.exposure_company %}
-    <div class="chart-card">
-      <img src="data:image/png;base64,{{ exposure_plots.exposure_company }}" alt="Company Exposure">
-      <div class="chart-caption">Top Look-Through Holdings</div>
-    </div>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <!-- Fundamental Health Summary -->
-  {% if quality_kpis and quality_kpis.total %}
-  <h2>Fundamental Health &amp; Quality Status</h2>
-  <div class="kpi-row">
-    <div class="kpi-card" style="border-top: 3px solid #3fb950;">
-      <div class="kpi-label">Tier A (High Quality)</div>
-      <div class="kpi-value" style="color: #3fb950;">{{ quality_kpis.tier_a }}</div>
-      <div class="kpi-sub">Out of {{ quality_kpis.total }} evaluated</div>
-    </div>
-    <div class="kpi-card" style="border-top: 3px solid #d29922;">
-      <div class="kpi-label">Tier B (Medium Quality)</div>
-      <div class="kpi-value" style="color: #d29922;">{{ quality_kpis.tier_b }}</div>
-      <div class="kpi-sub">Out of {{ quality_kpis.total }} evaluated</div>
-    </div>
-    <div class="kpi-card" style="border-top: 3px solid #f85149;">
-      <div class="kpi-label">Tier C (Low Quality / Speculative)</div>
-      <div class="kpi-value" style="color: #f85149;">{{ quality_kpis.tier_c }}</div>
-      <div class="kpi-sub">Out of {{ quality_kpis.total }} evaluated</div>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Asset Positions -->
-  <h2>Asset Positions</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Ticker</th>
-        <th>Name</th>
-        <th>Type</th>
-        <th class="right">Qty</th>
-        <th class="right">Value (€)</th>
-        <th class="right">Cost Basis (€)</th>
-        <th class="right">ROI (€)</th>
-        <th class="right">ROI (%)</th>
-        <th class="right">Share</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for s in asset_summaries|sort(attribute='latest_value_eur', reverse=True) %}
-      <tr>
-        <td><strong>{{ s.ticker }}</strong></td>
-        <td>{{ s.name }}</td>
-        <td>
-          <span class="tag {% if s.asset_type|upper == 'ETF' %}tag-etf{% else %}tag-stock{% endif %}">
-            {{ s.asset_type }}
-          </span>
-        </td>
-        <td class="right">{{ "%.4f"|format(s.latest_quantity) }}</td>
-        <td class="right">{{ "%.2f"|format(s.latest_value_eur) }}</td>
-        <td class="right">{{ "%.2f"|format(s.cost_basis_eur) }}</td>
-        <td class="right {{ 'positive' if s.roi_eur >= 0 else 'negative' }}">
-          {{ "%+.2f"|format(s.roi_eur) }}
-        </td>
-        <td class="right {{ 'positive' if s.roi_percent >= 0 else 'negative' }}">
-          {{ "%+.2f"|format(s.roi_percent) }}%
-        </td>
-        <td class="right">{{ "%.1f"|format(s.portfolio_share_percent) }}%</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <!-- Opportunity Watchlist -->
-  {% if has_opportunities %}
-  <h2>Top-5 Opportunity Watchlist</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Rank</th>
-        <th>Symbol</th>
-        <th>Type</th>
-        <th class="right">Price (€)</th>
-        <th class="right">Quant Score</th>
-        <th>AI Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for opp in opportunities %}
-      <tr>
-        <td>#{{ opp.rank }}</td>
-        <td><strong>{{ opp.symbol }}</strong></td>
-        <td>
-          <span class="tag {% if opp.asset_type|upper == 'ETF' %}tag-etf{% else %}tag-stock{% endif %}">
-            {{ opp.asset_type }}
-          </span>
-        </td>
-        <td class="right">€{{ "%.2f"|format(opp.price_eur) }}</td>
-        <td class="right">{{ "%.2f"|format(opp.quant_score) }}</td>
-        <td>
-          {% if opp.ai_action %}
-            <span class="ai-{{ opp.ai_action|lower }}">{{ opp.ai_action }}</span>
-          {% else %}
-            <span class="ai-none">—</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  <!-- Growth Projections -->
-  <h2>Growth Projections</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Scenario</th>
-        <th class="right">Rate</th>
-        <th class="right">10Y Value</th>
-        <th class="right">10Y Real</th>
-        <th class="right">20Y Value</th>
-        <th class="right">20Y Real</th>
-        <th class="right">30Y Value</th>
-        <th class="right">30Y Real</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for s in growth_scenarios %}
-      <tr>
-        <td><strong>{{ s.name }}</strong></td>
-        <td class="right">{{ "%.0f"|format(s.annual_return_pct) }}%</td>
-        {% for m in s.milestones %}
-        <td class="right positive">€{{ "{:,.0f}".format(m.projected_value) }}</td>
-        <td class="right" style="color:#8b949e;">€{{ "{:,.0f}".format(m.inflation_adjusted_value) }}</td>
+      <div class="kpi-card">
+        <div class="kpi-label">Portfolio Composition</div>
+        {% for c in composition %}
+        <div style="margin-top:6px;">
+          <span class="tag {% if c.asset_type == 'ETF' %}tag-etf{% else %}tag-stock{% endif %}" style="margin-right:6px;">{{ c.asset_type }}</span>
+          <span style="color:#e6edf3;font-weight:600;">€{{ "%.2f"|format(c.value_eur) }}</span>
+          <span class="kpi-sub" style="display:inline;">&nbsp;({{ "%.1f"|format(c.share_percent) }}%)</span>
+        </div>
         {% endfor %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+      </div>
+    </div>
+
+    <h2>Performance Charts</h2>
+    <div class="charts-row">
+      <div class="chart-card">
+        {% if chart_valuation_b64 %}
+        <img src="data:image/png;base64,{{ chart_valuation_b64 }}" alt="Portfolio Valuation History">
+        {% endif %}
+        <div class="chart-caption">Portfolio Valuation History</div>
+      </div>
+      <div class="chart-card">
+        {% if chart_class_b64 %}
+        <img src="data:image/png;base64,{{ chart_class_b64 }}" alt="Asset Class Evolution">
+        {% endif %}
+        <div class="chart-caption">Asset Class Valuation Evolution</div>
+      </div>
+    </div>
+
+    {% if exposure_plots and (exposure_plots.exposure_sector or exposure_plots.exposure_country or exposure_plots.exposure_company) %}
+    <h2>Risk &amp; Look-Through Exposure</h2>
+    <div class="charts-row" style="grid-template-columns: repeat(3, 1fr);">
+      {% if exposure_plots.exposure_sector %}
+      <div class="chart-card">
+        <img src="data:image/png;base64,{{ exposure_plots.exposure_sector }}" alt="Sector Exposure">
+        <div class="chart-caption">Consolidated Sector Exposure</div>
+      </div>
+      {% endif %}
+      {% if exposure_plots.exposure_country %}
+      <div class="chart-card">
+        <img src="data:image/png;base64,{{ exposure_plots.exposure_country }}" alt="Country Exposure">
+        <div class="chart-caption">Consolidated Country Exposure</div>
+      </div>
+      {% endif %}
+      {% if exposure_plots.exposure_company %}
+      <div class="chart-card">
+        <img src="data:image/png;base64,{{ exposure_plots.exposure_company }}" alt="Company Exposure">
+        <div class="chart-caption">Top Look-Through Holdings</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <h2>Asset Positions</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Name</th>
+          <th>Type</th>
+          <th class="right">Qty</th>
+          <th class="right">Value (€)</th>
+          <th class="right">Cost Basis (€)</th>
+          <th class="right">ROI (€)</th>
+          <th class="right">ROI (%)</th>
+          <th class="right">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in asset_summaries|sort(attribute='latest_value_eur', reverse=True) %}
+        <tr>
+          <td><strong>{{ s.ticker }}</strong></td>
+          <td>{{ s.name }}</td>
+          <td>
+            <span class="tag {% if s.asset_type|upper == 'ETF' %}tag-etf{% else %}tag-stock{% endif %}">
+              {{ s.asset_type }}
+            </span>
+          </td>
+          <td class="right">{{ "%.4f"|format(s.latest_quantity) }}</td>
+          <td class="right">{{ "%.2f"|format(s.latest_value_eur) }}</td>
+          <td class="right">{{ "%.2f"|format(s.cost_basis_eur) }}</td>
+          <td class="right {{ 'positive' if s.roi_eur >= 0 else 'negative' }}">{{ "%+.2f"|format(s.roi_eur) }}</td>
+          <td class="right {{ 'positive' if s.roi_percent >= 0 else 'negative' }}">{{ "%+.2f"|format(s.roi_percent) }}%</td>
+          <td class="right">{{ "%.1f"|format(s.portfolio_share_percent) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Growth Projections</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th class="right">Rate</th>
+          <th class="right">10Y Value</th>
+          <th class="right">10Y Real</th>
+          <th class="right">20Y Value</th>
+          <th class="right">20Y Real</th>
+          <th class="right">30Y Value</th>
+          <th class="right">30Y Real</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in growth_scenarios %}
+        <tr>
+          <td><strong>{{ s.name }}</strong></td>
+          <td class="right">{{ "%.0f"|format(s.annual_return_pct) }}%</td>
+          {% for m in s.milestones %}
+          <td class="right positive">€{{ "{:,.0f}".format(m.projected_value) }}</td>
+          <td class="right" style="color:#8b949e;">€{{ "{:,.0f}".format(m.inflation_adjusted_value) }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div><!-- /tab-portfolio -->
+
+  <!-- ═══════════════════ TAB: QUALITY ═══════════════════ -->
+  <div class="tab-pane" id="tab-quality">
+
+    {% if quality_kpis and quality_kpis.total %}
+    <div class="kpi-container">
+      <div class="kpi-box">
+        <div class="kpi-value">{{ quality_kpis.total }}</div>
+        <div class="kpi-label">Total Evaluated</div>
+      </div>
+      <div class="kpi-box" style="border-top: 3px solid #3fb950;">
+        <div class="kpi-value" style="color:#3fb950;">{{ quality_kpis.tier_a }}</div>
+        <div class="kpi-label">Tier A</div>
+      </div>
+      <div class="kpi-box" style="border-top: 3px solid #d29922;">
+        <div class="kpi-value" style="color:#d29922;">{{ quality_kpis.tier_b }}</div>
+        <div class="kpi-label">Tier B</div>
+      </div>
+      <div class="kpi-box" style="border-top: 3px solid #f85149;">
+        <div class="kpi-value" style="color:#f85149;">{{ quality_kpis.tier_c }}</div>
+        <div class="kpi-label">Tier C</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-value" style="color:#3fb950;">{{ quality_kpis.undervalued }}</div>
+        <div class="kpi-label">Undervalued</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-value" style="color:#f85149;">{{ quality_kpis.overvalued }}</div>
+        <div class="kpi-label">Overvalued</div>
+      </div>
+    </div>
+    {% endif %}
+
+    <h2>Evaluated Assets Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Asset Name</th>
+          <th class="center">Ticker</th>
+          <th class="center">Type</th>
+          <th class="center">Quality Tier</th>
+          <th class="right">Score</th>
+          <th>Valuation</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in quality_assets %}
+        <tr>
+          <td>{{ a.name }}</td>
+          <td class="center"><strong>{{ a.symbol }}</strong></td>
+          <td class="center"><span class="tag {{ 'tag-etf' if a.asset_type == 'ETF' else 'tag-stock' }}">{{ a.asset_type }}</span></td>
+          <td class="center"><span class="tier-{{ a.tier|lower|replace('tier ','') }}">{{ a.tier }}</span></td>
+          <td class="right" style="font-weight:600;">{{ a.score }}/100</td>
+          <td><span class="val-{{ a.valuation_status|lower|replace(' ','') }}">{{ a.valuation_status }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Detailed Asset Diagnostics</h2>
+    {% for a in quality_assets %}
+    {% set tier_cls = 'tier-a-card' if 'A' in a.tier else ('tier-c-card' if 'C' in a.tier else 'tier-b-card') %}
+    <div class="asset-card {{ tier_cls }}">
+      <div class="asset-header">
+        <div class="asset-name">{{ a.name }} ({{ a.symbol }})</div>
+        <span class="tag {{ 'tag-etf' if a.asset_type == 'ETF' else 'tag-stock' }}">{{ a.asset_type }}</span>
+        <span class="tier-{{ a.tier|lower|replace('tier ','') }}">{{ a.tier }}</span>
+        <span class="asset-score" style="color:#58a6ff;">{{ a.score }}/100</span>
+        {% set val_badge_cls = 'val-badge-undervalued' if a.valuation_status == 'Undervalued' else ('val-badge-overvalued' if a.valuation_status == 'Overvalued' else 'val-badge-fair') %}
+        <span class="valuation-badge {{ val_badge_cls }}">{{ a.valuation_status }}</span>
+      </div>
+
+      {% if a.asset_type == 'ETF' %}
+      <div class="metrics-grid">
+        <div>
+          <div class="metrics-section-title">ETF Structure</div>
+          <div class="metric-row"><span class="metric-key">TER</span><span class="metric-val">{{ a.ter_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">Top Holdings</span><span class="metric-val" style="font-size:11px;">{{ a.holdings_str }}</span></div>
+        </div>
+        <div>
+          <div class="metrics-section-title">Exposure</div>
+          <div class="metric-row"><span class="metric-key">Sectors</span><span class="metric-val" style="font-size:11px;">{{ a.sectors_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">Countries</span><span class="metric-val" style="font-size:11px;">{{ a.countries_str }}</span></div>
+        </div>
+      </div>
+      {% else %}
+      <div class="metrics-grid">
+        <div>
+          <div class="metrics-section-title">Valuation</div>
+          <div class="metric-row"><span class="metric-key">Trailing P/E</span><span class="metric-val">{{ a.tr_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">Forward P/E</span><span class="metric-val">{{ a.fw_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">PEG Ratio</span><span class="metric-val">{{ a.peg_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">Price/Book</span><span class="metric-val">{{ a.pb_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">Div Yield</span><span class="metric-val">{{ a.div_str }}</span></div>
+        </div>
+        <div>
+          <div class="metrics-section-title">Fundamentals</div>
+          <div class="metric-row"><span class="metric-key">Beta</span><span class="metric-val">{{ a.beta_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">Profit Margin</span><span class="metric-val">{{ a.margin_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">Rev Growth</span><span class="metric-val">{{ a.rev_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">Earn Growth</span><span class="metric-val">{{ a.earn_str }}</span></div>
+          <div class="metric-row"><span class="metric-key">52w Range</span><span class="metric-val" style="font-size:11px;">{{ a.low_str }} / {{ a.peak_str }}</span></div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="cases-grid">
+        <div class="case-bull">
+          <div class="case-title">Bull Case</div>
+          {% for b in a.bull_case %}<div class="case-item">{{ b }}</div>{% endfor %}
+        </div>
+        <div class="case-bear">
+          <div class="case-title">Bear Case</div>
+          {% for b in a.bear_case %}<div class="case-item">{{ b }}</div>{% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+  </div><!-- /tab-quality -->
+
+  <!-- ═══════════════════ TAB: OPPORTUNITY ═══════════════════ -->
+  <div class="tab-pane" id="tab-opportunity">
+
+    <h2>Portfolio &amp; Strategy Summary</h2>
+    <div class="summary-row">
+      <div class="summary-card">
+        <div class="card-label">Total Portfolio Value</div>
+        <div class="card-value">€{{ "{:,.2f}".format(opp_total_value_eur) }}</div>
+      </div>
+      <div class="summary-card">
+        <div class="card-label">Assets Evaluated</div>
+        <div class="card-value">{{ opp_assets|length }}</div>
+      </div>
+      <div class="summary-card">
+        <div class="card-label">AI Analysis</div>
+        <div class="card-value" style="font-size:15px;">{{ "Active" if opp_has_ai else "Quant Only" }}</div>
+      </div>
+    </div>
+
+    <div class="weights-box">
+      <div style="color:#e6edf3; font-weight:600; margin-bottom:4px;">Active Strategy Weights</div>
+      <div class="wrow">
+        <div class="witem">Stocks — Dip: <span>{{ "%.2f"|format(opp_w_stock_dip) }}</span> | Fwd P/E: <span>{{ "%.2f"|format(opp_w_stock_pe) }}</span> | 52w: <span>{{ "%.2f"|format(opp_w_stock_52w) }}</span> | Gap: <span>{{ "%.2f"|format(opp_w_stock_gap) }}</span></div>
+        <div class="witem">ETFs — Dip: <span>{{ "%.2f"|format(opp_w_etf_dip) }}</span> | TER: <span>{{ "%.2f"|format(opp_w_etf_ter) }}</span> | Gap: <span>{{ "%.2f"|format(opp_w_etf_gap) }}</span></div>
+        <div class="witem">Penalties — Sector: <span>{{ "%.2f"|format(opp_w_sector_pen) }}</span> | Country: <span>{{ "%.2f"|format(opp_w_country_pen) }}</span></div>
+      </div>
+    </div>
+
+    <h2>Rebalancing &amp; Opportunity Matrix</h2>
+    {% if opp_assets %}
+    <table>
+      <thead>
+        <tr>
+          <th class="center">Rank</th>
+          <th>Symbol</th>
+          <th>Type</th>
+          <th class="right">Price (€)</th>
+          <th class="right">Current %</th>
+          <th class="right">Target %</th>
+          <th class="right">Score</th>
+          {% if opp_has_ai %}<th class="center">Action</th><th class="center">Urgency</th><th class="right">Conf.</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in opp_assets %}
+        <tr>
+          <td class="center" style="color:#d29922;">{{ a.rank }}</td>
+          <td><strong>{{ a.symbol }}</strong></td>
+          <td><span class="tag {{ 'tag-etf' if a.asset_type == 'ETF' else 'tag-stock' }}">{{ a.asset_type }}</span></td>
+          <td class="right">{{ "{:,.2f}".format(a.price_eur) }}</td>
+          <td class="right">{{ "%.1f"|format(a.current_pct) }}%</td>
+          <td class="right">{{ "%.1f"|format(a.target_pct) }}%</td>
+          <td class="right" style="color:#58a6ff; font-weight:600;">{{ "%.3f"|format(a.score) }}</td>
+          {% if opp_has_ai %}
+          <td class="center"><span class="action-{{ a.ai_action|lower if a.ai_action else 'na' }}">{{ a.ai_action or "N/A" }}</span></td>
+          <td class="center"><span class="urg-{{ a.ai_urgency|lower if a.ai_urgency else 'na' }}">{{ a.ai_urgency or "N/A" }}</span></td>
+          <td class="right">{{ a.ai_conf or "N/A" }}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:#8b949e; font-size:13px; margin-top:16px;">No opportunity data available. Run <code>make analyze-opportunity</code> to populate.</p>
+    {% endif %}
+
+    {% if opp_has_ai and opp_advisories %}
+    <h2>Actionable Advisory Insights</h2>
+    {% for adv in opp_advisories %}
+    {% set act_lower = adv.action|lower %}
+    <div class="advisory-card adv-{{ act_lower }}">
+      <div class="advisory-header">
+        <div class="advisory-symbol">{{ adv.symbol }}</div>
+        <span class="tag {{ 'tag-etf' if adv.asset_type == 'ETF' else 'tag-stock' }}">{{ adv.asset_type }}</span>
+        <div class="advisory-badges">
+          <span class="adv-badge adv-badge-{{ act_lower }}">{{ adv.action }}</span>
+          {% if adv.urgency %}<span class="adv-badge" style="background:#21262d; color:#c9d1d9;">{{ adv.urgency }}</span>{% endif %}
+          {% if adv.confidence %}<span class="adv-badge adv-badge-conf">{{ adv.confidence }}</span>{% endif %}
+        </div>
+      </div>
+
+      <hr class="adv-divider">
+
+      <div class="adv-metrics-row">
+        <div class="adv-metric">Price: <span>€{{ "{:,.2f}".format(adv.price) }}</span></div>
+        {% if adv.peak %}<div class="adv-metric">52w Peak: <span>€{{ "{:,.2f}".format(adv.peak) }}</span></div>{% endif %}
+        <div class="adv-metric">Current: <span>{{ "%.1f"|format(adv.curr_alloc) }}%</span></div>
+        <div class="adv-metric">Target: <span>{{ "%.1f"|format(adv.targ_alloc) }}%</span></div>
+        <div class="adv-metric">Δ: <span class="{{ 'positive' if adv.delta >= 0 else 'negative' }}">{{ "%+.1f"|format(adv.delta) }}%</span></div>
+      </div>
+
+      {% if adv.asset_type == 'ETF' %}
+      <div class="adv-section-title">ETF Structure</div>
+      <div class="adv-metrics-row">
+        {% if adv.ter_str is defined %}<div class="adv-metric">TER: <span>{{ adv.ter_str }}</span></div>{% endif %}
+        {% if adv.holdings_str is defined %}<div class="adv-metric">Holdings: <span style="font-size:11px;">{{ adv.holdings_str }}</span></div>{% endif %}
+      </div>
+      {% if adv.sectors_str is defined %}
+      <div class="adv-metrics-row">
+        <div class="adv-metric">Sectors: <span style="font-size:11px;">{{ adv.sectors_str }}</span></div>
+        {% if adv.countries_str is defined %}<div class="adv-metric">Countries: <span style="font-size:11px;">{{ adv.countries_str }}</span></div>{% endif %}
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="adv-section-title">Valuation &amp; Fundamentals</div>
+      <div class="adv-metrics-row">
+        {% if adv.tr_pe is defined %}<div class="adv-metric">Tr P/E: <span>{{ adv.tr_pe }}</span></div>{% endif %}
+        {% if adv.fwd_pe is defined %}<div class="adv-metric">Fwd P/E: <span>{{ adv.fwd_pe }}</span></div>{% endif %}
+        {% if adv.peg is defined %}<div class="adv-metric">PEG: <span>{{ adv.peg }}</span></div>{% endif %}
+        {% if adv.pb is defined %}<div class="adv-metric">P/B: <span>{{ adv.pb }}</span></div>{% endif %}
+        {% if adv.div_yield is defined %}<div class="adv-metric">Div Yield: <span>{{ adv.div_yield }}</span></div>{% endif %}
+        {% if adv.beta is defined %}<div class="adv-metric">Beta: <span>{{ adv.beta }}</span></div>{% endif %}
+      </div>
+      <div class="adv-metrics-row">
+        {% if adv.margin is defined %}<div class="adv-metric">Margin: <span>{{ adv.margin }}</span></div>{% endif %}
+        {% if adv.rev_growth is defined %}<div class="adv-metric">Rev Growth: <span>{{ adv.rev_growth }}</span></div>{% endif %}
+        {% if adv.earn_growth is defined %}<div class="adv-metric">Earn Growth: <span>{{ adv.earn_growth }}</span></div>{% endif %}
+        {% if adv.debt_eq is defined %}<div class="adv-metric">Debt/Eq: <span>{{ adv.debt_eq }}</span></div>{% endif %}
+      </div>
+      {% endif %}
+
+      <div class="adv-section-title">Factor Scores</div>
+      <div class="adv-metrics-row">
+        <div class="adv-metric">Dip: <span>{{ "%.2f"|format(adv.dip_score) }}</span></div>
+        <div class="adv-metric">Cost: <span>{{ "%.2f"|format(adv.cost_score) }}</span></div>
+        <div class="adv-metric">Gap: <span>{{ "%.2f"|format(adv.gap_score) }}</span></div>
+        <div class="adv-metric">Total: <span style="color:#58a6ff; font-weight:600;">{{ "%.3f"|format(adv.total_score) }}</span></div>
+      </div>
+
+      {% if adv.reasoning %}
+      <hr class="adv-divider">
+      <div class="adv-reasoning">{{ adv.reasoning }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+  </div><!-- /tab-opportunity -->
 
   <!-- Footer -->
   <div class="report-footer">
     Generated by finances portfolio tracker &nbsp;|&nbsp; For personal use only. Not financial advice.
   </div>
 
+</div><!-- /.page -->
+
+<!-- Lightbox overlay -->
+<div class="lightbox-overlay" id="lightbox">
+  <img id="lightbox-img" src="" alt="">
 </div>
+
+<script>
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  (function() {
+    var overlay = document.getElementById('lightbox');
+    var lbImg = document.getElementById('lightbox-img');
+    document.querySelectorAll('.chart-card img, .exposure-card img').forEach(function(img) {
+      img.addEventListener('click', function() {
+        lbImg.src = img.src;
+        lbImg.alt = img.alt;
+        overlay.classList.add('open');
+      });
+    });
+    overlay.addEventListener('click', function() {
+      overlay.classList.remove('open');
+      lbImg.src = '';
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { overlay.classList.remove('open'); lbImg.src = ''; }
+    });
+  })();
+</script>
+
 </body>
 </html>

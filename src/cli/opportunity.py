@@ -252,7 +252,7 @@ def export_outputs(
     total_val: float,
     has_ai: bool,
     output_dir: Path = OUTPUT_DIR,
-) -> None:
+) -> list[dict[str, Any]]:
     """Exports CSV matrix and HTML report ordered by rank
     including all recommendation cards."""
     formatted_date_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -476,8 +476,10 @@ def export_outputs(
             report_path,
         )
         logger.success("Successfully exported opportunity report HTML.")
+        return advisories_ctx
     except Exception as err:
         logger.error(f"Failed to export opportunity report HTML: {err}")
+        return []
 
 
 def _format_action(action: RecommendationAction | None) -> Text:
@@ -958,7 +960,7 @@ def recommend_rebalance(
         verbose=verbose,
     )
 
-    export_outputs(
+    advisories_ctx: list[dict[str, Any]] = export_outputs(
         ranked_scores=ranked_scores,
         asset_dict_map=asset_dict_map,
         recommendations_map=recommendations_map,
@@ -969,6 +971,9 @@ def recommend_rebalance(
     if "pytest" not in sys.modules:
         try:
             timestamp_key: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            advisories_map_db: dict[str, dict[str, Any]] = {
+                adv["symbol"]: adv for adv in advisories_ctx
+            }
             opportunity_repo.save_opportunity_report(
                 timestamp=timestamp_key,
                 total_value_eur=total_val,
@@ -976,6 +981,7 @@ def recommend_rebalance(
                 ranked_scores=ranked_scores,
                 asset_dict_map=asset_dict_map,
                 recommendations_map=recommendations_map,
+                advisories_map=advisories_map_db,
             )
             logger.success(
                 "Successfully persisted opportunity report into SQLite database."
