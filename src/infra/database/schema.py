@@ -125,6 +125,13 @@ def initialize_database(conn: sqlite3.Connection) -> None:
     cursor.execute(CREATE_OPPORTUNITIES_TABLE_SQL)
     cursor.execute(CREATE_OPPORTUNITY_ASSET_METRICS_TABLE_SQL)
 
+    try:
+        cursor.execute(
+            "ALTER TABLE opportunity_asset_metrics ADD COLUMN advisory_json TEXT;"
+        )
+    except sqlite3.OperationalError:
+        pass
+
     for table in ("stock_fundamental_history", "etf_fundamental_history"):
         for column, col_type in [
             ("quality_tier", "TEXT"),

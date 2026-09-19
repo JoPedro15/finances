@@ -12,7 +12,7 @@ from typing import Any
 import jinja2
 from markupsafe import Markup
 
-from src.config import DATA_DIR
+from src.config import DATA_DIR, settings
 from src.core.models import (
     Asset,
     AssetPerformanceSummary,
@@ -21,7 +21,7 @@ from src.core.models import (
 )
 from src.core.portfolio_analytics import PortfolioAnalyticsEngine
 from src.core.projections import ProjectionEngine
-from src.core.repositories import SqliteOpportunityRepository, SqlitePortfolioRepository
+from src.core.repositories import SqlitePortfolioRepository
 from src.infra.database.connection import DEFAULT_DB_PATH
 from src.infra.database.finance_sql_extraction import (
     AssetHistoricalRecord,
@@ -133,12 +133,26 @@ class PortfolioReportGenerator:
         overview: DashboardOverview,
         chart_valuation_b64: Markup,
         chart_class_b64: Markup,
-        opportunities: list[dict[str, Any]],
         generated_at: str,
     ) -> dict[str, Any]:
         value_history = overview.portfolio_history.value_history
-        period_start: str = value_history[0].date if value_history else "—"
-        period_end: str = value_history[-1].date if value_history else "—"
+
+        def _fmt_period(raw: str) -> str:
+            for fmt in (
+                "%Y-%m-%dT%H:%M:%S.%f",
+                "%Y-%m-%dT%H:%M:%S",
+                "%Y-%m-%d %H:%M:%S.%f",
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%d",
+            ):
+                try:
+                    return datetime.strptime(raw, fmt).strftime("%Y-%m-%d %H:%M")
+                except ValueError:
+                    continue
+            return raw
+
+        period_start: str = _fmt_period(value_history[0].date) if value_history else "—"
+        period_end: str = _fmt_period(value_history[-1].date) if value_history else "—"
         total_value_eur: float = value_history[-1].value if value_history else 0.0
         summaries: list[AssetPerformanceSummary] = overview.asset_summaries
         total_cost_basis_eur: float = sum(s.cost_basis_eur for s in summaries)
@@ -194,9 +208,6 @@ class PortfolioReportGenerator:
             "chart_valuation_b64": chart_valuation_b64,
             "chart_class_b64": chart_class_b64,
             "exposure_plots": self._load_exposure_plots(),
-            "quality_kpis": self._build_quality_kpis(),
-            "opportunities": opportunities,
-            "has_opportunities": len(opportunities) > 0,
             "growth_scenarios": self._build_growth_scenarios(),
         }
 
@@ -217,54 +228,287 @@ class PortfolioReportGenerator:
                     )
         return plots
 
-    def _build_quality_kpis(self) -> dict[str, Any]:
-        """Fetches the latest quality evaluation metrics."""
+    def _build_quality_context(self) -> dict[str, Any]:
+        """Builds the full quality tab context from the latest DB snapshots."""
+        import json as _json
         from collections import Counter
 
         from src.infra.database.connection import get_db_context
         from src.infra.database.schema import initialize_database
 
-        assets_data = []
+        assets: list[dict[str, Any]] = []
         try:
             with get_db_context(str(self.db_path)) as conn:
                 initialize_database(conn)
                 cursor = conn.cursor()
 
-                # Get the most recent stock fundamental snapshots
                 cursor.execute("""
-                    SELECT a.yahoo_ticker as ticker, sfh.quality_tier, sfh.quality_score
+                    SELECT a.name, a.yahoo_ticker as symbol, a.isin,
+                           sfh.pe_ratio, sfh.forward_pe, sfh.dividend_yield_pct,
+                           sfh.fifty_two_week_high, sfh.fifty_two_week_low,
+                           sfh.quality_tier, sfh.quality_score
                     FROM stock_fundamental_history sfh
                     JOIN assets a ON sfh.asset_id = a.id
                     WHERE sfh.id IN (
                         SELECT MAX(id) FROM stock_fundamental_history GROUP BY asset_id
                     )
+                    ORDER BY a.id ASC
                 """)
-                assets_data.extend([dict(r) for r in cursor.fetchall()])
+                for row in cursor.fetchall():
+                    r = dict(row)
+                    pe = r.get("pe_ratio")
+                    fwd_pe = r.get("forward_pe")
+                    div = r.get("dividend_yield_pct")
+                    high = r.get("fifty_two_week_high")
+                    low = r.get("fifty_two_week_low")
+                    tier = r.get("quality_tier") or "Tier C"
+                    score = r.get("quality_score") or 0
 
-                # Get the most recent ETF fundamental snapshots
+                    valuation_status = "Fair Value"
+                    if pe is not None:
+                        valuation_status = (
+                            "Undervalued"
+                            if pe < 15.0
+                            else ("Overvalued" if pe > 30.0 else "Fair Value")
+                        )
+
+                    bull: list[str] = []
+                    bear: list[str] = []
+                    if fwd_pe is not None and fwd_pe < 20.0:
+                        bull.append(
+                            f"Attractive forward valuation (Fwd P/E: {fwd_pe:.1f})"
+                        )
+                    if div is not None and div > 0:
+                        bull.append(f"Dividend income ({div:.2f}%)")
+                    if not bull:
+                        bull.append(
+                            "Established business model with stable market presence"
+                        )
+                    if pe is not None and pe > 30.0:
+                        bear.append(
+                            f"Elevated trailing P/E ({pe:.1f}) may limit upside"
+                        )
+                    if not bear:
+                        bear.append(
+                            "No critical balance sheet vulnerabilities detected"
+                        )
+
+                    assets.append(
+                        {
+                            "name": r["name"],
+                            "symbol": r["symbol"],
+                            "asset_type": "STOCK",
+                            "tier": tier,
+                            "score": score,
+                            "valuation_status": valuation_status,
+                            "bull_case": bull,
+                            "bear_case": bear,
+                            "tr_str": f"{pe:.1f}" if pe else "N/A",
+                            "fw_str": f"{fwd_pe:.1f}" if fwd_pe else "N/A",
+                            "peg_str": "N/A",
+                            "pb_str": "N/A",
+                            "div_str": f"{div:.2f}%" if div else "N/A",
+                            "beta_str": "N/A",
+                            "margin_str": "N/A",
+                            "rev_str": "N/A",
+                            "earn_str": "N/A",
+                            "debt_str": "N/A",
+                            "low_str": f"{low:,.2f} EUR" if low else "N/A",
+                            "peak_str": f"{high:,.2f} EUR" if high else "N/A",
+                        }
+                    )
+
                 cursor.execute("""
-                    SELECT a.yahoo_ticker as ticker, efh.quality_tier, efh.quality_score
+                    SELECT a.name, a.yahoo_ticker as symbol, a.isin,
+                           efh.ter_pct, efh.holdings_json,
+                           efh.sector_breakdown_json, efh.country_breakdown_json,
+                           efh.quality_tier, efh.quality_score
                     FROM etf_fundamental_history efh
                     JOIN assets a ON efh.asset_id = a.id
                     WHERE efh.id IN (
                         SELECT MAX(id) FROM etf_fundamental_history GROUP BY asset_id
                     )
+                    ORDER BY a.id ASC
                 """)
-                assets_data.extend([dict(r) for r in cursor.fetchall()])
+                for row in cursor.fetchall():
+                    r = dict(row)
+                    ter = r.get("ter_pct")
+                    tier = r.get("quality_tier") or "Tier C"
+                    score = r.get("quality_score") or 0
+
+                    holdings: list[Any] = (
+                        _json.loads(r["holdings_json"])
+                        if r.get("holdings_json")
+                        else []
+                    )
+                    sectors: list[Any] = (
+                        _json.loads(r["sector_breakdown_json"])
+                        if r.get("sector_breakdown_json")
+                        else []
+                    )
+                    countries: list[Any] = (
+                        _json.loads(r["country_breakdown_json"])
+                        if r.get("country_breakdown_json")
+                        else []
+                    )
+
+                    ter_str = f"{ter:.2f}%" if ter is not None else "N/A"
+                    holdings_str = (
+                        ", ".join(
+                            f"{h.get('name','')} ({float(h.get('weight_pct',0)):.1f}%)"
+                            for h in holdings[:5]
+                        )
+                        or "N/A"
+                    )
+                    sectors_str = (
+                        ", ".join(
+                            f"{s.get('sector_name') or s.get('name', '')}"
+                            f" ({float(s.get('weight_pct', 0)):.1f}%)"
+                            for s in sectors[:4]
+                        )
+                        or "N/A"
+                    )
+                    countries_str = (
+                        ", ".join(
+                            f"{c.get('country_name') or c.get('name', '')}"
+                            f" ({float(c.get('weight_pct', 0)):.1f}%)"
+                            for c in countries[:4]
+                        )
+                        or "N/A"
+                    )
+
+                    assets.append(
+                        {
+                            "name": r["name"],
+                            "symbol": r["symbol"],
+                            "asset_type": "ETF",
+                            "tier": tier,
+                            "score": score,
+                            "valuation_status": "Fair Value",
+                            "bull_case": [
+                                f"Attractive cost efficiency (TER: {ter_str})",
+                                "Fund scale and liquidity",
+                            ],
+                            "bear_case": [
+                                "Market systemic exposure without"
+                                " individual stock selection",
+                                "Regulatory or structural tracking risks",
+                            ],
+                            "ter_str": ter_str,
+                            "holdings_str": holdings_str,
+                            "sectors_str": sectors_str,
+                            "countries_str": countries_str,
+                        }
+                    )
         except Exception:
-            return {}
+            return {"assets": [], "kpis": {}}
 
-        if not assets_data:
-            return {}
-
-        tiers = Counter(a.get("quality_tier", "Unknown") for a in assets_data)
-
-        return {
-            "total": len(assets_data),
+        tiers = Counter(a["tier"] for a in assets)
+        valuations = Counter(a["valuation_status"] for a in assets)
+        kpis = {
+            "total": len(assets),
             "tier_a": tiers.get("Tier A", 0),
             "tier_b": tiers.get("Tier B", 0),
             "tier_c": tiers.get("Tier C", 0),
+            "undervalued": valuations.get("Undervalued", 0),
+            "overvalued": valuations.get("Overvalued", 0),
         }
+        return {"assets": assets, "kpis": kpis}
+
+    def _build_opportunity_context(self) -> dict[str, Any]:
+        """Loads the latest opportunity run from SQLite for the Opportunity tab."""
+        from src.infra.database.connection import get_db_context
+        from src.infra.database.schema import initialize_database
+
+        empty: dict[str, Any] = {
+            "opp_assets": [],
+            "opp_advisories": [],
+            "opp_has_ai": False,
+            "opp_total_value_eur": 0.0,
+            "opp_w_stock_dip": settings.stock_weight_dip,
+            "opp_w_stock_pe": settings.stock_weight_forward_pe,
+            "opp_w_stock_52w": settings.stock_weight_52w_range,
+            "opp_w_stock_gap": settings.stock_weight_allocation,
+            "opp_w_etf_dip": settings.etf_weight_dip,
+            "opp_w_etf_ter": settings.etf_weight_ter,
+            "opp_w_etf_gap": settings.etf_weight_allocation,
+            "opp_w_sector_pen": settings.exposure_sector_penalty_weight,
+            "opp_w_country_pen": settings.exposure_country_penalty_weight,
+        }
+        if not self.db_path.exists():
+            return empty
+        try:
+            with get_db_context(str(self.db_path)) as conn:
+                initialize_database(conn)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, total_value_eur, has_ai FROM opportunities"
+                    " ORDER BY id DESC LIMIT 1"
+                )
+                opp_row = cursor.fetchone()
+                if not opp_row:
+                    return empty
+                opp_id = opp_row["id"]
+                total_val = float(opp_row["total_value_eur"])
+                has_ai = bool(opp_row["has_ai"])
+
+                cursor.execute(
+                    """
+                    SELECT symbol, asset_type, rank, price_eur,
+                           current_allocation_pct, target_allocation_pct,
+                           dip_score, cost_score, gap_score, quant_score,
+                           ai_action, ai_urgency, ai_confidence_pct,
+                           forward_pe, trailing_pe, peg_ratio, price_to_book,
+                           dividend_yield_pct, ter, advisory_json
+                    FROM opportunity_asset_metrics
+                    WHERE opportunity_id = ?
+                    ORDER BY rank ASC
+                    """,
+                    (opp_id,),
+                )
+                assets: list[dict[str, Any]] = []
+                advisories: list[dict[str, Any]] = []
+                for row in cursor.fetchall():
+                    r = dict(row)
+                    conf = r.get("ai_confidence_pct")
+                    assets.append(
+                        {
+                            "rank": r["rank"],
+                            "symbol": r["symbol"],
+                            "asset_type": r["asset_type"],
+                            "price_eur": float(r["price_eur"]),
+                            "current_pct": float(r["current_allocation_pct"]),
+                            "target_pct": float(r["target_allocation_pct"]),
+                            "score": float(r["quant_score"]),
+                            "ai_action": r.get("ai_action"),
+                            "ai_urgency": r.get("ai_urgency"),
+                            "ai_conf": f"{conf:.0f}%" if conf is not None else None,
+                        }
+                    )
+                    raw_adv = r.get("advisory_json")
+                    if raw_adv:
+                        try:
+                            adv = json.loads(raw_adv)
+                            advisories.append(adv)
+                        except Exception:  # nosec B110
+                            pass
+
+                return {
+                    "opp_advisories": advisories,
+                    "opp_has_ai": has_ai,
+                    "opp_total_value_eur": total_val,
+                    "opp_w_stock_dip": settings.stock_weight_dip,
+                    "opp_w_stock_pe": settings.stock_weight_forward_pe,
+                    "opp_w_stock_52w": settings.stock_weight_52w_range,
+                    "opp_w_stock_gap": settings.stock_weight_allocation,
+                    "opp_w_etf_dip": settings.etf_weight_dip,
+                    "opp_w_etf_ter": settings.etf_weight_ter,
+                    "opp_w_etf_gap": settings.etf_weight_allocation,
+                    "opp_w_sector_pen": settings.exposure_sector_penalty_weight,
+                    "opp_w_country_pen": settings.exposure_country_penalty_weight,
+                }
+        except Exception:
+            return empty
 
     def generate(self, open_browser: bool = True) -> Path:
         """Generates the HTML report and returns html_path."""
@@ -281,21 +525,19 @@ class PortfolioReportGenerator:
         chart_valuation_b64 = self._chart_to_b64(val_path)
         chart_class_b64 = self._chart_to_b64(class_path)
 
-        opportunities: list[dict[str, Any]] = []
-        try:
-            opportunities = SqliteOpportunityRepository(
-                self.db_path
-            ).load_latest_top_opportunities(limit=5)
-        except Exception:  # nosec B110
-            pass
-
         context = self._build_template_context(
             overview=overview,
             chart_valuation_b64=chart_valuation_b64,
             chart_class_b64=chart_class_b64,
-            opportunities=opportunities,
             generated_at=generated_at,
         )
+
+        quality_ctx = self._build_quality_context()
+        context["quality_assets"] = quality_ctx["assets"]
+        context["quality_kpis"] = quality_ctx["kpis"]
+
+        opp_ctx = self._build_opportunity_context()
+        context.update(opp_ctx)
 
         template = self._jinja_env.get_template("report.html.j2")
         html_content = template.render(**context)

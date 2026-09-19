@@ -456,6 +456,7 @@ class SqliteOpportunityRepository:
         ranked_scores: list[Any],
         asset_dict_map: dict[str, dict[str, Any]],
         recommendations_map: dict[str, Any],
+        advisories_map: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         """Saves a complete opportunity evaluation run and its asset metrics
         into SQLite.
@@ -487,6 +488,11 @@ class SqliteOpportunityRepository:
                     target_item: dict[str, Any] = asset_dict_map.get(symbol, {})
                     rec = recommendations_map.get(symbol)
 
+                    adv_dict = (advisories_map or {}).get(symbol)
+                    advisory_json_str: str | None = (
+                        __import__("json").dumps(adv_dict) if adv_dict else None
+                    )
+
                     cursor.execute(
                         """
                         INSERT INTO opportunity_asset_metrics (
@@ -495,11 +501,11 @@ class SqliteOpportunityRepository:
                             dip_score, cost_score, gap_score, quant_score,
                             ai_action, ai_urgency, ai_confidence_pct,
                             forward_pe, trailing_pe, peg_ratio, price_to_book,
-                            dividend_yield_pct, ter
+                            dividend_yield_pct, ter, advisory_json
                         )
                         VALUES (
                             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                         )
                         """,
                         (
@@ -527,6 +533,7 @@ class SqliteOpportunityRepository:
                             target_item.get("price_to_book"),
                             target_item.get("dividend_yield_pct"),
                             target_item.get("ter"),
+                            advisory_json_str,
                         ),
                     )
         except Exception as e:
