@@ -364,8 +364,10 @@ def export_outputs(
 
                 t = asset_dict_map[symbol]
                 si: AssetScore | None = score_map_ctx.get(symbol)
-                curr_alloc: float = float(t.get("current_allocation_pct", 0.0))
-                targ_alloc: float = float(t.get("target_allocation_pct", 0.0))
+                curr_alloc: float = round(
+                    float(t.get("current_allocation_pct", 0.0)), 1
+                )
+                targ_alloc: float = round(float(t.get("target_allocation_pct", 0.0)), 1)
                 adv: dict[str, Any] = {
                     "symbol": symbol,
                     "asset_type": str(t.get("asset_type", "STOCK")).upper(),
@@ -378,7 +380,7 @@ def export_outputs(
                     "peak": float(t.get("peak_price", 0.0)),
                     "curr_alloc": curr_alloc,
                     "targ_alloc": targ_alloc,
-                    "delta": targ_alloc - curr_alloc,
+                    "delta": round(targ_alloc - curr_alloc, 1),
                     "dip_score": si.dip_score if si else 0.0,
                     "cost_score": si.cost_score if si else 0.0,
                     "gap_score": si.allocation_score if si else 0.0,
@@ -416,7 +418,7 @@ def export_outputs(
                 else:
 
                     def _f(v: Any, fmt: str = ".1f") -> str:
-                        return format(v, fmt) if v is not None else "N/A"
+                        return format(v, fmt) if v is not None and v != 0.0 else "N/A"
 
                     adv.update(
                         {
@@ -871,6 +873,16 @@ def recommend_rebalance(
     if not targets_raw:
         logger.error(f"No targets found in '{targets_file}'.")
         raise typer.Exit(code=1)
+
+    target_sum: float = sum(
+        float(t.get("target_allocation_pct", 0.0)) for t in targets_raw
+    )
+    if abs(target_sum - 100.0) > 0.5:
+        logger.warning(
+            f"Target allocations sum to {target_sum:.1f}% (expected 100.0%). "
+            "Gap scoring and rebalancing signals may be distorted. "
+            "Update portfolio_targets.json so all targets sum to 100%."
+        )
 
     stock_provider: StockProvider = StockProvider()
     etf_provider: ETFProvider = ETFProvider()

@@ -494,6 +494,7 @@ class PortfolioReportGenerator:
                             pass
 
                 return {
+                    "opp_assets": assets,
                     "opp_advisories": advisories,
                     "opp_has_ai": has_ai,
                     "opp_total_value_eur": total_val,
