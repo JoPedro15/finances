@@ -92,26 +92,29 @@ def generate_allocation_chart(
         return None
 
 
+# Dark palette validated against report card surface #161b22
 _DONUT_COLORS = [
-    "#2a78d6",  # blue
+    "#3987e5",  # blue
     "#008300",  # green
-    "#e87ba4",  # magenta
-    "#eda100",  # yellow
-    "#1baf7a",  # aqua
-    "#eb6834",  # orange
-    "#4a3aa7",  # violet
-    "#e34948",  # red
+    "#d55181",  # magenta
+    "#c98500",  # yellow
+    "#199e70",  # aqua
+    "#d95926",  # orange
+    "#9085e9",  # violet
+    "#e66767",  # red
 ]
 
-_SURFACE = "#fcfcfb"
-_TEXT_PRIMARY = "#0b0b0b"
-_TEXT_SECONDARY = "#52514e"
+# Matches report.html.j2 dark theme tokens exactly
+_SURFACE = "#161b22"  # .chart-card background
+_SURFACE_LABEL = "#0d1117"  # page background used for label contrast
+_TEXT_PRIMARY = "#e6edf3"  # h2/h3 colour
+_TEXT_SECONDARY = "#8b949e"  # muted/meta colour
 
 
 def generate_exposure_pie_chart(
     data: dict[str, float], title: str, file_name: str
 ) -> Path | None:
-    """Generates a donut chart for exposure data (Country, Sector, Company)."""
+    """Generates a dark-theme donut chart for exposure data."""
     try:
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         file_path: Path = PLOTS_DIR / file_name
@@ -126,7 +129,7 @@ def generate_exposure_pie_chart(
         fig, ax = plt.subplots(figsize=(9, 7), facecolor=_SURFACE)
         ax.set_facecolor(_SURFACE)
 
-        wedges, texts = ax.pie(
+        wedges, _ = ax.pie(
             sizes,
             labels=None,
             startangle=90,
@@ -151,7 +154,7 @@ def generate_exposure_pie_chart(
                 va="center",
                 fontsize=8,
                 fontweight="bold",
-                color=_SURFACE,
+                color=_SURFACE_LABEL,
             )
 
         ax.set_title(title, fontsize=13, fontweight="bold", color=_TEXT_PRIMARY, pad=16)
