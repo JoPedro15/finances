@@ -4,6 +4,7 @@ visual comparison charts for portfolio allocations.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -91,32 +92,87 @@ def generate_allocation_chart(
         return None
 
 
+_DONUT_COLORS = [
+    "#2a78d6",  # blue
+    "#008300",  # green
+    "#e87ba4",  # magenta
+    "#eda100",  # yellow
+    "#1baf7a",  # aqua
+    "#eb6834",  # orange
+    "#4a3aa7",  # violet
+    "#e34948",  # red
+]
+
+_SURFACE = "#fcfcfb"
+_TEXT_PRIMARY = "#0b0b0b"
+_TEXT_SECONDARY = "#52514e"
+
+
 def generate_exposure_pie_chart(
     data: dict[str, float], title: str, file_name: str
 ) -> Path | None:
-    """Generates a pie chart for exposure data (Country, Sector, Company)."""
+    """Generates a donut chart for exposure data (Country, Sector, Company)."""
     try:
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         file_path: Path = PLOTS_DIR / file_name
 
-        # Sort and limit to top 10 for readability if needed
         sorted_data = dict(sorted(data.items(), key=lambda x: x[1], reverse=True))
         labels = list(sorted_data.keys())
         sizes = list(sorted_data.values())
 
-        plt.figure(figsize=(10, 8))
-        plt.pie(
-            sizes,
-            labels=labels,
-            autopct="%1.1f%%",
-            startangle=140,
-            colors=sns.color_palette("pastel"),
-        )
-        plt.title(title, fontsize=14, fontweight="bold")
-        plt.axis("equal")
-        plt.tight_layout()
+        n = len(labels)
+        colors = [_DONUT_COLORS[i % len(_DONUT_COLORS)] for i in range(n)]
 
-        plt.savefig(file_path, dpi=300)
+        fig, ax = plt.subplots(figsize=(9, 7), facecolor=_SURFACE)
+        ax.set_facecolor(_SURFACE)
+
+        wedges, texts = ax.pie(
+            sizes,
+            labels=None,
+            startangle=90,
+            colors=colors,
+            wedgeprops={"width": 0.52, "edgecolor": _SURFACE, "linewidth": 2},
+            counterclock=False,
+        )
+
+        # Direct labels on slices >= 3%
+        for wedge, _label, size in zip(wedges, labels, sizes, strict=True):
+            if size < 3.0:
+                continue
+            angle = (wedge.theta1 + wedge.theta2) / 2
+            rad = math.radians(angle)
+            r = 0.72
+            x, y = r * math.cos(rad), r * math.sin(rad)
+            ax.text(
+                x,
+                y,
+                f"{size:.1f}%",
+                ha="center",
+                va="center",
+                fontsize=8,
+                fontweight="bold",
+                color=_SURFACE,
+            )
+
+        ax.set_title(title, fontsize=13, fontweight="bold", color=_TEXT_PRIMARY, pad=16)
+
+        # Legend — sorted by size, max 8 entries
+        legend_labels = [
+            f"{lbl}  {sz:.1f}%" for lbl, sz in zip(labels, sizes, strict=True)
+        ]
+        ax.legend(
+            wedges[:8],
+            legend_labels[:8],
+            loc="lower center",
+            bbox_to_anchor=(0.5, -0.18),
+            ncol=2,
+            frameon=False,
+            fontsize=8,
+            labelcolor=_TEXT_SECONDARY,
+        )
+
+        plt.tight_layout()
+        plt.savefig(file_path, dpi=300, bbox_inches="tight", facecolor=_SURFACE)
         plt.close()
 
         logger.success(f"Exposure chart '{title}' generated at '{file_path}'.")
