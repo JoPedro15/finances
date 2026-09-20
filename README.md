@@ -126,7 +126,7 @@ Rather than relying solely on AI outputs, the system uses deterministic multi-fa
 
 - **Look-Through Aggregation**: Unpacks underlying ETF holdings (via JustETF data) and merges them with direct equity positions to determine true portfolio-wide concentration.
 - **Policy Constraints**: Enforces configurable thresholds — Country Allocation (default: max 60%), Tech Sector (max 50%), Other Sectors (max 15%), Single Company (max 15%).
-- **Visual Audit Charts**: Exports pie charts visualising consolidated sector, country, and holding exposures (`make exposure`).
+- **Visual Audit Charts**: Exports donut charts visualising consolidated sector, country, and holding exposures (`make exposure`).
 
 ### 3. Absolute Quality Tier Evaluation
 
