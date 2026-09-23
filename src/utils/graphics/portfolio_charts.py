@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import matplotlib
 
-matplotlib.use("Agg")
-from datetime import datetime
-
+matplotlib.use(
+    "Agg"
+)  # Must be set before importing pyplot; safe for non-interactive/server use
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np

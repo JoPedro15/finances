@@ -193,6 +193,13 @@ ETF_WEIGHT_DIP=0.60
 ETF_WEIGHT_TER=0.20
 ETF_WEIGHT_ALLOCATION=0.20
 
+# Stock Scoring Shape Parameters
+STOCK_DIP_PENALTY_DIVISOR=30.0   # Decay rate for falling-knife penalty above dip_max_pct
+STOCK_DIP_UNDERSHOOT_CAP=0.2     # Max score fraction when dip is below dip_min_pct
+STOCK_PE_GROWTH_MULTIPLIER=2.4   # Bonus multiplier for earnings growth (forward_pe < trailing_pe)
+STOCK_PE_NEUTRAL_SCORE=0.6       # Base P/E score for the earnings-growth/contraction boundary
+STOCK_52W_BOTTOM_BAND=0.30       # Relative position threshold below which 52w score is maximum
+
 # Exposure Penalty Multipliers
 EXPOSURE_SECTOR_PENALTY_WEIGHT=0.30
 EXPOSURE_COUNTRY_PENALTY_WEIGHT=0.20

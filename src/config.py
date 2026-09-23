@@ -80,6 +80,22 @@ class Settings(BaseSettings):
     stock_alloc_gap_max_pct: float = Field(
         default=10.0, alias="STOCK_ALLOC_GAP_MAX_PCT"
     )
+    # Penalty decay divisor: how steeply the dip score falls beyond dip_max_pct
+    stock_dip_penalty_divisor: float = Field(
+        default=30.0, alias="STOCK_DIP_PENALTY_DIVISOR"
+    )
+    # Score floor for below-dip-min region (max achievable score fraction)
+    stock_dip_undershoot_cap: float = Field(
+        default=0.2, alias="STOCK_DIP_UNDERSHOOT_CAP"
+    )
+    # P/E growth bonus multiplier: scales earnings-growth gain toward 1.0
+    stock_pe_growth_multiplier: float = Field(
+        default=2.4, alias="STOCK_PE_GROWTH_MULTIPLIER"
+    )
+    # P/E neutral starting score for earnings-growth and contraction regions
+    stock_pe_neutral_score: float = Field(default=0.6, alias="STOCK_PE_NEUTRAL_SCORE")
+    # 52-week range: relative position threshold below which score is maximum
+    stock_52w_bottom_band: float = Field(default=0.30, alias="STOCK_52W_BOTTOM_BAND")
 
     # ETF Strategy Settings
     etf_weight_dip: float = Field(default=0.60, alias="ETF_WEIGHT_DIP")
@@ -166,6 +182,11 @@ class StockStrategyConfig:
     weight_52w_range: float = settings.stock_weight_52w_range
     weight_allocation: float = settings.stock_weight_allocation
     alloc_gap_max_pct: float = settings.stock_alloc_gap_max_pct
+    dip_penalty_divisor: float = settings.stock_dip_penalty_divisor
+    dip_undershoot_cap: float = settings.stock_dip_undershoot_cap
+    pe_growth_multiplier: float = settings.stock_pe_growth_multiplier
+    pe_neutral_score: float = settings.stock_pe_neutral_score
+    range_bottom_band: float = settings.stock_52w_bottom_band
 
     def __post_init__(self) -> None:
         """Validates that stock scoring criteria weights sum to 1.0."""

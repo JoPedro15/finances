@@ -30,14 +30,16 @@ class StockScoringStrategy(ScoringStrategy):
             return 0.0
 
         if dip_pct < self.config.dip_min_pct:
-            return (dip_pct / self.config.dip_min_pct) * 0.2
+            return (dip_pct / self.config.dip_min_pct) * self.config.dip_undershoot_cap
 
         if self.config.dip_min_pct <= dip_pct <= self.config.dip_max_pct:
             return 1.0
 
         # Falling knife protection: Progressive penalty above dip_max_pct
         excess_drop: float = dip_pct - self.config.dip_max_pct
-        penalty_score: float = max(0.1, 1.0 - (excess_drop / 30.0))
+        penalty_score: float = max(
+            0.1, 1.0 - (excess_drop / self.config.dip_penalty_divisor)
+        )
         return penalty_score
 
     def calculate_pe_score(
@@ -54,15 +56,14 @@ class StockScoringStrategy(ScoringStrategy):
 
         pe_ratio: float = forward_pe / trailing_pe
 
-        # Earnings growth (pe_ratio < 1.0): scales from 0.6 up to 1.0 cap
-        # (~20% earnings growth)
+        # Earnings growth (pe_ratio < 1.0): scales from pe_neutral_score up to 1.0
         if pe_ratio < 1.0:
-            growth_bonus: float = (1.0 - pe_ratio) * 2.4
-            return min(1.0, 0.6 + growth_bonus)
+            growth_bonus: float = (1.0 - pe_ratio) * self.config.pe_growth_multiplier
+            return min(1.0, self.config.pe_neutral_score + growth_bonus)
 
         # Earnings stagnation/contraction (pe_ratio >= 1.0):
-        # decays from 0.6 to floor 0.0
-        return max(0.0, 0.6 - (pe_ratio - 1.0))
+        # decays from pe_neutral_score to floor 0.0
+        return max(0.0, self.config.pe_neutral_score - (pe_ratio - 1.0))
 
     def calculate_52w_range_score(
         self,
@@ -82,10 +83,17 @@ class StockScoringStrategy(ScoringStrategy):
         range_span: float = high_52w - low_52w
         relative_pos: float = max(0.0, min(1.0, (current_price - low_52w) / range_span))
 
-        if relative_pos <= 0.30:
-            return 1.0  # Trading near bottom 30% of annual range
+        if relative_pos <= self.config.range_bottom_band:
+            return 1.0  # Trading near bottom of annual range
 
-        return max(0.0, 1.0 - ((relative_pos - 0.30) / 0.70))
+        return max(
+            0.0,
+            1.0
+            - (
+                (relative_pos - self.config.range_bottom_band)
+                / (1.0 - self.config.range_bottom_band)
+            ),
+        )
 
     def calculate_allocation_score(
         self, target_allocation_pct: float, current_allocation_pct: float
