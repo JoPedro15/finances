@@ -15,6 +15,7 @@ This document outlines the mandatory operating procedures, coding standards, and
 - **Impact & Realistic Planning**: Prioritize highest-impact tasks and keep implementation plans realistic.
 - **No Destructive Operations**: Never overwrite or delete configuration files, SQLite databases (`finances.db`), or credentials (`.env`, `secrets/`) without explicit user instruction.
 - **No Direct Commits/PRs to Main**: AI agents are strictly prohibited from performing git commits or opening Pull Requests targeting the `main` branch. All branch merges and commits to `main` must be performed exclusively by the user.
+- **Never Open Pull Requests**: AI agents must never create Pull Requests under any circumstances. Repository management — including PR creation, review, and merging — is handled exclusively by the user.
 
 ---
 

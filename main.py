@@ -241,8 +241,8 @@ def etf_details_cmd(
             assets_lookup: list[Asset] = []
             try:
                 assets_lookup = repo.load_assets()
-            except Exception:
-                assets_lookup = []
+            except Exception as e:
+                logger.warning(f"Could not load portfolio assets for name lookup: {e}")
 
             matched_asset: Asset | None = next(
                 (a for a in assets_lookup if a.isin and a.isin.upper() == clean_isin),
@@ -398,8 +398,8 @@ def stock_details_cmd(
             assets_lookup: list[Asset] = []
             try:
                 assets_lookup = repo.load_assets()
-            except Exception:
-                assets_lookup = []
+            except Exception as e:
+                logger.warning(f"Could not load portfolio assets for name lookup: {e}")
 
             matched_asset: Asset | None = next(
                 (
